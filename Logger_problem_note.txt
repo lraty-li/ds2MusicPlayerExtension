@@ -1,0 +1,39 @@
+如果你这次实测已经看到日志恢复了，那可以基本这样总结：
+
+问题主因不在日志模块，也不在新终端代码，而在 [Hooks.cpp](E:/dev/code/game/DS2MusicPlayer/Ds2MusicPlayerExtendLink/Hooks.cpp) 的 **hook 启用方式**。
+
+之前那版的问题是：
+
+- 一次性新增了很多 hook
+- 每个 hook 在 `InstallHook(...)` 里都是：
+  `MH_CreateHook(...)` 后立刻 `MH_EnableHook(...)`
+- 也就是启动阶段会连续很多次“立即启用 hook”
+
+这会把启动过程变得很脆弱。批量装很多 hook 时，问题不一定出在某个 detour 本体，而可能出在“反复逐个启用”这一层。  
+所以表面现象才会像是“连日志和新终端都没了”，但其实更准确地说，是 **初始化链在大量即时启用 hook 时就失稳了**。
+
+这次改动后变成了：
+
+- 每个 hook 先 `MH_CreateHook(...)`
+- 再 `MH_QueueEnableHook(...)`
+- 最后统一一次 `MH_ApplyQueued()`
+
+也就是“先排队，最后一次性启用”。
+
+所以如果这次恢复了，结论就是：
+
+- 不是 [Logger.cpp](E:/dev/code/game/DS2MusicPlayer/Ds2MusicPlayerExtendLink/Logger.cpp) 坏了
+- 不是 [ConsoleOutput.cpp](E:/dev/code/game/DS2MusicPlayer/Ds2MusicPlayerExtendLink/ConsoleOutput.cpp) 坏了
+- 主要是上一版 **大量 hook 的逐个 `MH_EnableHook`** 把启动流程搞坏了
+
+现在这版的好处是，后面就算还有问题，日志里也能更清楚地区分：
+
+- `MH_CreateHook` 失败
+- `MH_QueueEnableHook` 失败
+- `MH_ApplyQueued` 失败
+
+这样就不会再把所有问题都混成“日志没了”。
+
+
+
+游戏启动跳过启动动画似乎会导致hook 失效？

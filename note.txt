@@ -1,0 +1,44 @@
+已经找到可用于 hook 的实际路径，不再是 RTTI/UI/反射线。
+
+核心证据链是：
+
+- `sub_140C14BE0(manager)` 返回“当前播放条目”。
+  - 条目步长是 `0x38`
+  - 条目 `+0x10` 是曲目对象指针
+- `sub_140C15A70` 就是 `GetCurrentPlayingTrackId` 的实现。
+  - 它调用 `sub_140C14BE0(qword_14619C428, ...)`
+  - 然后从返回条目里的对象 `*(entry+0x10)` 读取 `*(DWORD*)(obj+0x20)` 作为 TrackId
+- 真正把曲目资源变成运行时音频对象的是 `sub_140C12580(manager, entry)`。
+  - `v3 = *(QWORD*)(entry+0x10)`
+  - `v4 = *(DWORD*)(v3+0x20)`，对应 `TrackId`
+  - `v10 = *(QWORD*)(v3+0x40)`，严格对应 `SoundResource`
+  - `sub_140AC5210(v10)` 创建运行时对象，结果存到 `manager+0x1918`（即 `a1+6424`）
+  - 同一个函数还会对列表中各条目的 `obj+0x40` 和 `obj+0x48` 分别调用 `sub_140AC5210`，缓存到每条目的 `+0x18 / +0x20`
+- `sub_140AC5210(refSoundResource)` 是资源解析/实例化点。
+  - 内部调用 `sub_142684A30(qword_14A10C580, 0, a1, 0)`
+  - 还给返回对象注册了 `"_on_start_"` 回调
+- `sub_140AC5320(obj)` 是对应销毁点。
+- `sub_140C15560(entry)` 是试播路径。
+  - 它读取 `*(QWORD*)(*(QWORD*)(entry+0x10)+0x48)`，严格对应 `TrialSoundResource`
+  - 然后 `sub_140AC5210(...)`
+  - 接着 `sub_140C152A0(...)` 设 RTPC
+  - 最后对创建出的对象调用虚函数 `+0x90`（table offset `144`）
+
+可以直接把音乐播放器路径总结成：
+
+- 正常播放/切歌：
+  - `sub_140C111E0 -> sub_140C12580 -> sub_140AC5210`
+- 试播：
+  - `sub_140C15560 -> sub_140AC5210 -> [obj vfunc +144]`
+- 停止/释放：
+  - `sub_140C14CB0 -> sub_140AC5320`
+  - `sub_140C155F0 -> sub_140AC5320`
+
+如果你要开始 hook，我建议优先落点在两个位置：
+
+- `sub_140C12580`
+  - 优点是还能拿到 TrackId，并且能在 `obj+0x40 / obj+0x48` 被实例化前替换资源
+- `sub_140AC5210`
+  - 优点是所有 `RefSoundResource` 最终都经过这里，最接近“实际加载/实例化”
+
+反过来说，`sub_140C15460` / `sub_14165D190` 这条是当前曲目信息通知路径，不是加载点。
