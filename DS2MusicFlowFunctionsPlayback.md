@@ -73,6 +73,10 @@
   - `soundResource guid=F5 D5 4A 4A 8C 01 44 17 BF DC 6B F7 9C 0E D9 DA`
   - `trialSoundResource guid=56 82 27 78 F3 0E 4A D5 A7 6F CE EE DD 18 B4 9E`
 - 这说明至少对第二首 `trackId=5` 而言，正式播放链上的资源标识在跨进程后同样保持稳定。
+- 在一组“光标停在第二首，先试听第二首，再点击播放”的样本里，还观察到：
+  - 试听阶段命中的仍是第二首 `trackId=5`
+  - 但正式点击播放后，`sub_140C12580` 首次命中的却是第一首 `trackId=57`
+  - 这说明当前“点击播放”更像从当前播放列表队列头启动正式播放，而不是直接把刚才试听或光标选中的条目提升为 `currentRuntime`
 
 ### `sub_140C15560`
 
@@ -114,6 +118,20 @@
   - `trialSoundResource guid=56 82 27 78 F3 0E 4A D5 A7 6F CE EE DD 18 B4 9E`
 - 这组新进程样本里，条目地址和对象地址都变了，但 `trackObject guid` 与 `trialSoundResource guid` 与旧进程样本保持一致。
 - 因此，当前运行时样本已经支持：至少对 `trackId=5` 的试听链而言，相关资源标识在跨进程后仍然稳定。
+- 在一组较新的受控样本里，当前正式播放已是第二首 `trackId=5`，此时再次对当前选中第二首点击试听，仍观察到：
+  - `sub_140C15560(entry=0x5166F828038, trackId=5)`
+  - `currentRuntime=0x516ADBB8C00` 保持不变
+  - `trialRuntime=0x516ADBB9680` 被新建并挂到试听槽位
+- 这说明即使试听目标与当前正式播放曲目是同一首，系统也不会复用 `currentRuntime`，而是另外建立独立的 `trialRuntime`。
+- 在这组样本里还观察到：
+  - `sub_140AC5210(preview.create)` 刚返回时，试听对象 `flags180=50`
+  - 但 `sub_140C15560` 返回后，再读到同一 `trialRuntimeObject` 时，`flags180=54`
+- 因此，当前运行时样本支持：试听对象在创建完成并挂接到管理器试听槽位后，还会继续发生一次模式位更新。
+- 在一组“第二首试听成功后，紧接着点击正式播放”的样本里，还观察到：
+  - `preview.create` 先为第二首 `trackId=5` 建立 `trialRuntime`
+  - 随后的正式播放会先触发 `preview.destroy`
+  - 然后正式播放仍从第一首 `trackId=57` 的 `soundResource` 建立 `currentRuntime`
+- 这说明“试听对象已存在”不会直接转正；从试听切到正式播放时，现有 `trialRuntime` 会先被销毁，再按正式播放入口重新选曲和建对象。
 
 ### `sub_140C155F0`
 
@@ -136,7 +154,9 @@
   - `currentRuntime=0x2881893EE00`
   - `state2826=0`
   - `trialRuntime=0x0`
-- 在两组“点击下一首”样本里，它都出现在 `advance.current.create` 之后，并且返回后的状态就是新的切歌完成态。
+- 在较早的“点击下一首”样本里，它确实出现在 `advance.current.create` 之后，并且返回后的状态就是新的切歌完成态。
+- 但在较新的 `[57,5]` 手动下一首样本里，它出现在 `sub_140C12580 -> sub_140AC5210(play.current.create)` 之后。
+- 因此，`sub_140C155F0` 位于“试听槽清理/收尾”层，本身不能再拿来区分切歌究竟落到 `advance.current.create` 还是 `play.current.create`。
 
 ### `sub_140C14CB0`
 
@@ -174,6 +194,15 @@
   - `state1E0=0`
   - `state245=0`
   - `ref2BA=0`
+- 但在较新的试听样本里还观察到：
+  - `preview.create` 刚返回时，`runtimeObject.flags180=50`
+  - 同一个对象在 `sub_140C15560` 返回后重新读取时，`trialRuntimeObject.flags180=54`
+- 因此，`sub_140AC5210` 更像“创建初始运行时对象”的共用入口；至少在试听链里，对象挂入 `trialRuntime` 后还会继续被上层补写状态位。
+- 在一组“试听第二首后点击播放，再点击下一首”的连续样本里，还观察到：
+  - 从试听切到正式播放时，`sub_140AC5210` 会先走 `preview.create`，随后旧试听对象被 `preview.destroy`
+  - 紧接着正式播放先为第一首走一次 `play.current.create`
+  - 手动下一首再为第二首走一次新的 `play.current.create`
+- 这说明至少在当前这组受控样本里，`play.current.create` 既覆盖“从空闲开始正式播放”，也覆盖“手动切到下一首”；`advance.current.create` 不是每次切歌都必经。
 
 ### `sub_140AC5320`
 
