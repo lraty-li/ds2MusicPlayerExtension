@@ -10,6 +10,17 @@
 - [函数职责：UI 路径](./DS2MusicFlowFunctionsUi.md)
 - [状态字段与顺序样本](./DS2MusicFlowStates.md)
 
+## 原型验证记录
+
+- [旧方案：外部 WEM 注入原型（已证伪）](./DS2MusicFlow实现方案-外部Wem注入.md)
+
+## 待验证专题
+
+- [待验证记录索引](./DS2MusicFlow待验证记录.md)
+- [待验证：文件定位与读链](./DS2MusicFlow待验证记录-文件定位与读链.md)
+- [待验证：流媒体设备与外部文件](./DS2MusicFlow待验证记录-流媒体设备与外部文件.md)
+- [待验证：历史归档](./DS2MusicFlow待验证记录-历史归档.md)
+
 ## 常用跳转
 
 - [播放清理入口 `sub_140C12AC0`](./DS2MusicFlowFunctionsPlayback.md#sub_140c12ac0)
