@@ -204,9 +204,16 @@
   - 同时 `submitterVftable=0`、`submitterSlot4=0`
   - 因而当前失败原因不是“slot4 本体零命中”，而是“这条 submitter 全局取法本身被运行时证伪”
 - 因而，`0x407FB20` 当前不能再被表述为“真实运行时 submitter 对象槽位”。
-- 下一轮真正该确认的，不再是“这个固定全局槽位里的 `[4]` 是谁”，而是：
-  - `sub_1426C4120` 发起那次虚调用时，`rcx` 实参究竟从哪一步被装入
-  - 也就是实际 submitter 对象的运行时来源
+- 静态继续下钻后，当前更稳的 owner 链已经收缩到：
+  - `qword_1461C4638 -> StreamingManager*`
+  - `[StreamingManager + 0x578] -> ObjectStreamingSystem*`
+  - `ObjectStreamingSystem + 0x20 -> submitter 子对象`
+- 但现有运行样本同时给出了新的反证：
+  - 目标提交样本里，当前代码按 `base + 0x61C4638` 读取 `StreamingManager*` 时，连续读到 `0`
+  - 因而“直接读这条 owner 链就能在目标时刻拿到 live submitter”这条前提，目前也还不能写成已成立
+- 因而下一轮真正该确认的，不再是“这个固定全局槽位里的 `[4]` 是谁”，而是：
+  - `InitStreamCacheSubmitterThread / StartAddress` 命中时的 `ObjectStreamingSystem*`
+  - 它派生出的 `+0x20` 子对象，是否稳定等于 `sub_1426C4120` 现场实际装入 `rcx` 的 submitter
 
 ### 下一首
 

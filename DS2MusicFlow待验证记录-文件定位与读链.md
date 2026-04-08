@@ -6,15 +6,16 @@
 ## 当前仍需闭环的问题
 
 - `sub_142693510 -> sub_1426C4120` 已经通过运行日志稳定闭环，但其后的真实提交节点仍未最终钉死。
-- `sub_1426C4120` 这轮已经运行命中补齐 `submitCtx / dstBuffer / readBytes / logicalOffset`，而新的静态链已收敛到：`qword_1461C4638 -> StreamingManager + 0x578 -> ObjectStreamingSystem + 0x20`。因此当前最需要确认的是：这条 owner 链在运行时是否稳定等于 `sub_1426C4120` 现场实际装入 `rcx` 的 submitter 对象，以及它返回的异步句柄是如何完成与回收的。
+- `sub_1426C4120` 这轮已经运行命中补齐 `submitCtx / dstBuffer / readBytes / logicalOffset`，而新的静态链已收敛到：`qword_1461C4638 -> StreamingManager + 0x578 -> ObjectStreamingSystem + 0x20`。因此当前最需要确认的是：在 `InitStreamCacheSubmitterThread / StartAddress` 真正命中时，这条 owner 链是否稳定成立，以及它派生出的 submitter 子对象是否等于 `sub_1426C4120` 现场实际装入 `rcx` 的对象。
 - preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在真实 submitter 调用之后是否还会再次分叉，仍需确认。
 - `sub_1426C4120` 里当前记录到的 `dstBuffer` 是否就是后续真实消费的目标缓冲，而不是中间 staging buffer，仍需运行时确认。
 - 当前已经补出更具体的反证：按 `base + 0x407FB20` 读取到的所谓 submitter 全局值是非指针 `0x65525F7961727241`。因此当前待确认的不是“这个全局里的槽位 `[4]` 为何零命中”，而是“真实 submitter 对象根本不在这里”。
+- 同时，按 `base + 0x61C4638 -> +0x578 -> +0x20` 直接轮询 owner 链时，在目标提交样本里又连续读到 `manager=0`。因此当前待确认的也不是“owner 链静态上是否存在”，而是“这条链为什么没有被当前运行时观测方案建立成功”。
 
 ## 需要继续依赖 IDA 下钻的对象问题
 
-- `sub_1426C4120` 发起虚调用前，静态上已经能确认 `rcx` 来自 `off_14407FB20`；当前还需确认的是：运行时这个槽位是否稳定等于 `ObjectStreamingSystem + 0x20`。
-- `qword_1461C4638 -> +0x578 -> +0x20` 这条 owner 链，在当前版本运行时是否稳定可用，还是还需要通过 `InitStreamCacheSubmitterThread` 再做一次捕获。
+- `sub_1426C4120` 发起虚调用前，静态上已经能确认 `rcx` 来自 `off_14407FB20`；当前还需确认的是：运行时这个槽位是否稳定等于 `InitStreamCacheSubmitterThread / StartAddress` 里拿到的 `ObjectStreamingSystem + 0x20`。
+- `qword_1461C4638 -> +0x578 -> +0x20` 这条 owner 链，为什么在当前目标提交样本里直接轮询会读到 `manager=0`；是初始化时机问题，还是对象持有链还差最后一跳。
 - `sub_1426C4120` 传给真实 submitter 槽位的第二实参 `resource + 0x10`、以及塞进 transfer 结构的 `resource + 0xC0 / +0xD0`，分别代表哪些提交侧元数据。
 - `sub_1426C4120` 里 `segmentDesc + 0x10` 这块缓冲，后续是被谁消费、是否允许同步覆写后直接视作本段已完成。
 - 若仍想继续保留低层 `Win32ReadQueue_ExecuteRead` 作为备选，则必须继续把 `wemResource / streamHandle / segment` 映射到 `fileView / segmentEntry`。
@@ -168,9 +169,12 @@
   - 在目标提交样本里，当前代码反复读到同一个值 `0x65525F7961727241`
   - 该值不是合法对象指针，同时 `submitterVftable=0`、`submitterSlot4=0`
   - 因而当前不能继续把 `0x407FB20` 写成真实运行时 submitter 对象槽位
+- `base + 0x61C4638 -> +0x578 -> +0x20` 这条 owner 链，当前也还不能写成已被运行时证实：
+  - 在目标提交样本里，当前代码反复读到 `submitterManager=0`
+  - 因而当前不能继续把“直接读取这条链就能拿到 live submitter”写成既定事实
 - 因而当前更合理的解释不再是“第一次提交发生在 hook 安装前”，而是：
-  - 运行时真实 submitter 对象来源不是当前这条固定全局取法
-  - 而需要回到 `sub_1426C4120` 调用现场，直接追那次虚调用的 `rcx`
+  - 运行时真实 submitter 对象来源仍未被当前观测方案建立成功
+  - 必须转向 `InitStreamCacheSubmitterThread / StartAddress` 这类初始化线程入口做直接捕获
 
 ## 下一轮应优先追的方向
 
@@ -181,7 +185,8 @@
 - 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
 - 不再把 `sub_142692E90 / sub_142692EE0` 当成默认完成路径；这条前提也已经被本轮运行日志否掉。
 - 下一轮唯一优先确认的运行时边界，收缩为：
-  - `qword_1461C4638 -> +0x578 -> +0x20` 这条 owner 链在运行时的实际值
+  - `InitStreamCacheSubmitterThread / StartAddress` 命中时的 `ObjectStreamingSystem*`
+  - 由它派生的 `+0x20` submitter 子对象
   - 它是否稳定等于 `sub_1426C4120` 发起虚调用时的真实 `rcx`
   - 基于这个真实对象记录 vftable 地址与槽位目标
   - 记录返回句柄与真实完成路径，确认能否在该边界把外部文件同步灌入 `dstBuffer`
