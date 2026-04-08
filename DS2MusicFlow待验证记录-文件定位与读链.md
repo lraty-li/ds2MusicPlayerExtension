@@ -6,10 +6,10 @@
 ## 当前仍需闭环的问题
 
 - `sub_142693510 -> sub_1426C4120` 已经通过运行日志稳定闭环，但其后的真实提交节点仍未最终钉死。
-- 当前更需要确认的是：`off_14407FB20` 运行时对象的虚表槽位 `[4]` 最终指向谁，以及它返回的异步句柄是如何完成与回收的。
+- `sub_1426C4120` 这轮已经运行命中补齐 `submitCtx / dstBuffer / readBytes / logicalOffset`，因此当前最需要确认的是：`off_14407FB20` 运行时对象的虚表槽位 `[4]` 最终指向谁，以及它返回的异步句柄是如何完成与回收的。
 - preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在 `off_14407FB20[4]` 之后是否还会再次分叉，仍需确认。
-- `sub_1426C4120` 里的 `segmentDesc + 0x10` 是否就是后续真实消费的目标缓冲，而不是中间 staging buffer，仍需运行时确认。
-- `streamObject + 0x30 -> WwiseWemResource*` 与当前目标曲目的绑定虽然已经有运行命中样本支持，但仍需补一轮更直接的运行时对照，排除共享资源或预读对象。
+- `sub_1426C4120` 里当前记录到的 `dstBuffer` 是否就是后续真实消费的目标缓冲，而不是中间 staging buffer，仍需运行时确认。
+- 当前没有任何 `dynamic submitter.slot4` 安装日志或 `submitter.slot4` 命中日志；这是“运行时槽位 `[4]` 未被成功观测到”，还是“真实消费边界不在该函数本体”，仍需确认。
 
 ## 需要继续依赖 IDA 下钻的对象问题
 
@@ -18,23 +18,42 @@
 - `sub_1426C4120` 里 `segmentDesc + 0x10` 这块缓冲，后续是被谁消费、是否允许同步覆写后直接视作本段已完成。
 - 若仍想继续保留低层 `Win32ReadQueue_ExecuteRead` 作为备选，则必须继续把 `wemResource / streamHandle / segment` 映射到 `fileView / segmentEntry`。
 
-## 已获得的静态证据（尚未经过运行日志确认）
+## 已获得的证据
+
+### 运行已命中
+
+- 在目标操作流程里，`sub_1426C4120` 这轮已经直接记录到：
+  - `submitCtx`
+  - `streamObject`
+  - `wemResource`
+  - `wemId`
+  - `logicalOffset`
+  - `readBytes`
+  - `dstBuffer`
+- 上述字段已在以下资源样本里复现：
+  - 试听第二首：`wemId=647888142`
+  - 正式播放第一首：`wemId=609479110`
+  - 正式播放第二首：`wemId=780084104`
+  - 再次正式播放第一首：`wemId=609479110`
+- 同一资源的前两段推进已稳定表现为：
+  - `logicalOffset=0`
+  - `logicalOffset=131072`
+  - `readBytes=131072`
+- 因而 `sub_1426C4120` 当前已经不是单纯静态候选，而是运行已命中的资源级提交边界。
+
+### 静态候选
 
 - `sub_1426C4120` 不是直接提交读请求；它会调用 `off_14407FB20` 的虚表 `+0x20`，当前落点是 `sub_14206A490`。
 - `off_14407FB20` 默认先指向静态 submitter 对象 `0x14407F9F8`，其首字段就是 submitter vtable `0x1433C9CE0`。
 - `InitStreamCacheSubmitterThread (sub_1426E4670)` 会把 `off_14407FB20` 改成运行时对象 `a1 + 0x20`，但仍复用同一套 submitter 虚接口。
-- `sub_1426C4120` 当前已补全出一组更直接的提交侧字段：
+- `sub_1426C4120` 当前已静态补全出一组更直接的提交侧字段：
   - `streamObject + 0x30 -> WwiseWemResource*`
   - `streamObject + 0x38 -> segment 基偏移`
   - `segmentDesc + 0x00 -> 当前段相对偏移`
   - `segmentDesc + 0x0C -> 当前段长度`
   - `segmentDesc + 0x10 -> 当前段输出缓冲`
-- 因而 `sub_1426C4120` 是目前第一个静态上同时具备：
-  - `wemResource / segment` 级资源关联
-  - 输出缓冲
-  - 写入长度
-  - 逻辑偏移
-  的候选边界。
+- 结合上面的运行命中样本，当前可以把它写成：
+  - 当前第一个已经运行命中并补齐 `wemResource / submitCtx / dstBuffer / readBytes / logicalOffset` 的边界
 - `sub_1426C4120` 还会把：
   - `resource + 0x10`
   - `resource + 0xC0`
@@ -133,6 +152,10 @@
 - 即使把 submit route hook 的安装时机前移到 resolver / `sub_1426C4120` 之前，当前选中的 `sub_14206A490 / sub_14206FEF0` 在真实试听、正式播放、下一首流程里仍然零命中。
 - 即使直接 hook `KernelBase!ReadFile`，同一套真实音乐流程里也没有任何命中日志。
 - 同时 `sub_1426C4120` 的目标 `segment` 记录仍然稳定成功。
+- `sub_142692E90` 与 `sub_142692EE0` 这轮也已明确形成反证：
+  - hook 安装成功
+  - 真实试听、正式播放、下一首流程里真正命中数仍然为 `0`
+  - 因而当前不能继续把它们表述成音乐分段请求的实际完成 / 释放主路径
 - 因而当前更合理的解释不再是“第一次提交发生在 hook 安装前”，而是：
   - 运行时真实 submit 落点不是这轮直接 hook 到的静态函数本体
   - 或者 `sub_1426C4120` 之后的真实消费边界比当前探测到的 submit / `ReadFile` 更靠后
@@ -144,8 +167,10 @@
 - 不再把低层 `Win32ReadQueue_ExecuteRead` 当成“已经补齐条件的最终实现边界”；它目前仍缺资源关联桥。
 - 不再把 `sub_142073210 / sub_1420741A0` 当成默认主链；运行验证已经表明，不能先假设当前音乐一定走 wrapper。
 - 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
+- 不再把 `sub_142692E90 / sub_142692EE0` 当成默认完成路径；这条前提也已经被本轮运行日志否掉。
 - 下一轮唯一优先确认的运行时边界，收缩为：
   - `off_14407FB20` 运行时对象的槽位 `[4]`
   - 记录对象地址、vftable 地址、槽位真实函数指针
-  - 记录返回句柄与完成路径，确认能否在该边界把外部文件同步灌入 `segmentDesc + 0x10`
+  - 解释为什么当前没有任何 `dynamic submitter.slot4` 安装日志或命中日志
+  - 记录返回句柄与真实完成路径，确认能否在该边界把外部文件同步灌入 `dstBuffer`
 - 后续运行态关联应优先使用 `wemId / wemResource / streamHandle / segment`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。

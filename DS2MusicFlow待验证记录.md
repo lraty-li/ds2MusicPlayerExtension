@@ -10,10 +10,10 @@
 
 ## 当前开放问题
 
-- `sub_1426C4120` 已经静态补齐 `wemResource + 输出缓冲 + 写入长度 + 逻辑偏移`，但 `off_14407FB20` 运行时槽位 `[4]` 的真实函数指针仍未记录。
+- `sub_1426C4120` 已经运行命中补齐 `wemResource + dstBuffer + readBytes + logicalOffset`，但 `off_14407FB20` 运行时槽位 `[4]` 的真实函数指针仍未记录。
 - preview 与正式播放已确认汇合到 `sub_1426C4120`，但它们在 `off_14407FB20[4]` 之后是否再次分叉，仍未闭环。
-- `sub_1426C4120` 里的 `segmentDesc + 0x10` 是否就是后续真实消费的目标缓冲，仍需运行时确认。
-- 低层 `Win32ReadQueue_ExecuteRead` 虽拿得到文件偏移、缓冲、长度，但当前仍缺 `wemResource / streamHandle -> fileView / segmentEntry` 的稳定关联桥，不能直接作为主替换边界。
+- 当前记录到的 `dstBuffer` 是否就是后续真实消费的目标缓冲，仍需运行时确认。
+- 当前没有任何 `dynamic submitter.slot4` 安装日志或命中日志；这是观测方案未挂上，还是 `sub_1426C4120` 之后真实消费边界不在该函数本体，仍需确认。
 
 ## 维护规则
 
