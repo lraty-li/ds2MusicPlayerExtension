@@ -1,143 +1,111 @@
 # DS2 音乐流程待验证记录：文件定位与读链
 
-本页只整理“音乐请求如何被收束成文件键并交给下游设备”的静态证据。
+本页只保留“resolver 已命中之后，真实可听数据链到底落到哪里”的开放问题。
+已经被运行日志确认的结论已移入主知识文件与流程总览，不再在本页重复展开。
 
-## 已确认的候选文件定位链
+## 当前仍需闭环的问题
 
-- 当前已静态确认同属 `CAkFilePackageLowLevelIO` 相关分层的候选点包括：
-  - `sub_1426932B0`
-  - `sub_142693510`
-  - `sub_1426C4120`
-- 其中：
-  - `sub_1426932B0` 当前更像“按 `fileId / name` 尝试解析 `%u.wem`”的 resolver 观察点
-  - `sub_142693510` 当前更像同一对象上的更外层 resolver 边界
-  - `sub_1426C4120` 不是终点，它会继续把请求交给读设备
-- 但需要明确降级的一点是：
-  - 目前还没有 IDA 里的明确调用链，能把高层 `sub_140C12580 / sub_140C15560` 直接连到 `sub_1426932B0 / sub_142693510`
-  - 因此这里不能再写成“已确认的实际播放链骨架”，只能写成“文件定位相关候选链”
+- `sub_142693510 -> sub_1426C4120 -> sub_14206FEF0` 已经通过运行日志闭到提交节点，但 `sub_14206FEF0` 之后谁真正消费这些分块，仍未闭环。
+- preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在更下游是否会再次分叉，仍需确认。
+- 若最终替换点不是 resolver 返回阶段，也不是 `sub_14206FEF0` 本身，真实可听链会落到哪个更下游的读、流或解码完成点。
+- `wemId / streamHandle / requestKey / fileToken / fileView` 这几套键之间如何转换，仍未闭环。
 
-## 已确认的 `%u.wem` 请求参数形态
+## 需要继续依赖 IDA 下钻的对象问题
 
-- 当前已直接从 `sub_1426932B0` 反编译确认：
-  - `request + 0x00` 是可选的宽字符串名称指针
-  - `request + 0x08` 是 `fileId`
-  - `request + 0x0C` 是后续解析要用的描述/表指针
-  - `request + 0x14` 是额外标志位
-- 当 `request + 0x00 == null` 时，`sub_1426932B0` 会直接用 `request + 0x08` 格式化：
-  - `L"%u.wem"`
-- 也就是说，`"%u.wem"` 这条线当前已经不是模糊推测，而是可以落到具体参数：
-  - 名称为空时，由 `fileId` 直接生成 WEM 名称
-  - 名称非空时，优先使用上层已给出的显式名称
+- `WwiseWemResource` 的哪一段内嵌 stream 才是最小可改写边界。
+- `sub_1426C4120` 里由 `streamObject + 0x30` 解出的 `WwiseWemResource*`，在后续哪些函数里继续被解引用。
+- `sub_1426C4120` 读到的 `segment / segmentCtx / streamHandle`，哪一层才是真正的分块数据源选择边界。
+- 是否存在一个比“伪造完整 `WwiseWemResource`”更轻的做法，只改指针、内嵌 stream 或分段来源就能让目录外部音乐接管当前曲目。
 
-## 已确认的 low-level 提交链
+## 已获得的静态证据（尚未经过运行日志确认）
 
-- `sub_1426C4120` 会通过 `off_14407FB20` 的 `+0x20` 槽位调用 `sub_14206A490`。
-- `sub_14206A490` 会先调用 `sub_14206A1B0`。
-- `sub_14206A1B0` 会构造固定格式的逻辑键：
-  - `cache:streams/%x/%x/%x/%x/%s.%02x.stream`
-- 当前已直接从 `sub_14206A1B0` 反编译确认：
-  - 第二个参数是 16 字节原始 key
-  - 第三个参数是末尾 `%02x` 的流索引/变体字节
-  - 函数返回的是一个字符串对象，内容就是构造出的 `cache:streams/...`
-- 之后 `sub_14206A490` 会把这个键交给 `qword_14619D918` 当前设备的 `+0x20` 槽位。
-- 这里的“当前设备”不能再简单等同成基础 `NXStorageReadDevice`：
-  - `sub_1426E47A0` 在条件成立时会把它替换成 `DecompressingReadDevice`
-  - 该包装设备的 `+0x20 -> sub_142073210`
-  - 包装设备会先按 `streaming_graph.core` 注入的分类表决定是直通到底层设备，还是进入“包文件偏移 + 解压”链
+- `sub_1426C4120` 不是直接提交读请求；它会调用 `off_14407FB20` 的虚表 `+0x20`，当前落点是 `sub_14206A490`。
+- `sub_14206A490` 会先调用 `sub_14206A1B0` 构造 `cache:streams/%x/%x/%x/%x/%s.%02x.stream` 路径，再把请求对象交给 `qword_14619D918` 当前设备对象的虚表 `+0x20`。
+- 因而，`sub_1426C4120` 之后真正稳定的抽象边界不是某一个固定函数，而是：
+  - `SubmitStreamCacheReadRequest`
+  - `-> qword_14619D918`
+  - `-> vftable + 0x20`
+- 这一个虚表槽位当前只静态确认了两种具体实现：
+  - `NXStorageReadDevice_SubmitRequest (sub_14206FEF0)`
+  - `DecompressingReadDevice_SubmitRequest (sub_142073210)`
+- `sub_14206A490` 传下去的请求结构已经带有足够具体的 I/O 字段：
+  - `request + 0x00`：路径字符串指针
+  - `request + 0x08`：请求键，初始常见值为 `-1`
+  - `request + 0x10`：`segment + 0x10`
+  - `request + 0x18`：`segmentBase + streamOffset`
+  - `request + 0x20`：`segmentSize`
+  - `request + 0x30`：完成回调
+  - `request + 0x38`：回调上下文，静态上对应 `segment`
+- `sub_140119CF0 -> sub_14206ED10` 会先创建 `NXStorageReadDevice` 并写入 `qword_14619D918`。
+- `sub_1426E47A0` 在流媒体初始化阶段会检查 streaming graph；若图中存在对应条目，会调用 `sub_1420721B0` 构造 `DecompressingReadDevice`，并再次把 `qword_14619D918` 改成新的包装设备。
+- 目前静态上只确认到这两处主路径会写 `qword_14619D918`：
+  - 基础初始化时写入 `NXStorageReadDevice`
+  - `sub_1426E47A0` 条件成立时写入 `DecompressingReadDevice`
+- 除了 `sub_1426E47A0` 内部分配失败后的防御性写回，尚未看到第三个常规写点会把它改成别的设备类型。
+- `sub_1420721B0` 构造 `DecompressingReadDevice` 时，会把旧的活动设备保存到 `device + 0x40`。
+- 因而即使运行时当前设备已经切到 `DecompressingReadDevice`，该对象内部仍可能把某些请求继续转发到底层 `NXStorageReadDevice`。
+- 目前更像“真实提交读请求入口”的下一个候选点是 `sub_14206FEF0`：
+  - 它正是设备虚表 `+0x20` 这类读入口之一
+  - 它会消费上面的请求结构，分配/复用 I/O operation slot，并把返回句柄写回调用方提供的输出地址
+  - 已被确认会调用 `sub_14206E920` 复制请求对象，后续再进入设备内部排队
+- `NXStorageReadDevice_SubmitRequest (sub_14206FEF0)` 在 `request + 0x08 == -1` 时，会用 `sub_1400CA170 -> sub_1420713E0` 按路径字符串查文件对象。
+- 同一个提交点会把选中的文件对象写到 operation context 的 `+0x08`，并把 operation handle 写到 `+0x78`。
+- `NXStorageReadDevice_AllocOpContext (sub_142071710)` 通过空闲表取回 operation slot；静态上已经能看出，返回 handle 的高 16 位直接对应 slot 索引。
+- 因此在 `sub_14206FEF0` 返回后，可以用：
+  - `slotIndex = (handle >> 16) & 0xFFFF`
+  - `opContext = *(_QWORD *)(device + 0x200) + 144 * slotIndex`
+  重新定位本次 operation context，并回读 `opContext + 0x08` 里的文件槽令牌。
+- `NXStorageReadDevice_IoWorkerThread (sub_1420708D0)` 会收集待处理 operation context，并交给 `NXStorageReadDevice_QueueBatchReads (sub_1420704E0)`。
+- `NXStorageReadDevice_QueueBatchReads (sub_1420704E0)` 会按“同一文件对象 + 连续偏移”合并请求，然后调用 `Win32ReadQueue_EnqueueRead (sub_1427FE5C0)`。
+- `Win32ReadQueue_EnqueueRead (sub_1427FE5C0)` 写入的低层队列项已经明确带有：
+  - 文件对象
+  - 文件偏移
+  - 输出缓冲
+  - 读取长度
+- 进一步静态确认：
+  - `Win32ReadQueue_EnqueueRead` 的第三个参数不是文件指针，而是文件槽令牌 / 索引。
+  - 它会经由 `readQueue + 0xC0` 指向的文件表，把该槽令牌解析成真实条目，再把 `fileEntry + 0x40` 写入低层队列项的 `+0x08`。
+  - 这意味着 `sub_14206FEF0` 记录到的 `fileToken` 与 `sub_1427FE940` 看到的 `fileView` 之间需要一次显式映射，不能直接拿来做指针相等比较。
+- `Win32ReadQueue_WorkerThread (sub_1427FDB40)` 消费这批低层队列项，并在普通读分支里调用 `Win32ReadQueue_ExecuteRead (sub_1427FE940)`。
+- `Win32ReadQueue_ExecuteRead (sub_1427FE940)` 已静态确认会真正落到 `ReadFile`；对当前目标来说，它是目前第一个已经看到“文件对象 + 偏移 + 缓冲 + 长度”同时同场出现的下游点。
+- `sub_1420734A0` 仍更像包装层后续线程分支，不应默认视为 `sub_1426C4120` 的直接下一个主线节点。
+- `sub_142073210` 当前应单独看待：
+  - 静态上它已经明确是 `DecompressingReadDevice` 的请求入口
+  - 但运行验证已经表明：当前音乐主链并没有命中这一个包装层入口
+- `DecompressingReadDevice_SubmitRequest (sub_142073210)` 会直接按 `request + 0x08` 索引包装层分类表，不是简单转发。
+- `DecompressingIOThread_MainLoop (sub_142074380)` 会把包装层父请求翻译成新的底层请求：
+  - 这份新请求改用数值键、包文件压缩偏移和新的完成回调
+  - 因而运行时在 `sub_14206FEF0` 看到数值 `requestKey`，已经有了静态解释
+- `DecompressingIOThread_BuildBlockCopies (sub_142073860)` 会把父请求拆成逻辑块描述符，当前已能静态读出：
+  - `blockIndex`
+  - `inBlockOffset`
+  - `dest`
+  - `copyBytes`
+  - `parentRequest`
+- `DecompressingIOThread_FinalizeBlockCopy (sub_1420741A0)` 会在包装层把块数据写回最终输出缓冲，然后才继续父请求完成逻辑。
+- 但运行验证已经确认：
+  - 当前真实音乐链没有命中 `sub_1420741A0`
+  - 所以这条包装层逻辑块覆写线不能再作为当前实现依据
 
-## 已确认的读请求对象布局
+## 下一轮应优先追的方向
 
-- 当前已直接从 `sub_14206A490 -> sub_14206E920 -> sub_142073210` 的实参装配与字段拷贝确认：
-  - `request + 0x00`：逻辑键字符串对象，也就是 `cache:streams/...`
-  - `request + 0x08`：分类/索引字段；`sub_142073210` 会直接读取这里决定是否进入解压包装路径
-  - `request + 0x10`：目标缓冲指针
-  - `request + 0x18`：读取起始偏移
-  - `request + 0x20`：读取长度
-  - `request + 0x28`：单字节标志
-  - `request + 0x2C`：优先级；当前音乐链样本里是 `127`
-  - `request + 0x30`：完成回调函数
-  - `request + 0x38`：完成回调上下文
-- 其中 `request + 0x10 / +0x18 / +0x20` 的判断依据是：
-  - `sub_14206E920` 会原样把这些字段拷进 op context
-  - `sub_142073860` 随后按 `a2[2] / a2[3] / a2[4]` 使用它们计算块号、偏移和覆盖范围
-- 因而，当前已经不只是“知道音乐会落到读设备”：
-  - 还已经静态确认存在一份标准化请求对象
-  - 其中明确带着 `buffer / offset / size / completion callback`
-
-## 当前最可行的数据替换落点
-
-- 如果后续能进一步证实当前播放请求确实会落到这条 resolver / low-level 读链，那么当前最可行的切入层仍更像：
-  - 决策层：`sub_142693510`
-  - 数据层：`DecompressingReadDevice + 0x20 -> sub_142073210`
-- 但这一定义现在必须附带前提：
-  - `sub_142693510` 当前只是静态上更像 resolver 边界
-  - 还没有足够的 IDA 明确调用证据，把它写成“已证实属于实际播放主链的决策层”
-- 当前已经可以单独成立的部分只有：
-  - `sub_142073210` 确实拿到完整读请求对象
-  - 它在结构上适合按 `request + 0x18 / +0x20` 从外部 `.wem` 读取，并把数据写到 `request + 0x10`
-
-## 当前测试版替换方案
-
-- 当前代码实现先按“肯定替换”思路做闭环验证，不再等待更高层的 `fileId` 透传完全钉死。
-- 现阶段的测试 hook 组合是：
-  - `sub_140C12580`：播放入口，负责根据当前曲目选择外部 `.wem`
-  - `sub_140C15560`：试听入口，负责根据当前曲目选择外部 `.wem`
-  - `sub_142073210`：捕获低层读请求，记录 `outputBuffer / offset / size / opHandle`
-  - `sub_1420734A0`：等待底层读完成；若返回值为成功态 `2`，则按前面记录的 `offset / size` 用外部 `.wem` 覆写输出缓冲
-- 这套测试方案的关键假设是：
-  - 不手动伪造底层 I/O 完成协议
-  - 先让游戏原生读链正常走完
-  - 再在完成点上按块覆写缓冲，验证“外部 WEM 字节能否直接替换当前音乐数据”
-- 这套测试方案当前仍只是验证性原型，不代表：
-  - 已经证实高层播放入口静态落到 `sub_1426932B0 / sub_142693510`
-  - 也不代表 `%u.wem` resolver 线已经被证明是当前播放器的实际必经路径
-- 当前测试版额外支持以下外部目录候选：
-  - `script/externalMusic`
-  - `scripts/externalMusic`
-  - `scripts/external_music`
-
-## 已确认的请求字段矛盾点
-
-- `sub_14206A490` 在构造送往读设备的请求对象时，当前已能静态确认：
-  - `+0x00` 放入 `cache:streams/...` 字符串对象
-  - `+0x08` 被明确写成 `-1`
-  - `+0x10` 起的后续字段再填入额外参数
-- 但 `DecompressingReadDevice +0x20 -> sub_142073210` 的首条分类判断，当前已能从汇编确认是：
-  - 读取 `*(int *)(request + 8)`
-  - 按这个值去索引 `device + 0x20` 那张 16 字节步长的分类表
-- 进一步在包装层工作线程 `sub_142074380` 与排程函数 `sub_142073610` / `sub_142073860` 中，也能看到同一事实：
-  - 原始请求的 `+0x08` 会被继续传播
-  - 后续包文件偏移查询也是按这个字段去索引 `streaming_graph` 表
-- 这说明当前存在一个必须解释的静态矛盾：
-  - 音乐链构造请求时把 `request + 8` 设成 `-1`
-  - 包装层又把 `request + 8` 当成 `fileIndex` 使用
-- 目前唯一还能成立的两种解释是：
-  - `streaming_graph` 相关表对 `-1` 预留了哨兵项或偏移基址
-  - 音乐这条请求在实际运行时并不走这条包装层索引路径
-
-## 已确认的分层
-
-- `CAkFilePackageLowLevelIO` 当前已能静态拆成两层视图：
-  - resolver 视图
-  - low-level I/O 视图
-- 当前已对上的关键槽位包括：
-  - resolver `+0x18 -> sub_142693510`
-  - resolver `+0x38 -> sub_1426932B0`
-  - low-level `+0x28 -> sub_142692C90`
-  - low-level `+0x30 -> sub_1426C4120`
-  - low-level `+0x08 -> sub_142692DE0`
-  - low-level `+0x10 -> sub_142692E90`
-
-## 当前不能下的结论
-
-- 不能因为看到了 `cache:streams/...`，就直接断言它已经等价于某个真实磁盘路径。
-- 不能因为 `sub_1426C4120` 已经接到共享读设备，就直接断言“用户目录外部文件已经可读”。
-- 这条链当前只能证明：
-  - 音乐请求最终会变成一个固定命名空间下的逻辑键。
-  - 这个逻辑键会被交给下游读设备继续处理。
-
-## 当前剩余问题
-
-- `cache:streams/...` 进入 `DecompressingReadDevice` 后，`request + 8 == -1` 究竟是如何被解释的。
-- 启动阶段装入的文件表与运行时音乐请求是否最终收束到同一组 `streaming_graph` 映射表。
-- 包装设备分类表里“直通”和“压缩块流”两类请求，各自对应哪些具体音乐资源形态。
+- 不再把 `sub_14206FEF0` 的运行态请求当成 `cache:streams/...` 路径对象；这条前提已经被运行日志证伪。
+- 继续保留 `sub_1426C4120` 作为上游 `wemResource / wemId` 观测点，并用：
+  - `sub_14206FEF0.outHandle == sub_1426C4120.streamHandle`
+  - `sub_14206FEF0.callbackCtx == sub_1426C4120.segment`
+  做稳定关联。
+- 不再单独把 `sub_142073210 / sub_1420741A0` 当成默认主链；运行验证已经表明，不能先假设当前音乐一定走 wrapper。
+- 下一轮更稳妥的第一步，应先确认目标请求命中 `sub_14206A490` 时：
+  - `qword_14619D918` 当前指向哪种设备对象
+  - `vftable + 0x20` 真实落到 `sub_14206FEF0` 还是 `sub_142073210`
+- 更适合继续推进的候选实现边界，已经从“固定 hook 某个 submit 函数”收束成：
+  - 以 `qword_14619D918` 的虚接口为中心
+  - 先识别当前活动设备类型
+  - 再决定继续走 `NXStorageReadDevice` 低层覆写，还是走 wrapper 分支
+- 下一轮应优先确认：
+  - `sub_1426C4120` 调用的活动读设备在当前运行态到底是谁
+  - 当前目标音乐请求是否直接走 `NXStorageReadDevice_SubmitRequest`
+  - 还是先进入 `DecompressingReadDevice_SubmitRequest` 后再转发
+  - 若是前者，音乐链是否继续沿 `sub_14206FEF0 -> sub_1420708D0 -> sub_1420704E0 -> sub_1427FE5C0 -> sub_1427FE940` 推进
+- `requestKey / fileToken / fileView` 的低层映射仍然有价值，但不再是“音乐替换最小闭环”的首要前提。
+- 后续运行态关联应优先使用 `wemId / wemResource / streamHandle`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。
