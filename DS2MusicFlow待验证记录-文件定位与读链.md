@@ -6,15 +6,15 @@
 ## 当前仍需闭环的问题
 
 - `sub_142693510 -> sub_1426C4120` 已经通过运行日志稳定闭环，但其后的真实提交节点仍未最终钉死。
-- `sub_1426C4120` 这轮已经运行命中补齐 `submitCtx / dstBuffer / readBytes / logicalOffset`，因此当前最需要确认的是：发起那次虚调用时，真实 submitter 对象到底从哪来，以及它返回的异步句柄是如何完成与回收的。
+- `sub_1426C4120` 这轮已经运行命中补齐 `submitCtx / dstBuffer / readBytes / logicalOffset`，而新的静态链已收敛到：`qword_1461C4638 -> StreamingManager + 0x578 -> ObjectStreamingSystem + 0x20`。因此当前最需要确认的是：这条 owner 链在运行时是否稳定等于 `sub_1426C4120` 现场实际装入 `rcx` 的 submitter 对象，以及它返回的异步句柄是如何完成与回收的。
 - preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在真实 submitter 调用之后是否还会再次分叉，仍需确认。
 - `sub_1426C4120` 里当前记录到的 `dstBuffer` 是否就是后续真实消费的目标缓冲，而不是中间 staging buffer，仍需运行时确认。
 - 当前已经补出更具体的反证：按 `base + 0x407FB20` 读取到的所谓 submitter 全局值是非指针 `0x65525F7961727241`。因此当前待确认的不是“这个全局里的槽位 `[4]` 为何零命中”，而是“真实 submitter 对象根本不在这里”。
 
 ## 需要继续依赖 IDA 下钻的对象问题
 
-- `sub_1426C4120` 发起虚调用前，`rcx` 里的真实 submitter 对象到底从哪一个寄存器搬运或哪一段对象链解出。
-- 当前静态上看到的 `off_14407FB20`，与运行时读到的非指针值之间，究竟是符号识别错误、RVA 误判，还是对象布局理解错误。
+- `sub_1426C4120` 发起虚调用前，静态上已经能确认 `rcx` 来自 `off_14407FB20`；当前还需确认的是：运行时这个槽位是否稳定等于 `ObjectStreamingSystem + 0x20`。
+- `qword_1461C4638 -> +0x578 -> +0x20` 这条 owner 链，在当前版本运行时是否稳定可用，还是还需要通过 `InitStreamCacheSubmitterThread` 再做一次捕获。
 - `sub_1426C4120` 传给真实 submitter 槽位的第二实参 `resource + 0x10`、以及塞进 transfer 结构的 `resource + 0xC0 / +0xD0`，分别代表哪些提交侧元数据。
 - `sub_1426C4120` 里 `segmentDesc + 0x10` 这块缓冲，后续是被谁消费、是否允许同步覆写后直接视作本段已完成。
 - 若仍想继续保留低层 `Win32ReadQueue_ExecuteRead` 作为备选，则必须继续把 `wemResource / streamHandle / segment` 映射到 `fileView / segmentEntry`。
@@ -47,6 +47,13 @@
 - `sub_1426C4120` 不是直接提交读请求；它会调用 `off_14407FB20` 的虚表 `+0x20`，当前落点是 `sub_14206A490`。
 - `off_14407FB20` 默认先指向静态 submitter 对象 `0x14407F9F8`，其首字段就是 submitter vtable `0x1433C9CE0`。
 - `InitStreamCacheSubmitterThread (sub_1426E4670)` 会把 `off_14407FB20` 改成运行时对象 `a1 + 0x20`，但仍复用同一套 submitter 虚接口。
+- 新一轮 IDA 静态下钻已经把 submitter 的 owner 链补齐为：
+  - `qword_1461C4638 -> StreamingManager*`
+  - `[StreamingManager + 0x578] -> ObjectStreamingSystem*`
+  - `ObjectStreamingSystem + 0x20 -> submitter 子对象`
+- 这意味着当前更稳的 submitter 来源不是“固定全局槽位本身”，而是：
+  - `StreamingManager` 持有的 `ObjectStreamingSystem`
+  - 再由它派生 `+0x20` 子对象
 - `sub_1426C4120` 当前已静态补全出一组更直接的提交侧字段：
   - `streamObject + 0x30 -> WwiseWemResource*`
   - `streamObject + 0x38 -> segment 基偏移`
@@ -174,8 +181,8 @@
 - 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
 - 不再把 `sub_142692E90 / sub_142692EE0` 当成默认完成路径；这条前提也已经被本轮运行日志否掉。
 - 下一轮唯一优先确认的运行时边界，收缩为：
-  - `sub_1426C4120` 发起那次虚调用时的真实 `rcx`
-  - 解释为什么当前 `base + 0x407FB20` 会读出非指针 `0x65525F7961727241`
-  - 重新定位真实 submitter 对象地址、vftable 地址与槽位目标
+  - `qword_1461C4638 -> +0x578 -> +0x20` 这条 owner 链在运行时的实际值
+  - 它是否稳定等于 `sub_1426C4120` 发起虚调用时的真实 `rcx`
+  - 基于这个真实对象记录 vftable 地址与槽位目标
   - 记录返回句柄与真实完成路径，确认能否在该边界把外部文件同步灌入 `dstBuffer`
 - 后续运行态关联应优先使用 `wemId / wemResource / streamHandle / segment`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。
