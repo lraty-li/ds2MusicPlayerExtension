@@ -10,10 +10,10 @@
 
 ## 当前开放问题
 
-- `sub_1426C4120` 之后，`off_14407FB20->vftable + 0x20` 与 `qword_14619D918->vftable + 0x20` 在运行时到底各自指到谁，谁才是真正决定可听内容的下游消费者。
-- preview 与正式播放已确认汇合到 `sub_1426C4120`，但它们在更下游是否会再次分叉，仍未闭环。
-- `sub_1426C4120` 读到的 128KB 分块，最终是在哪个不是当前已排除 submit / `ReadFile` 边界的点变成实际发声缓冲或解码输入。
-- 若必须走对象级替换，最小可行边界是“替换 `WwiseWemResource*` 指针”“改写其内嵌 stream / 分段来源”，还是“伪造完整 `WwiseWemResource` 对象”。
+- `sub_1426C4120` 已经静态补齐 `wemResource + 输出缓冲 + 写入长度 + 逻辑偏移`，但 `off_14407FB20` 运行时槽位 `[4]` 的真实函数指针仍未记录。
+- preview 与正式播放已确认汇合到 `sub_1426C4120`，但它们在 `off_14407FB20[4]` 之后是否再次分叉，仍未闭环。
+- `sub_1426C4120` 里的 `segmentDesc + 0x10` 是否就是后续真实消费的目标缓冲，仍需运行时确认。
+- 低层 `Win32ReadQueue_ExecuteRead` 虽拿得到文件偏移、缓冲、长度，但当前仍缺 `wemResource / streamHandle -> fileView / segmentEntry` 的稳定关联桥，不能直接作为主替换边界。
 
 ## 维护规则
 

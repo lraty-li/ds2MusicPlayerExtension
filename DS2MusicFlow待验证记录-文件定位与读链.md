@@ -6,22 +6,43 @@
 ## 当前仍需闭环的问题
 
 - `sub_142693510 -> sub_1426C4120` 已经通过运行日志稳定闭环，但其后的真实提交节点仍未最终钉死。
-- preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在更下游是否会再次分叉，仍需确认。
-- 若最终替换点不是 resolver 返回阶段，也不是 `sub_14206FEF0` 本身，真实可听链会落到哪个更下游的读、流或解码完成点。
-- `wemId / streamHandle / requestKey / fileToken / fileView` 这几套键之间如何转换，仍未闭环。
+- 当前更需要确认的是：`off_14407FB20` 运行时对象的虚表槽位 `[4]` 最终指向谁，以及它返回的异步句柄是如何完成与回收的。
+- preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在 `off_14407FB20[4]` 之后是否还会再次分叉，仍需确认。
+- `sub_1426C4120` 里的 `segmentDesc + 0x10` 是否就是后续真实消费的目标缓冲，而不是中间 staging buffer，仍需运行时确认。
+- `streamObject + 0x30 -> WwiseWemResource*` 与当前目标曲目的绑定虽然已经有运行命中样本支持，但仍需补一轮更直接的运行时对照，排除共享资源或预读对象。
 
 ## 需要继续依赖 IDA 下钻的对象问题
 
-- `WwiseWemResource` 的哪一段内嵌 stream 才是最小可改写边界。
-- `sub_1426C4120` 里由 `streamObject + 0x30` 解出的 `WwiseWemResource*`，在后续哪些函数里继续被解引用。
-- `sub_1426C4120` 读到的 `segment / segmentCtx / streamHandle`，哪一层才是真正的分块数据源选择边界。
-- 是否存在一个比“伪造完整 `WwiseWemResource`”更轻的做法，只改指针、内嵌 stream 或分段来源就能让目录外部音乐接管当前曲目。
+- `off_14407FB20` 运行时对象的虚表槽位 `[4]` 在启动后是否会被改写到静态命名之外的真实实现。
+- `sub_1426C4120` 传给 `off_14407FB20[4]` 的第二实参 `resource + 0x10`、以及塞进 transfer 结构的 `resource + 0xC0 / +0xD0`，分别代表哪些提交侧元数据。
+- `sub_1426C4120` 里 `segmentDesc + 0x10` 这块缓冲，后续是被谁消费、是否允许同步覆写后直接视作本段已完成。
+- 若仍想继续保留低层 `Win32ReadQueue_ExecuteRead` 作为备选，则必须继续把 `wemResource / streamHandle / segment` 映射到 `fileView / segmentEntry`。
 
 ## 已获得的静态证据（尚未经过运行日志确认）
 
 - `sub_1426C4120` 不是直接提交读请求；它会调用 `off_14407FB20` 的虚表 `+0x20`，当前落点是 `sub_14206A490`。
 - `off_14407FB20` 默认先指向静态 submitter 对象 `0x14407F9F8`，其首字段就是 submitter vtable `0x1433C9CE0`。
 - `InitStreamCacheSubmitterThread (sub_1426E4670)` 会把 `off_14407FB20` 改成运行时对象 `a1 + 0x20`，但仍复用同一套 submitter 虚接口。
+- `sub_1426C4120` 当前已补全出一组更直接的提交侧字段：
+  - `streamObject + 0x30 -> WwiseWemResource*`
+  - `streamObject + 0x38 -> segment 基偏移`
+  - `segmentDesc + 0x00 -> 当前段相对偏移`
+  - `segmentDesc + 0x0C -> 当前段长度`
+  - `segmentDesc + 0x10 -> 当前段输出缓冲`
+- 因而 `sub_1426C4120` 是目前第一个静态上同时具备：
+  - `wemResource / segment` 级资源关联
+  - 输出缓冲
+  - 写入长度
+  - 逻辑偏移
+  的候选边界。
+- `sub_1426C4120` 还会把：
+  - `resource + 0x10`
+  - `resource + 0xC0`
+  - `resource + 0xD0`
+  拆进提交给 `off_14407FB20[4]` 的参数与 transfer 结构。
+- 这意味着当前更小的静态替换边界，已经从“伪造完整 `WwiseWemResource`”收缩成：
+  - `sub_1426C4120`
+  - 或其调用的运行时 `off_14407FB20` 槽位 `[4]`
 - `sub_14206A490` 会先调用 `sub_14206A1B0` 构造 `cache:streams/%x/%x/%x/%x/%s.%02x.stream` 路径，再把请求对象交给 `qword_14619D918` 当前设备对象的虚表 `+0x20`。
 - 因而，`sub_1426C4120` 之后真正稳定的抽象边界不是某一个固定函数，而是：
   - `SubmitStreamCacheReadRequest`
@@ -70,10 +91,23 @@
   - 这意味着 `sub_14206FEF0` 记录到的 `fileToken` 与 `sub_1427FE940` 看到的 `fileView` 之间需要一次显式映射，不能直接拿来做指针相等比较。
 - `Win32ReadQueue_WorkerThread (sub_1427FDB40)` 消费这批低层队列项，并在普通读分支里调用 `Win32ReadQueue_ExecuteRead (sub_1427FE940)`。
 - `Win32ReadQueue_ExecuteRead (sub_1427FE940)` 已静态确认会真正落到 `ReadFile`；对当前目标来说，它是目前第一个已经看到“文件对象 + 偏移 + 缓冲 + 长度”同时同场出现的下游点。
+- 但低层队列链这轮也补上了一条新的静态限制：
+  - `sub_14206FEF0` 返回的 handle 只能可靠映射回 `opContext`
+  - 到 `sub_1420704E0` 后就会被摘成“文件槽位 + 偏移 + 缓冲 + 长度”并可能合并
+  - `sub_1427FE5C0 / sub_1427FE940` 里已经看不到 `request handle / callbackCtx / wemResource / streamHandle`
+- 因而 `Win32ReadQueue_ExecuteRead` 虽然机械上具备：
+  - 输出缓冲
+  - 读取长度
+  - 逻辑偏移
+  但当前仍缺“目标资源 -> fileView / segmentEntry”的稳定关联桥，不能直接当作理论上完全可行的最终边界。
 - `sub_1420734A0` 仍更像包装层后续线程分支，不应默认视为 `sub_1426C4120` 的直接下一个主线节点。
 - `sub_142073210` 当前应单独看待：
   - 静态上它已经明确是 `DecompressingReadDevice` 的请求入口
   - 但运行验证已经表明：当前音乐主链并没有命中这一个包装层入口
+- 包装层最终写回 `sub_1420741A0` 这轮也被进一步降级：
+  - 它静态上确实拿得到 `dst / len / blockIndex + inBlockOffset`
+  - 但稳定键已经退化成 `(packageId, chunkIndex)` 级别
+  - 这更像共享包块缓存写回点，而不是适合作主替换边界的资源级节点
 - 新一轮围绕活动读设备的最小验证还补充确认：
   - 这轮选中的 `sub_14206A490` 与 `sub_14206FEF0` 虽然都安装成功
   - 但真实的试听、正式播放、下一首流程里依然没有出现任何命中日志
@@ -106,18 +140,12 @@
 ## 下一轮应优先追的方向
 
 - 不再把 `sub_14206FEF0` 的运行态请求当成 `cache:streams/...` 路径对象；这条前提已经被运行日志证伪。
-- 继续保留 `sub_1426C4120` 作为上游 `wemResource / wemId / streamHandle / segment` 观测点。
-- 不再单独把 `sub_142073210 / sub_1420741A0` 当成默认主链；运行验证已经表明，不能先假设当前音乐一定走 wrapper。
+- 继续保留 `sub_1426C4120` 作为当前唯一主替换边界假设的上游观测点。
+- 不再把低层 `Win32ReadQueue_ExecuteRead` 当成“已经补齐条件的最终实现边界”；它目前仍缺资源关联桥。
+- 不再把 `sub_142073210 / sub_1420741A0` 当成默认主链；运行验证已经表明，不能先假设当前音乐一定走 wrapper。
 - 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
-- 不再把 `KernelBase!ReadFile` 当成当前真实音乐链已经落到的低层边界；这条前提也已经被运行日志否掉。
-- 更适合继续推进的候选实现边界，已经从“固定 hook 某个 submit 函数”收束成：
-  - 以 `qword_14619D918` 的虚接口为中心
-  - 先识别当前活动设备类型
-  - 再决定继续走 `NXStorageReadDevice` 低层覆写，还是走 wrapper 分支
-- 下一轮应优先确认：
-  - `off_14407FB20->vftable + 0x20` 在真实音乐流程里到底指到哪一个运行时函数
-  - `qword_14619D918->vftable + 0x20` 在真实音乐流程里到底指到哪一个运行时函数
-  - 当前零命中现象，究竟是“虚表实际目标不是这轮静态命名实现”，还是“`sub_1426C4120` 之后的真实消费边界更靠后”
-  - 若真实边界仍落在 `NXStorageReadDevice` 系列，音乐链是否继续沿 `sub_1420708D0 -> sub_1420704E0 -> sub_1427FE5C0 -> sub_1427FE940` 推进
-- `requestKey / fileToken / fileView` 的低层映射仍然有价值，但不再是“音乐替换最小闭环”的首要前提。
+- 下一轮唯一优先确认的运行时边界，收缩为：
+  - `off_14407FB20` 运行时对象的槽位 `[4]`
+  - 记录对象地址、vftable 地址、槽位真实函数指针
+  - 记录返回句柄与完成路径，确认能否在该边界把外部文件同步灌入 `segmentDesc + 0x10`
 - 后续运行态关联应优先使用 `wemId / wemResource / streamHandle / segment`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。
