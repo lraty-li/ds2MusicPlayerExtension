@@ -5,7 +5,7 @@
 
 ## 当前仍需闭环的问题
 
-- `sub_142693510 -> sub_1426C4120 -> sub_14206FEF0` 已经通过运行日志闭到提交节点，但 `sub_14206FEF0` 之后谁真正消费这些分块，仍未闭环。
+- `sub_142693510 -> sub_1426C4120` 已经通过运行日志稳定闭环，但其后的真实提交节点仍未最终钉死。
 - preview 与正式播放已确认都会命中 `sub_1426C4120`，但它们在更下游是否会再次分叉，仍需确认。
 - 若最终替换点不是 resolver 返回阶段，也不是 `sub_14206FEF0` 本身，真实可听链会落到哪个更下游的读、流或解码完成点。
 - `wemId / streamHandle / requestKey / fileToken / fileView` 这几套键之间如何转换，仍未闭环。
@@ -20,6 +20,8 @@
 ## 已获得的静态证据（尚未经过运行日志确认）
 
 - `sub_1426C4120` 不是直接提交读请求；它会调用 `off_14407FB20` 的虚表 `+0x20`，当前落点是 `sub_14206A490`。
+- `off_14407FB20` 默认先指向静态 submitter 对象 `0x14407F9F8`，其首字段就是 submitter vtable `0x1433C9CE0`。
+- `InitStreamCacheSubmitterThread (sub_1426E4670)` 会把 `off_14407FB20` 改成运行时对象 `a1 + 0x20`，但仍复用同一套 submitter 虚接口。
 - `sub_14206A490` 会先调用 `sub_14206A1B0` 构造 `cache:streams/%x/%x/%x/%x/%s.%02x.stream` 路径，再把请求对象交给 `qword_14619D918` 当前设备对象的虚表 `+0x20`。
 - 因而，`sub_1426C4120` 之后真正稳定的抽象边界不是某一个固定函数，而是：
   - `SubmitStreamCacheReadRequest`
@@ -92,23 +94,30 @@
   - 当前真实音乐链没有命中 `sub_1420741A0`
   - 所以这条包装层逻辑块覆写线不能再作为当前实现依据
 
+## 已获得的运行时反证
+
+- 即使把 submit route hook 的安装时机前移到 resolver / `sub_1426C4120` 之前，当前选中的 `sub_14206A490 / sub_14206FEF0` 在真实试听、正式播放、下一首流程里仍然零命中。
+- 即使直接 hook `KernelBase!ReadFile`，同一套真实音乐流程里也没有任何命中日志。
+- 同时 `sub_1426C4120` 的目标 `segment` 记录仍然稳定成功。
+- 因而当前更合理的解释不再是“第一次提交发生在 hook 安装前”，而是：
+  - 运行时真实 submit 落点不是这轮直接 hook 到的静态函数本体
+  - 或者 `sub_1426C4120` 之后的真实消费边界比当前探测到的 submit / `ReadFile` 更靠后
+
 ## 下一轮应优先追的方向
 
 - 不再把 `sub_14206FEF0` 的运行态请求当成 `cache:streams/...` 路径对象；这条前提已经被运行日志证伪。
-- 继续保留 `sub_1426C4120` 作为上游 `wemResource / wemId` 观测点，并用：
-  - `sub_14206FEF0.outHandle == sub_1426C4120.streamHandle`
-  - `sub_14206FEF0.callbackCtx == sub_1426C4120.segment`
-  做稳定关联。
+- 继续保留 `sub_1426C4120` 作为上游 `wemResource / wemId / streamHandle / segment` 观测点。
 - 不再单独把 `sub_142073210 / sub_1420741A0` 当成默认主链；运行验证已经表明，不能先假设当前音乐一定走 wrapper。
-- 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被本轮运行日志否掉。
+- 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
+- 不再把 `KernelBase!ReadFile` 当成当前真实音乐链已经落到的低层边界；这条前提也已经被运行日志否掉。
 - 更适合继续推进的候选实现边界，已经从“固定 hook 某个 submit 函数”收束成：
   - 以 `qword_14619D918` 的虚接口为中心
   - 先识别当前活动设备类型
   - 再决定继续走 `NXStorageReadDevice` 低层覆写，还是走 wrapper 分支
 - 下一轮应优先确认：
-  - 为什么这轮选中的 `sub_14206A490 / sub_14206FEF0` 会在真实音乐流程里完全零命中
-  - 这轮签名是否对应到了同职责但并非当前音乐链使用的另一份实现
-  - `sub_1426C4120` 在当前运行态之后，到底先交给了哪一个真实提交边界
+  - `off_14407FB20->vftable + 0x20` 在真实音乐流程里到底指到哪一个运行时函数
+  - `qword_14619D918->vftable + 0x20` 在真实音乐流程里到底指到哪一个运行时函数
+  - 当前零命中现象，究竟是“虚表实际目标不是这轮静态命名实现”，还是“`sub_1426C4120` 之后的真实消费边界更靠后”
   - 若真实边界仍落在 `NXStorageReadDevice` 系列，音乐链是否继续沿 `sub_1420708D0 -> sub_1420704E0 -> sub_1427FE5C0 -> sub_1427FE940` 推进
 - `requestKey / fileToken / fileView` 的低层映射仍然有价值，但不再是“音乐替换最小闭环”的首要前提。
-- 后续运行态关联应优先使用 `wemId / wemResource / streamHandle`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。
+- 后续运行态关联应优先使用 `wemId / wemResource / streamHandle / segment`，而不是只靠 resolver 时间窗，因为同一资源会在时间窗结束后继续推进更多分块。
