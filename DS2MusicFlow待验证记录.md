@@ -10,10 +10,10 @@
 
 ## 当前开放问题
 
-- `sub_1426C4120` 已经运行命中补齐 `wemResource + dstBuffer + readBytes + logicalOffset`，但 `off_14407FB20` 运行时槽位 `[4]` 的真实函数指针仍未记录。
-- preview 与正式播放已确认汇合到 `sub_1426C4120`，但它们在 `off_14407FB20[4]` 之后是否再次分叉，仍未闭环。
+- `sub_1426C4120` 已经运行命中补齐 `wemResource + dstBuffer + readBytes + logicalOffset`，但真实 submitter 对象仍未定位。
+- preview 与正式播放已确认汇合到 `sub_1426C4120`，但它们在真实 submitter 调用之后是否再次分叉，仍未闭环。
 - 当前记录到的 `dstBuffer` 是否就是后续真实消费的目标缓冲，仍需运行时确认。
-- 当前没有任何 `dynamic submitter.slot4` 安装日志或命中日志；这是观测方案未挂上，还是 `sub_1426C4120` 之后真实消费边界不在该函数本体，仍需确认。
+- 当前已经确认 `base + 0x407FB20` 会读出非指针 `0x65525F7961727241`；因此当前待确认的是 `sub_1426C4120` 调用现场里真实的 submitter 来源。
 
 ## 维护规则
 
