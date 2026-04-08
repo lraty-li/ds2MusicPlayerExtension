@@ -22,6 +22,8 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 任何IDA MCP 探索都交给子agent来做，避免挤满上下文
 
+
+
 ## 工作循环
 - ida 探索，探索相关函数，确定目标hook点
 - 如果获得新知识，核对并补充到 “待验证记录”
