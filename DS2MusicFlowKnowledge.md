@@ -10,13 +10,7 @@
 - [函数职责：UI 路径](./DS2MusicFlowFunctionsUi.md)
 - [状态字段与顺序样本](./DS2MusicFlowStates.md)
 
-## 原型验证记录
 
-- [旧方案：外部 WEM 注入原型（已证伪）](./DS2MusicFlow实现方案-外部Wem注入.md)
-
-## 方案审阅
-
-- [音频替换方案：`sub_1426C4120 -> off_14407FB20[4]`](./RE/音频替换方案-sub_1426C4120.md)
 
 ## 待验证专题
 
