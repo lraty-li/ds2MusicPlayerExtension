@@ -11,21 +11,6 @@
 - [状态字段与顺序样本](./DS2MusicFlowStates.md)
 
 
-
-## 待验证专题
-
-- [待验证记录索引](./DS2MusicFlow待验证记录.md)
-- [待验证：文件定位与读链](./DS2MusicFlow待验证记录-文件定位与读链.md)
-- [待验证：流媒体设备与外部文件](./DS2MusicFlow待验证记录-流媒体设备与外部文件.md)
-
-## 已排除路线
-
-- [Wwise External Source 与 SetMedia](./DS2MusicFlow已排除路线-WwiseExternalSource与SetMedia.md)
-
-## 历史记录
-
-- [历史归档](./DS2MusicFlow待验证记录-历史归档.md)
-
 ## 常用跳转
 
 - [播放清理入口 `sub_140C12AC0`](./DS2MusicFlowFunctionsPlayback.md#sub_140c12ac0)
