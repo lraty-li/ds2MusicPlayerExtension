@@ -172,9 +172,13 @@
 - `base + 0x61C4638 -> +0x578 -> +0x20` 这条 owner 链，当前也还不能写成已被运行时证实：
   - 在目标提交样本里，当前代码反复读到 `submitterManager=0`
   - 因而当前不能继续把“直接读取这条链就能拿到 live submitter”写成既定事实
+- `sub_1426E4670` 这轮也已形成新的运行时反证：
+  - hook 安装成功
+  - 但目标流程里 `submitter owner capture` 真正命中数仍然为 `0`
+  - 因而当前不能继续把 `InitStreamCacheSubmitterThread` 写成“当前目标流程里稳定可用的 owner 捕获点”
 - 因而当前更合理的解释不再是“第一次提交发生在 hook 安装前”，而是：
   - 运行时真实 submitter 对象来源仍未被当前观测方案建立成功
-  - 必须转向 `InitStreamCacheSubmitterThread / StartAddress` 这类初始化线程入口做直接捕获
+  - 必须进一步收缩到 `StartAddress` 这类线程启动入口做直接捕获
 
 ## 下一轮应优先追的方向
 
@@ -185,7 +189,7 @@
 - 不再把“直接 hook 这轮选中的 `sub_14206A490 / sub_14206FEF0`”当成已证明可观察到真实音乐链的办法；这条前提已经被运行日志否掉。
 - 不再把 `sub_142692E90 / sub_142692EE0` 当成默认完成路径；这条前提也已经被本轮运行日志否掉。
 - 下一轮唯一优先确认的运行时边界，收缩为：
-  - `InitStreamCacheSubmitterThread / StartAddress` 命中时的 `ObjectStreamingSystem*`
+  - `StartAddress` 命中时的 `ObjectStreamingSystem*`
   - 由它派生的 `+0x20` submitter 子对象
   - 它是否稳定等于 `sub_1426C4120` 发起虚调用时的真实 `rcx`
   - 基于这个真实对象记录 vftable 地址与槽位目标

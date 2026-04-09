@@ -211,8 +211,12 @@
 - 但现有运行样本同时给出了新的反证：
   - 目标提交样本里，当前代码按 `base + 0x61C4638` 读取 `StreamingManager*` 时，连续读到 `0`
   - 因而“直接读这条 owner 链就能在目标时刻拿到 live submitter”这条前提，目前也还不能写成已成立
+- `sub_1426E4670` 这轮也已形成新的运行时反证：
+  - hook 安装成功
+  - 但目标流程里 `submitter owner capture` 真正命中数仍然为 `0`
+  - 因而当前不能继续把 `InitStreamCacheSubmitterThread` 写成当前目标流程里稳定可用的 owner 捕获点
 - 因而下一轮真正该确认的，不再是“这个固定全局槽位里的 `[4]` 是谁”，而是：
-  - `InitStreamCacheSubmitterThread / StartAddress` 命中时的 `ObjectStreamingSystem*`
+  - `StartAddress` 命中时的 `ObjectStreamingSystem*`
   - 它派生出的 `+0x20` 子对象，是否稳定等于 `sub_1426C4120` 现场实际装入 `rcx` 的 submitter
 
 ### 下一首
