@@ -180,3 +180,130 @@ struct MusicRuntimeState {
 而不是再继续扩散到 `+0x48` 那条 Intel 次级对象链。
 
 如果你要，我下一步可以基于这份结构，专门把**主播放链相关字段**再压缩成一张更短的“主链字段表”，方便后面持续对照。
+
+
+
+
+
+
+
+
+
+
+
+
+
+可以，而且现在已经能把它比较稳地还原成“全局指针 + 运行时对象”了。
+
+`qword_14622EDA8` 本身不是结构体本体，而是一个全局 `MusicRuntime *`。当前断在 `MusicRuntime_AdvanceNextTrack` 入口时，现场是：
+
+- `RIP = 0x7ff6483440d0`
+- `RSP = 0x740ddfee08`
+- `RCX = 0x1`
+- `RDX = 0x2734387db78`
+- `qword_14622EDA8 -> 0x44cc13b3000`
+
+当前对象里的关键值也能对上：
+- `playState @ +0x1910 = 1`
+- `playOrderMode @ +0x1911 = 1`
+- `currentPlayer @ +0x1918 = 0x44d0a59f880`
+- `currentTrackId @ +0x1924 = 57`
+- `currentPlayOrderIndex @ +0x1930 = 0`
+- `entryCount @ +0x1948 = 2`
+- `entryTrackIds @ +0x1950 = [57, 5]`
+- `playOrderRemap @ +0x1960 = [0, 1]`
+- `shuffleCursor @ +0x1968 = 0`
+- `secondaryPlayer @ +0x2830 = 0`
+
+我建议先把它定义成这样，已经足够拿来继续标注 IDA 了：
+
+```cpp
+struct MusicSlot24 {
+    uint32_t trackId;      // +0x00
+    uint8_t  valid;        // +0x04
+    uint8_t  pad05[3];
+    uint32_t p0;           // +0x08
+    uint32_t p1;           // +0x0C
+    uint32_t p2;           // +0x10
+    uint32_t p3;           // +0x14
+}; // 0x18
+
+struct MusicDescriptor56 {
+    uint8_t  unk00[0x10];
+    void    *entryObj;     // +0x10, entryObj+0x20 是 trackId
+    uint8_t  unk18[0x1D];
+    uint8_t  disabled;     // +0x35
+    uint8_t  unk36[0x02];
+}; // 0x38
+
+struct MusicLookup24 {
+    uint32_t trackId;      // +0x00
+    uint32_t unk04;
+    uint64_t unk08;
+    MusicSlot24 *slot;     // +0x10
+}; // 0x18
+
+struct MusicRuntime {
+    MusicSlot24 slots[100];            // 0x0000
+    uint8_t transitionTable[0xFA0];    // 0x0960, 100 * 40 bytes
+
+    uint64_t unk1900;                  // 0x1900
+    uint32_t unk1908;                  // 0x1908
+    uint8_t  defaultPlayOrderMode;     // 0x190C
+    uint8_t  initFlag1;                // 0x190D
+    uint8_t  initFlag2;                // 0x190E
+    uint8_t  unk190F;                  // 0x190F
+
+    uint8_t  playState;                // 0x1910
+    uint8_t  playOrderMode;            // 0x1911
+    uint8_t  pad1912[6];
+
+    void    *currentPlayer;            // 0x1918
+
+    uint8_t  pad1920[0x4];
+    uint32_t currentTrackId;           // 0x1924
+    uint32_t lastTrackId;              // 0x1928
+    uint8_t  pad192C[4];
+    uint32_t currentPlayOrderIndex;    // 0x1930
+    uint8_t  pad1934[4];
+
+    uint32_t descriptorCount;          // 0x1938
+    uint8_t  pad193C[4];
+    MusicDescriptor56 *descriptors;    // 0x1940
+
+    uint32_t entryCount;               // 0x1948
+    uint8_t  pad194C[4];
+    uint32_t *entryTrackIds;           // 0x1950
+
+    uint32_t playOrderCount;           // 0x1958
+    uint8_t  pad195C[4];
+    uint32_t *playOrderRemap;          // 0x1960
+    int32_t  shuffleCursor;            // 0x1968
+
+    uint8_t  pad196C[4];
+    MusicLookup24 lookup[100];         // 0x1970
+
+    uint8_t  unk22D0_to_2823[0x554];
+
+    uint8_t  state2824;                // 0x2824
+    uint8_t  flag2825;                 // 0x2825
+    uint8_t  secondaryState;           // 0x2826
+    uint8_t  pad2827;
+    uint32_t secondaryTrackIdOrIndex;  // 0x2828
+    void    *secondaryPlayer;          // 0x2830
+    uint8_t  trackChangePending;       // 0x2838
+
+    uint8_t  pad2839[0x1F];
+    uint8_t  initFlag1Copy;            // 0x2858
+    uint8_t  initFlag2Copy;            // 0x2859
+
+    uint8_t  pad285A[0x56];
+    uint32_t lastTransitionTime;       // 0x28B0
+};
+
+MusicRuntime *g_MusicRuntime; // qword_14622EDA8
+```
+
+高置信字段是 `+0x1910/+0x1911/+0x1918/+0x1924/+0x1930/+0x1948/+0x1950/+0x1958/+0x1960/+0x1968/+0x1940/+0x2830`。低一点的是两块大表的具体语义名，但尺寸和边界基本已经坐实了。
+
+这轮一共用了 7 次 ida mcp 调用，没有超过你限定的 10 次。下一步如果你要，我可以只用剩下的调用把这个 `struct` 直接声明进 IDA，并把 `qword_14622EDA8` 改成带类型的全局指针。

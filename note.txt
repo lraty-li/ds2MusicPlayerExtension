@@ -71,3 +71,7 @@ Array_DSUIMusicMenuFunction 后面接数组？
 
 .data:000000014622EDA8 qword_14622EDA8 dq ?                    ; DATA XREF: sub_1407139D0+E37↑r
 .data:000000014622EDA8                                         ; sub_140714D50:loc_1407159FF↑r ...
+
+
+有哪些是必须通过运行时断点才能获取的必要的信息
+尤其是还原结构体信息
