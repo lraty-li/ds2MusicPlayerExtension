@@ -9,6 +9,7 @@
 - [函数职责：列表核心](./DS2MusicFlowFunctionsPlaylist.md)
 - [函数职责：UI 路径](./DS2MusicFlowFunctionsUi.md)
 - [状态字段与顺序样本](./DS2MusicFlowStates.md)
+- [纯静态主方案：Wwise `.wem` 替换](./RE/WwiseWemReplacement_StaticPlan.md)
 
 
 ## 常用跳转

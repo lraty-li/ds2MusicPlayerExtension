@@ -1,3 +1,73 @@
 以音乐音频替换为目标，探索一条必须可行，不带任何 IDA静态分析无法证明的猜测，假设的方案
 
 你不应该根据当前hook 实现进行探索， hook 只是运行时探索以及验证工具
+
+
+.rdata:00000001432ECEF0 aMusicplay      db 'MusicPlay',0        ; DATA XREF: .data:00000001443E00A0↓o
+.rdata:00000001432ECEFA                 align 20h
+.rdata:00000001432ECF00 aChangepanel    db 'ChangePanel',0      ; DATA XREF: .data:00000001443E0068↓o
+.rdata:00000001432ECF0C                 align 10h
+.rdata:00000001432ECF10 aMusicnextto    db 'MusicNextTo',0      ; DATA XREF: .data:00000001443E0110↓o
+.rdata:00000001432ECF1C                 align 20h
+.rdata:00000001432ECF20 aMusicstop      db 'MusicStop',0        ; DATA XREF: .data:00000001443E00D8↓o
+
+
+
+这是注册回调吗？
+           + 40) = 0;
+  *(_BYTE *)(sub_14161A8A0(
+               a1,
+               (unsigned int)"OnPlayeMusic",
+               (unsigned int)"DSUIConstructionCustomizeMenuFunction_OnPlayMusic",
+               v25,
+               (__int64)sub_14161B110)
+           + 40) = 0;
+没啥结果，难道是建造音乐
+
+
+可能是UI代码
+ v75 = sub_1400A1560(64);
+  if ( v75 )
+  {
+    v140 = 0;
+    sub_1400A3C90(&v140, "MusicMenu", 9);
+    v76 = (volatile signed __int32 *)(v140 - 16);
+    *(_QWORD *)v75 = &DSUIController::`vftable';
+    if ( v76 != (volatile signed __int32 *)&unk_143B25C90 )
+.text:00000001414931AE                 call    sub_1400A3430
+.text:00000001414931B3                 lea     rax, ??_7DSUIMusicMenuController@@6B@ ; const DSUIMusicMenuController::`vftable'
+.text:00000001414931BA                 mov     dword ptr [rdi+20h], 0
+
+
+.rdata:000000014330E508 aSoundresourceA db 'SoundResource_Add_Playlist',0
+.rdata:000000014330E508                                         ; DATA XREF: .data:0000000143EF4C90↓o
+.rdata:000000014330E523                 align 8
+.rdata:000000014330E528 aSoundresourceD db 'SoundResource_Delete_Playlist',0
+.rdata:000000014330E528                                         ; DATA XREF: .data:0000000143EF4CC8↓o
+.rdata:000000014330E546                 align 8
+.rdata:000000014330E548 aSoundresourceA_0 db 'SoundResource_Apas_Recommend',0
+.rdata:000000014330E548                                         ; DATA XREF: .data:0000000143EF4D00↓o
+.rdata:000000014330E565                 align 8
+.rdata:000000014330E568 aSoundresourceN db 'SoundResource_NextMusic',0
+.rdata:000000014330E568                                         ; DATA XREF: .data:0000000143EF4D38↓o
+
+
+
+.text:0000000141EBE211                 mov     r8, rax
+.text:0000000141EBE214                 lea     rdx, aDsgmpostuDsmus ; "DSGMPostU_DSMusicPlayerManager"
+.text:0000000141EBE21B                 lea     rcx, [rsi+10h]
+.text:0000000141EBE21F                 call    sub_1400CC100
+
+.data:0000000143D773D8	00000022	C	Array_DSMusicPlayerSystemResource
+
+.data:00000001444061F0	00000018	C	DSUIMusicMenuDataSource
+
+.data:000000014450F0A0	00000012	C	MusicCueContainer
+
+140C16CB0
+
+
+Array_DSUIMusicMenuFunction 后面接数组？
+
+.data:000000014622EDA8 qword_14622EDA8 dq ?                    ; DATA XREF: sub_1407139D0+E37↑r
+.data:000000014622EDA8                                         ; sub_140714D50:loc_1407159FF↑r ...

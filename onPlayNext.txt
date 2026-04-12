@@ -1,0 +1,182 @@
+可以，先把 `qword_14622EDA8` 收成一版**可用的结构草图**。  
+下面所有结论都还是 **静态候选**，但已经足够支撑我们继续沿 `DSUIMusicMenu_HandlePlayNextMusic` 主链推进。
+
+**总体判断**
+`qword_14622EDA8` 更像一个**音乐运行时全局状态对象**，里面同时放了：
+
+- 主播放对象链
+- 次级/Intel 对象链
+- 当前曲目与播放顺序状态
+- 条目数组与顺序映射表
+- 一块受锁保护的异步控制块
+- 若干缓存运行时对象表
+
+**主结构草图**
+```c
+struct MusicMenuEntry {
+    char unk00[0x10];
+    void *trackObj;                 // +0x10
+    char unk18[0x1C];
+    uint8_t dirty52;                // +0x34  静态候选
+    uint8_t disabled53;             // +0x35  静态候选
+    char unk36[0x02];
+}; // 0x38
+
+struct MusicCachedRuntimeSlot {
+    void *srcObj;                   // +0x00  静态候选
+    char unk08[0x10];
+    void *cachedPrimaryObj;         // +0x18
+    void *cachedSecondaryObj;       // +0x20
+    char unk28[0x08];
+    uint32_t activeFlag48;          // +0x30
+    char unk34[0x04];
+}; // 0x38
+
+struct MusicRuntimeState {
+    char unk0000[0x1908];
+
+    float rtpcBaseValue;            // +0x1908 (6408)  静态候选
+
+    uint8_t playState;              // +0x1910 (6416)
+    uint8_t playMode;               // +0x1911 (6417)
+    uint16_t blockFlags;            // +0x1912 (6418)
+
+    char unk1914[0x04];
+
+    void *currentPlayerObj;         // +0x1918 (6424)
+
+    uint32_t sourcePlayingId;       // +0x1920 (6432)
+    uint32_t currentTrackId;        // +0x1924 (6436)
+    uint32_t lastTrackId;           // +0x1928 (6440)
+    uint32_t cursorIndex;           // +0x192C (6444)
+    uint32_t nextPlayOrderIndex;    // +0x1930 (6448)
+
+    char unk1934[0x04];
+
+    int entryCount;                 // +0x1938 (6456)
+    MusicMenuEntry *entries;        // +0x1940 (6464)
+
+    char unk1948[0x08];
+
+    uint32_t *playOrderTrackIdTable; // +0x1950 (6480)
+    int orderTableCount;             // +0x1958 (6488)
+    uint32_t *orderIndexTable;       // +0x1960 (6496)
+    int orderCursor;                 // +0x1968 (6504)
+
+    char unk196C[0x08];
+
+    char relationSlots[2400];       // +0x1970 (6512) 100 * 24 bytes, 静态候选
+
+    char unk22D0[0x518];
+    MusicMenuEntry fallbackEntry;   // +0x27E0 (10208) 找不到时返回的 sentinel
+
+    char unk2818[0x18];
+
+    uint32_t state5Counter;         // +0x2818 (10264) 静态候选
+    uint32_t pendingResetCounter;   // +0x281C (10268) 静态候选
+    uint32_t currentPlayerMetric;   // +0x2820 (10272) 静态候选
+    uint16_t transitionStateWord;   // +0x2824 (10276)
+
+    uint8_t secondaryState;         // +0x2826 (10278)
+    char unk2827[0x01];
+    uint32_t secondaryStateData;    // +0x2828 (10280)
+
+    uint32_t unk10284;              // +0x282C
+    void *secondaryPlayerObj;       // +0x2830 (10288)
+
+    uint8_t transitionFlag;         // +0x2838 (10296)
+
+    char asyncBlock[0x60];          // +0x2858 (10328) 静态候选
+    MusicCachedRuntimeSlot *cachedRuntimeSlots; // +0x2898 (10392)
+    int cachedRuntimeSlotCount;     // +0x28A4 (10404)
+    SRWLOCK asyncLock;              // +0x28A8 (10408)
+
+    uint32_t lastCheckpointSecond;  // +0x28B0 (10416)
+    uint16_t pendingWord10420;      // +0x28B4 (10420)
+    uint8_t trackChangedPending;    // +0x28B6 (10422)
+    char unk28B7[0x01];
+    float unknownScalar10424;       // +0x28B8 (10424), 当前看像 0.5f
+    uint32_t clearOnRelease10428;   // +0x28BC (10428)
+};
+```
+
+**最关键字段梳理**
+- `+6416 playState`
+  - `MusicRuntime_SetPlayStateAndNotify`
+  - `MusicRuntime_AdvanceNextTrack`
+  - `MusicRuntime_HandleCurrentPlayerTransition`
+- `+6417 playMode`
+  - 决定“下一首/上一首”是顺序还是走映射表
+- `+6424 currentPlayerObj`
+  - 主播放链的运行时对象
+  - 由 `AcquireRuntimeObjectAndEnableOnStart(trackObj+64)` 生成
+- `+6432 sourcePlayingId`
+  - `MusicRuntime_GetCurrentSourcePositionSeconds` 用它调 `AK::SoundEngine::GetSourcePlayPosition`
+- `+6436 currentTrackId`
+  - 当前主播放曲目 ID
+- `+6440 lastTrackId`
+  - 上一首/上次确认的曲目 ID
+- `+6444 cursorIndex`
+  - 当前 UI 光标所在条目索引
+- `+6448 nextPlayOrderIndex`
+  - 逻辑上的“下一首目标索引”
+- `+6456 entryCount`
+- `+6464 entries`
+  - `56` 字节一项，`entry + 0x10 = trackObj`
+- `+6480 playOrderTrackIdTable`
+  - `MusicRuntime_FindEntryByPlayOrderIndex` 用它把逻辑索引映射到 `trackId`
+- `+6488 orderTableCount`
+- `+6496 orderIndexTable`
+  - `MusicRuntime_AdvanceNextTrack` 在某些模式下先用它决定下一个逻辑索引
+- `+6504 orderCursor`
+  - 上面那张表的游标
+
+**条目对象 `trackObj` 的已知部分**
+- `trackObj + 0x20`：`trackId`
+- `trackObj + 0x40`：主播放链来源指针  
+  被 `MusicRuntime_ApplySelectedEntry` 传给 `AcquireRuntimeObjectAndEnableOnStart`
+- `trackObj + 0x48`：次级/Intel 链来源指针  
+  被 `MusicRuntime_StartSecondaryObjectForEntry` 使用
+
+**次级对象链相关**
+- `+10288 secondaryPlayerObj`
+  - `MusicRuntime_StartSecondaryObjectForEntry` 会填它
+  - 来源是 `trackObj + 0x48`
+- `+10278 / +10280`
+  - 次级对象状态字段
+- `MusicRuntime_ClearSecondaryPlayerObject`
+  - 清理这条链
+
+**过渡/缓存区相关**
+- `+10296 transitionFlag`
+  - 主链过渡时常被置位/清零
+- `+10392 cachedRuntimeSlots`
+  - 指向一张 `56` 字节表
+  - 其中：
+    - `slot + 0x18 cachedPrimaryObj`
+    - `slot + 0x20 cachedSecondaryObj`
+    - `slot + 0x30 activeFlag`
+- `+10404 cachedRuntimeSlotCount`
+- `+10408 asyncLock`
+  - `SRWLOCK`
+- `+10416 lastCheckpointSecond`
+  - 多个函数拿它和当前秒数比较 `>= 60`
+- `+10422 trackChangedPending`
+  - `sub_140C16540` 会在曲目切换时置 1
+  - 离开 `playState==5` 时清零
+
+**当前最有价值的结构认识**
+这次结构梳理后，主链已经很清楚：
+
+- 主播放对象链：`trackObj + 0x40 -> currentPlayerObj(+6424)`
+- 次级/Intel 链：`trackObj + 0x48 -> secondaryPlayerObj(+10288)`
+
+所以如果继续围绕你的目标“额外音乐替换”，后续应该只盯：
+
+- `currentPlayerObj(+6424)` 的虚表链
+- `AcquireRuntimeObjectAndEnableOnStart(trackObj+0x40)` 往下到底返回什么对象
+- `trackChangedPending(+10422)` 被谁消费
+
+而不是再继续扩散到 `+0x48` 那条 Intel 次级对象链。
+
+如果你要，我下一步可以基于这份结构，专门把**主播放链相关字段**再压缩成一张更短的“主链字段表”，方便后面持续对照。
