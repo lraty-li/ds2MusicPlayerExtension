@@ -269,6 +269,90 @@ self->stateFlags186 = 0x0C96;
 ++self->postedSlotCount182;
 ```
 
+## 运行已命中：PostEvent 内部提交层
+
+### `AK::SoundEngine::PostEvent -> sub_7FF69EEDA220`
+
+当前目标流程里，主音乐实例已命中过：
+
+```text
+sub_7FF69ED34D80
+-> AK::SoundEngine::PostEvent
+-> sub_7FF69EEDA220
+```
+
+`sub_7FF69EEDA220` 的已命中行为：
+
+- 按 `eventId` 查找事件描述对象
+- 分配一笔请求对象
+- 生成新的 `playingId`
+- 把 `gameObj` 绑定为当前 `GraphSoundInstance`
+- 把 `eventId / playingId / extInfo / flags` 填入请求对象
+- 调 `sub_7FF69EF22F10(...)` 继续提交
+
+这一步仍然只是提交层，不是字节边界。
+
+## 运行已命中：请求队列入口
+
+### `sub_7FF69EF22F10`
+
+当前目标流程里，`sub_7FF69EEDA220` 之后已实际命中过：
+
+```text
+sub_7FF69EF22F10
+```
+
+该函数本身只是一个薄包装：
+
+```text
+sub_7FF69EF22F10
+-> sub_7FF69EF22F50
+```
+
+其中已能确定的请求对象布局包括：
+
+- `+0x04`：`gameObj`
+- `+0x0C`：`playingId`
+- `+0x14`：`eventId`
+- `+0x18..+0x24`：外部源相关数据
+- `+0x28`：callback
+- `+0x30`：cookie
+- `+0x38`：flags
+
+### 静态候选：`sub_7FF69EF22F50`
+
+静态分析表明，`sub_7FF69EF22F50` 会：
+
+- 分配 `0x70` 字节队列节点
+- 把请求对象字段复制到该节点
+- 把节点挂入 `a1` 的链表/桶表
+
+当前还没有把它作为独立断点运行命中，因此这里只能记为静态候选队列入队点。
+
+## 运行已命中：队列轮询入口
+
+### `sub_7FF69EEF2AB0`
+
+当前目标流程里已命中过：
+
+```text
+sub_7FF69EEF3A80
+-> sub_7FF69EEF2AB0
+```
+
+但当前命中的这一拍是空轮询：
+
+```cpp
+queueObj->head == 0;
+```
+
+因此当前只能确认：
+
+- `sub_7FF69EEF2AB0` 确实属于后续队列处理线程/调度路径
+- 但这次命中尚未证明它已经消费到主音乐那笔请求
+
+它本身仍然过热，不适合作为直接观察点。
+
 ## 运行已命中：停止/清理路径
 
 ```text
@@ -324,9 +408,14 @@ struct GraphSoundResource {
 - 因此不能把 `sub_7FF69ED33F10(a1 == 0x2000, currentPlayerObj)` 当成主音乐实例当前流程的既定回调路径
 - `GraphSoundInstance::vftable + 0x118` 只在退出到标题界面时命中，当前不能把它当作常规播放主路径
 - `GraphSoundInstance + 0x170` 不是主资源字段
+- `sub_7FF69EEF2EB0` 在完整目标流程里零命中，不能继续把它当成当前主音乐请求的默认消费点
 
 ## 当前最有价值但未收口的点
 
 - `GraphSoundInstance + 0x184` 的真实写入者
 - `GraphSoundPlayingSlot::lookupKey0C` 对应的实际分组语义
 - `sub_7FF69ED34D80` 之后是否还存在更靠近字节流提交的音乐专用边界
+
+## 当前唯一优先确认的运行时边界
+
+- `sub_7FF69EEF2AB0 + 0xA0` 附近的非空分支，也就是开始真正处理队首节点的路径
