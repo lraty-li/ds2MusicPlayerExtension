@@ -3,6 +3,8 @@ typedef void *SRWLOCK;
 struct GraphSoundInstance;
 struct GraphSoundResource;
 struct GraphSoundInterface;
+struct GraphSoundControlBlock;
+struct GraphSoundPlayingSlot;
 
 struct GraphSoundResourceVftable {
     void *slot000;
@@ -44,6 +46,28 @@ struct GraphSoundResource {
     uint8_t pad2A5[0x03];
 };
 
+struct GraphSoundControlBlock {
+    uint64_t unk00;
+    uint64_t unk08;
+    uint8_t unk10;
+    uint8_t byte11;
+    uint8_t byte12;
+    uint8_t byte13;
+    uint8_t unk14[0xEC];
+    uint32_t dword100;
+    uint8_t unk104[0x0C];
+};
+
+struct GraphSoundPlayingSlot {
+    uint32_t playingId;
+    uint32_t eventId;
+    uint16_t slotFlags;
+    uint16_t useCount;
+    uint8_t lookupKey0C;
+    uint8_t callbackCookie0D;
+    uint8_t unk0E[0x02];
+};
+
 struct GraphSoundInstanceVftable {
     void *slot000[18];
     char (__fastcall *start)(GraphSoundInstance *self, double a2);
@@ -75,7 +99,9 @@ struct GraphSoundInstance {
     void *unk170;
     GraphSoundBindingRef *binding178;
     uint8_t stateByte180;
-    uint8_t unk181[0x05];
+    uint8_t unk181;
+    uint16_t postedSlotCount182;
+    uint16_t stateWord184;
     uint16_t stateFlags186;
     uint8_t unk188[0x058];
     uint8_t unk1E0;
@@ -83,10 +109,15 @@ struct GraphSoundInstance {
     uint8_t unk245;
     uint8_t pad246[0x02];
     SRWLOCK lock248;
-    uint8_t unk250[0x06A];
+    int32_t playingSlotTableCount;
+    int32_t unk254;
+    GraphSoundPlayingSlot *playingSlots258;
+    uint16_t activePlayingSlotCount;
+    uint16_t unk262;
+    uint8_t unk264[0x056];
     uint8_t counter2BA;
     uint8_t unk2BB[0x065];
-    void *controlBlock320;
+    GraphSoundControlBlock *controlBlock320;
     GraphSoundInterface *soundInterface328;
     float unk330;
     float unk334;
