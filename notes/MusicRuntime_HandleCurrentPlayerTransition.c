@@ -20,7 +20,7 @@ char __fastcall MusicRuntime_HandleCurrentPlayerTransition(__int64 a1, __int64 a
       LOBYTE(v4) = v4 - 2;
       if ( (v4 & 0xFB) == 0 )
       {
-        CurrentSourcePositionSeconds = MusicRuntime_GetCurrentSourcePositionSeconds(qword_7FF7BE0BEDA8, a2, a3);
+        CurrentSourcePositionSeconds = MusicRuntime_GetCurrentSourcePositionSeconds(qword_7FF7BE0BEDA8, a2, a3); // 当前播放音乐的秒数
         DSMusicTelemetry_BeginWindow(CurrentSourcePositionSeconds);
         if ( *(_BYTE *)(v3 + 10296) )
         {
@@ -35,6 +35,7 @@ char __fastcall MusicRuntime_HandleCurrentPlayerTransition(__int64 a1, __int64 a
           if ( !*((_BYTE *)v12 + 698) )
             (*(void (__fastcall **)(volatile signed __int8 *, _QWORD, _QWORD))(*(_QWORD *)v12 + 280LL))(v12, 0, 0);
           *(_BYTE *)(*(_QWORD *)(v3 + 6424) + 698LL) = 0;
+          // 修改测试：传5的话，会从头开始
           LOBYTE(v4) = MusicRuntime_SetPlayStateAndNotify(v3, 1);
         }
       }
