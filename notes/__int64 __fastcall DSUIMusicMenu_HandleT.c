@@ -64,8 +64,9 @@ LABEL_43:
   }
   v8 = *(_BYTE *)(qword_7FF7BE0BEDA8 + 6416);
   if ( v8 != 1 )
-  {
-    if ( *(int *)(MusicRuntime_FindCurrentEntryByTrackId(qword_7FF7BE0BEDA8) + 48) < 0 || ((v8 - 2) & 0xFB) != 0 )
+  { // 表示从暂停恢复播放
+    if ( *(int *)(MusicRuntime_FindCurrentEntryByTrackId(qword_7FF7BE0BEDA8) + 48) < 0 || ((v8 - 2) & 0xFB) != 0 ) 
+      // 没有正在播放的曲目
       MusicRuntime_ApplyCurrentPlayOrderEntry(v11, v10, v12);
     else
       MusicRuntime_HandleCurrentPlayerTransition();
