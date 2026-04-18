@@ -21,6 +21,8 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 无法对非代码区域打硬件断点，不得提出此类建议
 
+不准产生同时多个调用 ida mcp 的情况
+
 ## 子 agent 模型合规闸门
 - 任何 IDA MCP 探索在创建子 agent 时，必须显式指定 `model=gpt-5.2` 与 `reasoning_effort=xhigh`
 - 对于 IDA MCP 探索，不得为了使用某个 `agent_type` 而放松模型约束；只要某种创建方式存在把模型回退、覆写或展示成其他模型的风险，就禁止继续使用该方式

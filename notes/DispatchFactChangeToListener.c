@@ -38,6 +38,7 @@ void __fastcall DispatchFactChangeToListener(__int64 a1, __int64 a2, char *a3, c
     {
       v10 = *(_QWORD *)(a1 + 104) + 40LL * (int)v9;
       if ( *(_DWORD *)(v10 + 32) )
+      // __int64 __fastcall sub_7FF6157459A0(__int64 this_, __int64 a2, char *a3, int *a4)
         (*(void (__fastcall **)(char *, __int64, char *, __int64))(*(_QWORD *)a3 + 96LL))(a3, a2, &v15, v10 + 16);
     }
     if ( *(_DWORD *)(a1 + 88) )
