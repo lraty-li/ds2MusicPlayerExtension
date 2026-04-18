@@ -1,0 +1,19 @@
+__int64 __fastcall sub_7FF614AD5AD0(__int64 a1, __int64 a2)
+{
+  __int64 v2; // rbx
+  int v3; // eax
+  char v5; // [rsp+38h] [rbp+10h] BYREF
+
+  LOBYTE(a2) = 1;
+  sub_7FF614AD6250(a1, a2);
+  v5 = 48;
+  v2 = *(_QWORD *)qword_7FF6196F15C8;
+  v3 = sub_7FF613D02FB0(*(_QWORD *)qword_7FF6196F15C8 + 6560LL, &v5);
+  if ( v3 == -1 )
+    return sub_7FF614AD2D90(0, 0xFFFFFFFFLL);
+  else
+    return sub_7FF614AD2D90(*(_QWORD *)(*(_QWORD *)(v2 + 6560) + 24LL * v3), 0xFFFFFFFFLL);
+}
+
+点击试听的时候会触发
+但 v3 似乎并不是曲目index

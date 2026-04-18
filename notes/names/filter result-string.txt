@@ -1,0 +1,389 @@
+
+
+---------------------------------------------------------------------------------------------------------
+Python 3.12.12 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 20:05:38) [MSC v.1929 64 bit (AMD64)] 
+IDAPython 64-bit v9.2.0 (c) The IDAPython Team <idapython@googlegroups.com>
+---------------------------------------------------------------------------------------------------------
+================================================================================
+keyword = "music"
+matched strings with at least one function xref: 124
+================================================================================
+[STRING] 0x7FF6165D22D0 'FactMusicPresetSymbols'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363AB76
+  [FUNC]  0x7FF6136431A0  refs: 0x7FF6136431CD
+  [FUNC]  0x7FF6136433D0  refs: 0x7FF613643404
+  [FUNC]  0x7FF613643660  refs: 0x7FF6136436CE
+
+[STRING] 0x7FF6165D22E8 'FactMusicPreset_ExportedGetPresetName'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363AC2D
+
+[STRING] 0x7FF6165D2320 'FactMusicPreset_ExportedGetExitPresetName'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363AC07
+
+[STRING] 0x7FF6165D2360 'FactMusicPreset'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363AB82
+  [FUNC]  0x7FF61363C230  refs: 0x7FF61363C258
+
+[STRING] 0x7FF6165D2370 'Array_cptr_FactMusicPreset'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363ACA0
+
+[STRING] 0x7FF6165D2390 'PtrArray<FactMusicPreset*>'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363AC58
+
+[STRING] 0x7FF6165D23B8 'UUIDRef_FactMusicPreset'
+  [FUNC]  0x7FF61363AB50  refs: 0x7FF61363ABC5
+
+[STRING] 0x7FF6165D23E8 'FactMusicPreset_ExportedGetFactValue'
+  [FUNC]  0x7FF6136433D0  refs: 0x7FF613643412
+
+[STRING] 0x7FF6165D2420 'FactMusicPreset_ExportedGetInfo'
+  [FUNC]  0x7FF613643660  refs: 0x7FF6136436DA
+
+[STRING] 0x7FF6166A7058 'DSSoundNodeGraphBindings_sSetMusicPlayerCutscenePause'
+  [FUNC]  0x7FF613FC3F60  refs: 0x7FF613FC4133
+
+[STRING] 0x7FF6166A7090 'SetMusicPlayerCutscenePause'
+  [FUNC]  0x7FF613FC3F60  refs: 0x7FF613FC413A
+
+[STRING] 0x7FF6166A7148 'DSSoundNodeGraphBindings_sSetMusicPlayerCutsceneResume'
+  [FUNC]  0x7FF613FC3F60  refs: 0x7FF613FC4115
+
+[STRING] 0x7FF6166A7180 'SetMusicPlayerCutsceneResume'
+  [FUNC]  0x7FF613FC3F60  refs: 0x7FF613FC4121
+
+[STRING] 0x7FF6166AA354 'Music'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F556
+
+[STRING] 0x7FF6166AB738 'DSGameState_sExportedIsPauseMusic'
+  [FUNC]  0x7FF613FEE630  refs: 0x7FF613FEE6CA
+
+[STRING] 0x7FF6166AB760 'IsPauseMusic'
+  [FUNC]  0x7FF613FEE630  refs: 0x7FF613FEE6D6
+
+[STRING] 0x7FF6166C4D30 'DSMusicPlayerTrackResourceSymbols'
+  [FUNC]  0x7FF6140D7590  refs: 0x7FF6140D75AF
+
+[STRING] 0x7FF6166C4D58 'DSMusicPlayerTrackResource'
+  [FUNC]  0x7FF6140D7590  refs: 0x7FF6140D75BC
+
+[STRING] 0x7FF6166C4D78 'UUIDRef_DSMusicPlayerTrackResource'
+  [FUNC]  0x7FF6140D7590  refs: 0x7FF6140D7600
+
+[STRING] 0x7FF6166C5258 'SetPlayingPriorityMusic'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D72A8
+
+[STRING] 0x7FF6166C5270 'music_player_nodes::sRegisterBanRequest'
+  [FUNC]  0x7FF6140EDDA0  refs: 0x7FF6140EDDCA
+
+[STRING] 0x7FF6166C52B0 'music_player_nodes::sRegisterBanRequestSimple'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D72D8
+
+[STRING] 0x7FF6166C5300 'music_player_nodes::sRegisterBanRequestWithTimeout'
+  [FUNC]  0x7FF6140EE2F0  refs: 0x7FF6140EE32C
+
+[STRING] 0x7FF6166C5358 'music_player_nodes::sUnregisterBanRequest'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D7312
+
+[STRING] 0x7FF6166C53A0 'music_player_nodes::sGetCurrentPlayingTrackId'
+  [FUNC]  0x7FF6140EE5B0  refs: 0x7FF6140EE5D7
+
+[STRING] 0x7FF6166C53F0 'music_player_nodes::sSetIgnoreBanReason'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D734C
+
+[STRING] 0x7FF6166C5430 'music_player_nodes::sClearIgnoreBanReason'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D7376
+
+[STRING] 0x7FF6166C5488 'DSMusicPlayerNode'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D70D0
+
+[STRING] 0x7FF6166C54A0 'EDSMusicPlayerBanReason'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D70DB
+
+[STRING] 0x7FF6166C54B8 'music_player_nodes::sSetMenuOpen'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D7138
+
+[STRING] 0x7FF6166C54F0 'music_player_nodes::sIsMenuOpen'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D71DC
+
+[STRING] 0x7FF6166C5520 'music_player_nodes::sSetPlayingID'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D7283
+
+[STRING] 0x7FF6166C5558 'music_player_nodes::sSetPlayingPriorityMusic'
+  [FUNC]  0x7FF6140D7090  refs: 0x7FF6140D729E
+
+[STRING] 0x7FF6166E6BF0 'MusicInterval'
+  [FUNC]  0x7FF614274F50  refs: 0x7FF6142752E5
+
+[STRING] 0x7FF6166E6C00 'DSPlayerEntity_sExportedFadeAngelBabyOutWithMusic'
+  [FUNC]  0x7FF614274F50  refs: 0x7FF614275281
+
+[STRING] 0x7FF6166E6C38 'FadeAngelBabyOutWithMusic'
+  [FUNC]  0x7FF614274F50  refs: 0x7FF61427528D
+
+[STRING] 0x7FF6166E6CE8 'DSPlayerEntity_sExportedFadeAngelBabyInWithMusic'
+  [FUNC]  0x7FF614274F50  refs: 0x7FF6142752CA
+
+[STRING] 0x7FF6166E6D20 'FadeAngelBabyInWithMusic'
+  [FUNC]  0x7FF614274F50  refs: 0x7FF6142752D6
+
+[STRING] 0x7FF6166F7118 'DSSdMusicPlayerCheckCue'
+  [FUNC]  0x7FF6142DCA30  refs: 0x7FF6142DD46F
+
+[STRING] 0x7FF616776C48 'DSUIHUDNodeGraphBindingsNS::sShowMiniMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985630
+
+[STRING] 0x7FF616776C78 'ShowMiniMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF61498563C
+
+[STRING] 0x7FF616776CF0 'DSUIHUDNodeGraphBindingsNS::sShowMusicTelopFromId'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985483
+
+[STRING] 0x7FF616776D28 'ShowMusicTelopFromId'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF61498548F
+
+[STRING] 0x7FF616776DB0 'DSUIHUDNodeGraphBindingsNS::sShowMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF61498528D
+
+[STRING] 0x7FF616776DE0 'ShowMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985299
+
+[STRING] 0x7FF616777600 'EDSUIMusicTelopDisplayMode'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614984320
+
+[STRING] 0x7FF616777E48 'DSUIHUDNodeGraphBindingsNS::sHideMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985E91
+
+[STRING] 0x7FF616777E78 'HideMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985E9D
+
+[STRING] 0x7FF616777E88 'DSUIHUDNodeGraphBindingsNS::sHideMiniMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985EFA
+
+[STRING] 0x7FF616777EB8 'HideMiniMusicTelop'
+  [FUNC]  0x7FF6149841C0  refs: 0x7FF614985F06
+
+[STRING] 0x7FF6167981A8 'DSUIConstructionCustomizeMenuFunction_OnPlayMusic'
+  [FUNC]  0x7FF614AD4920  refs: 0x7FF614AD4CE6
+
+[STRING] 0x7FF616798230 'OnPlayeMusic'
+  [FUNC]  0x7FF614AD4920  refs: 0x7FF614AD4CF0
+
+[STRING] 0x7FF6167B12E8 'OnMusicPlaylistMouseAccept'
+  [FUNC]  0x7FF614BA5130  refs: 0x7FF614BA527A
+
+[STRING] 0x7FF6167B1308 'DSUIRingDeviceMenuFunction_OnMusicPlaylistMouseAccept'
+  [FUNC]  0x7FF614BA5130  refs: 0x7FF614BA5270
+
+[STRING] 0x7FF6167D06D8 'DSUIMusicMenuFunction_OnRightAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBACC
+
+[STRING] 0x7FF6167D0710 'OnRightAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBAD6
+
+[STRING] 0x7FF6167D0730 'DSUIMusicMenuFunction_OnPlayNextMusic'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBAA6
+
+[STRING] 0x7FF6167D0758 'OnPlayNextMusic'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBAB0
+
+[STRING] 0x7FF6167D0768 'DSUIMusicMenuFunction_OnPlayPrevMusic'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA80
+
+[STRING] 0x7FF6167D0790 'OnPlayPrevMusic'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA8A
+
+[STRING] 0x7FF6167D07A0 'DSUIMusicMenuFunction_OnPressUpMusicVolume'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA5A
+
+[STRING] 0x7FF6167D07D0 'OnPressUpMusicVolume'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA64
+
+[STRING] 0x7FF6167D07E8 'DSUIMusicMenuFunction_OnDpadInpuMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB64
+
+[STRING] 0x7FF6167D0818 'OnDpadInpuMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB6B
+
+[STRING] 0x7FF6167D0830 'DSUIMusicMenuFunction_OnUpAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB3E
+
+[STRING] 0x7FF6167D0868 'OnUpAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB48
+
+[STRING] 0x7FF6167D0888 'DSUIMusicMenuFunction_OnDownAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB18
+
+[STRING] 0x7FF6167D08C0 'OnDownAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB22
+
+[STRING] 0x7FF6167D08E0 'DSUIMusicMenuFunction_OnLeftAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBAF2
+
+[STRING] 0x7FF6167D0918 'OnLeftAndAcceptMusicListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBAFC
+
+[STRING] 0x7FF6167D0938 'DSUIMusicMenuFunction_OnResetCursor'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB99C
+
+[STRING] 0x7FF6167D0970 'DSUIMusicMenuFunction_OnResetPlaylistAfterAnimation'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB976
+
+[STRING] 0x7FF6167D09C8 'DSUIMusicMenuFunction_OnChangePlaylistStartAnimation'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB950
+
+[STRING] 0x7FF6167D0A20 'DSUIMusicMenuFunction_OnChangePlaylistAfterAnimation'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB92A
+
+[STRING] 0x7FF6167D0A78 'DSUIMusicMenuFunction_OnPressDownMusicVolume'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA34
+
+[STRING] 0x7FF6167D0AA8 'OnPressDownMusicVolume'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA3E
+
+[STRING] 0x7FF6167D0AC0 'DSUIMusicMenuFunction_OnPressIntel'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBA0E
+
+[STRING] 0x7FF6167D0AF8 'DSUIMusicMenuFunction_OnSetupApasPlaylist'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB9E8
+
+[STRING] 0x7FF6167D0B40 'DSUIMusicMenuFunction_OnChangePlaylist'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB9D0
+
+[STRING] 0x7FF6167D0B80 'UUIDRef_DSUIMusicMenuFunction'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB880
+
+[STRING] 0x7FF6167D0C00 'DSUIMusicMenuFunction_OnMouseAcceptOnListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB904
+
+[STRING] 0x7FF6167D0C48 'DSUIMusicMenuFunction_OnMouseOverListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB8DE
+
+[STRING] 0x7FF6167D0C78 'DSUIMusicMenuFunction_OnMouseAcceptOnShuffleButton'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB8B8
+
+[STRING] 0x7FF6167D0CD0 'DSUIMusicMenuFunction_OnMouseAcceptOnRepeatButton'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB8A0
+
+[STRING] 0x7FF6167D0D28 'DSUIMusicMenuFunction'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB83C
+
+[STRING] 0x7FF6167D1630 'MusicMenu'
+  [FUNC]  0x7FF614952EE0  refs: 0x7FF614953DCC
+
+[STRING] 0x7FF6167D19E8 'OnCancelMusicMenu'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBC9E
+
+[STRING] 0x7FF6167D1A00 'DSUIMusicMenuFunction_OnPressAccept'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBC6E
+
+[STRING] 0x7FF6167D1A28 'DSUIMusicMenuFunction_OnReleaseAccept'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBC48
+
+[STRING] 0x7FF6167D1A50 'DSUIMusicMenuFunction_OnPressInbox'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBC22
+
+[STRING] 0x7FF6167D1A78 'DSUIMusicMenuFunction_OnPressOptions'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBBFC
+
+[STRING] 0x7FF6167D1AA0 'DSUIMusicMenuFunction_OnReleaseOptions'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBBD6
+
+[STRING] 0x7FF6167D1AC8 'DSUIMusicMenuFunction_OnFocusListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBBB0
+
+[STRING] 0x7FF6167D1AF0 'DSUIMusicMenuFunction_OnUnFocusListItem'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBB8A
+
+[STRING] 0x7FF6167D1B70 'DSUIMusicMenuFunctionSymbols'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCB82F
+  [FUNC]  0x7FF614CCFC90  refs: 0x7FF614CCFCB4
+  [FUNC]  0x7FF614CCFE80  refs: 0x7FF614CCFEAD
+
+[STRING] 0x7FF6167D1B90 'DSUIMusicMenuFunction_OnPageOn'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBCE0
+
+[STRING] 0x7FF6167D1BB0 'DSUIMusicMenuFunction_OnFocusMusicMenu'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBCBA
+
+[STRING] 0x7FF6167D1BD8 'OnFocusMusicMenu'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBCC4
+
+[STRING] 0x7FF6167D1BF0 'DSUIMusicMenuFunction_OnCancelMusicMenu'
+  [FUNC]  0x7FF614CCB810  refs: 0x7FF614CCBC94
+
+[STRING] 0x7FF61685A7E8 'DSGMPostU_DSMusicPlayerManager'
+  [FUNC]  0x7FF61537EA60  refs: 0x7FF61537F094
+
+[STRING] 0x7FF61685ABA0 'DSGMPreU_DSNetGlobalMusicChartService'
+  [FUNC]  0x7FF61537D510  refs: 0x7FF61537EA02
+
+[STRING] 0x7FF6168BFAC8 'IsMusicInRegion'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F818
+
+[STRING] 0x7FF6168BFAD8 'MusicManager::sExportedIsCueContainedIn'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F8B5
+
+[STRING] 0x7FF6168BFB00 'GetMusicStatus'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F770
+
+[STRING] 0x7FF6168BFB10 'MusicManager::sExportedIsMusicInRegion'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F80C
+
+[STRING] 0x7FF6168BFB80 'UUIDRef_MusicCueContainer'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F659
+
+[STRING] 0x7FF6168BFBA0 'MusicRegionType'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F674
+
+[STRING] 0x7FF6168BFBB0 'UUIDRef_MusicCue'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F5FF
+
+[STRING] 0x7FF6168BFBC8 'MusicCueContainer'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F61A
+
+[STRING] 0x7FF6168BFBE0 'EMusicScale'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F71A
+
+[STRING] 0x7FF6168BFBF0 'MusicManager::sExportedGetMusicStatus'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F764
+
+[STRING] 0x7FF6168BFC18 'UUIDRef_MusicRegionType'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F6B3
+
+[STRING] 0x7FF6168BFC30 'EMusicKey'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F6EE
+
+[STRING] 0x7FF6168BFC40 'UUIDRef_MusicProject'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F5A5
+
+[STRING] 0x7FF6168BFC58 'MusicCue'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F5C0
+
+[STRING] 0x7FF6168BFC68 'MusicProject'
+  [FUNC]  0x7FF61581F510  refs: 0x7FF61581F562
+
+[STRING] 0x7FF616901F98 'SetMusicPlayerCutsceneResumeExport'
+  [FUNC]  0x7FF615B638B0  refs: 0x7FF615B64962
+
+[STRING] 0x7FF616901FF0 'SetMusicPlayerCutscenePauseExport'
+  [FUNC]  0x7FF615B638B0  refs: 0x7FF615B64938
+
+[STRING] 0x7FF616902018 'GraphSoundInterface::sSetMusicPlayerCutsceneResume'
+  [FUNC]  0x7FF615B638B0  refs: 0x7FF615B64958
+
+[STRING] 0x7FF616902068 'GraphSoundInterface::sSetMusicPlayerCutscenePause'
+  [FUNC]  0x7FF615B638B0  refs: 0x7FF615B6492E
+
+[STRING] 0x7FF6169043B0 'MusicTelop'
+  [FUNC]  0x7FF615B75080  refs: 0x7FF615B75320
+
+[STRING] 0x7FF6169043C0 'MusicEnd'
+  [FUNC]  0x7FF615B75080  refs: 0x7FF615B7529D
+
+[STRING] 0x7FF616904450 'WwiseGameObject::sIsMusicCueReceived'
+  [FUNC]  0x7FF615B766C0  refs: 0x7FF615B766FC
+
+[STRING] 0x7FF616904628 'WwisesIsMusicCueReceived'
+  [FUNC]  0x7FF615B766C0  refs: 0x7FF615B7673A, 0x7FF615B768E8
+
+Done. Found 124 matched strings.
