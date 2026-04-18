@@ -19,6 +19,7 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 知识库不是给你写流水账的！不允许编写例如“最新确认”或者 xx 时间日志发现，这种具有时效性的内容，如果发现有就必须按合理形式整理进入知识库且去掉原条目
 
+无法对非代码区域打硬件断点，不得提出此类建议
 
 ## 子 agent 模型合规闸门
 - 任何 IDA MCP 探索在创建子 agent 时，必须显式指定 `model=gpt-5.2` 与 `reasoning_effort=xhigh`

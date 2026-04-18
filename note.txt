@@ -75,3 +75,7 @@ Array_DSUIMusicMenuFunction 后面接数组？
 
 有哪些是必须通过运行时断点才能获取的必要的信息
 尤其是还原结构体信息
+
+
+DispatchFactChangeToListener
+a3 来自 qword_7FF7B9CAED88 指向对象里的三个槽位：+0x88、+0x90、+0x98
