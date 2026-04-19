@@ -9,6 +9,7 @@ void __fastcall DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObje
   {
     v6 = sub_7FF7F47313F0();
     if ( *(_QWORD *)(a1 + 216) )
+      // 建筑定制页面有正在播放的音乐
       DSUIConstructionCustomizeMenuFunction_StopCurrentMusicPlaying(a1, 1);
     v7 = *(_QWORD *)(a2 + 48);
     if ( a3 )
