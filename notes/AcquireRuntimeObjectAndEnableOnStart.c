@@ -15,6 +15,7 @@ __int64 __fastcall AcquireRuntimeObjectAndEnableOnStart(__int64 a1)
 
   result = sub_7FF7F57AA880(qword_7FF7FD2C1220, 0, a1, 0);
   v2 = result;
+  // 跳过这里的话，音乐不会播放
   if ( result )
   {
     v12 = 0;
