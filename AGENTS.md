@@ -21,6 +21,8 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 没有我的明确允许，不准读取仓库文件
 
+没有我的明确允许不准写入 ida 数据库
+
 ## 子 agent 模型合规闸门
 - 不准产生同时多个agent同时调用 ida mcp 的情况
 - 任何 IDA MCP 探索在创建子 agent 时，必须显式指定 `model=gpt-5.2` 与 `reasoning_effort=xhigh`

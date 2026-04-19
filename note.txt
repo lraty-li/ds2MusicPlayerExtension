@@ -89,3 +89,16 @@ a3 来自 qword_7FF7B9CAED88 指向对象里的三个槽位：+0x88、+0x90、+0
                (unsigned int)"DSGameStateSymbols",
                (__int64)sub_7FF614006120)
            + 40) = 0;
+
+
+
+我回顾了下我的“跳过”操作，实际上是在 7FF7F3BE64CD 把 rax 改成0，那么是不是还有真正的原因导致播放被跳过？
+
+经过我测试，如果通过 修改 rip 的方式跳过，其实还会播放，我认为就是返回值为0决定了无法播放，那么从 DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject 对 AcquireRuntimeObjectAndEnableOnStart 的调用看， 是怎么影响无法播放的？
+
+DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject
+
+我认为关键可能在这里 (*(void (__fastcall **)(__int64))(*(_QWORD *)v9 + 144LL))(v9);
+
+考虑如何分析 v9 + 144LL 
+当前位于断点 7FF7F473641E
