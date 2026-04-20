@@ -98,7 +98,20 @@ a3 来自 qword_7FF7B9CAED88 指向对象里的三个槽位：+0x88、+0x90、+0
 
 DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject
 
-我认为关键可能在这里 (*(void (__fastcall **)(__int64))(*(_QWORD *)v9 + 144LL))(v9);
+完整跳过
+(*(void (__fastcall **)(__int64))(*(_QWORD *)v9 + 144LL))(v9);
+赋值
+也不行
 
-考虑如何分析 v9 + 144LL 
-当前位于断点 7FF7F473641E
+单步发现回到
+7FF6EB13B010
+.text:00007FF6EB13B010 sub_7FF6EB13B010 proc near              ; DATA XREF: .rdata:ds2_D3D12SDKVersion+562E3C↓o
+.text:00007FF6EB13B010                                         ; .rdata:ds2_D3D12SDKVersion+A8FCA0↓o ...
+
+.rdata:00007FF6EC21B6C8 ; const MenuActionInstanceMethod::`vftable'
+.rdata:00007FF6EC21B6C8 ??_7MenuActionInstanceMethod@@6B@ dq offset sub_7FF6EB13AF00
+.rdata:00007FF6EC21B6C8                                         ; DATA XREF: sub_7FF6EB13AFD0+7↑o
+.rdata:00007FF6EC21B6D0 dq offset sub_7FF6E99C5CF0
+.rdata:00007FF6EC21B6D8 dq offset sub_7FF6E8F299E0
+.rdata:00007FF6EC21B6E0 dq offset sub_7FF6E8F29AB0
+.rdata:00007FF6EC21B6E8 dq offset sub_7FF6EB13B010
