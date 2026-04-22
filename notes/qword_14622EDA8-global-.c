@@ -157,9 +157,9 @@ struct GraphSoundInstance {
     uint32_t unk120;
     float scalar124;
     float scalar128;
-    uint32_t resourceDword12C;
-    uint16_t unk130;
-    uint8_t resourceByte132;
+    float scalar12C; // sub_7FF72AE35A80 在 a5 路径下由传入 float 覆盖，否则取 binding->resource+0x98
+    int16_t scalar130; // sub_7FF72AE35A80 把 a7 钳到 [-32768, 32767] 后写入
+    uint8_t resourceByte132; // sub_7FF72AE35A80 从 a2+0x20 归一化得到；特定分支会改从 binding->resource->*(+0x20)+0x20 取值
     uint8_t unk133;
     uint32_t derivedState134;
     uint8_t unk138[0x008];
@@ -167,7 +167,7 @@ struct GraphSoundInstance {
     uint8_t initState160[0x010];   // sub_7FF72AE17BE0 在 bit0 && !bit1 路径下写入按 1/dt 缩放的位移向量
     void *unk170;
     GraphSoundBindingRef *binding178;
-    uint8_t stateByte180; // sub_7FF72AE1F780 运行时读取 bit1，并在虚调 slot+0x120 后复查；sub_7FF72AE191E0 检查 bit4
+    uint8_t stateByte180; // sub_7FF72AE1F780 运行时读取 bit1，并在虚调 slot+0x120 后复查；sub_7FF72AE191E0 检查 bit4；sub_7FF72AE35A80 直接重写 bit4/bit5
     uint8_t unk181;
     uint16_t postedSlotCount182; // sub_7FF72AE45EF0 成功 PostEvent 后递增；sub_7FF72AE454D0 清零
     uint16_t stateWord184;
@@ -186,14 +186,15 @@ struct GraphSoundInstance {
     uint64_t stateTimestamp1D0; // sub_7FF72AE1F780 中当 stateByte180.bit1 变化时写 __rdtsc()
     uint64_t sortKey1D8; // sub_7FF72AE31EA0 中当 orderKey062 相等时作为次排序键
     uint8_t unk1E0;
-    uint8_t unk1E1[0x03B];
-    uint8_t notifyByte21C; // sub_7FF72AE45EF0 检测非零后通过 a12 返回 1，并清零
+    uint8_t unk1E1[0x03A];
+    uint8_t stateByte21B; // sub_7FF72AE35ED0 把其形参 a1 写到 qword_7FF72E9E9230->+48 所指对象的 +0x21B
+    uint8_t notifyByte21C; // sub_7FF72AE45EF0 检测 qword_7FF72E9E9230->+48 所指对象的该字节；非零时通过 a12 返回 1，并清零
     uint8_t unk21D[0x028];
     uint8_t unk245;
     uint8_t pad246[0x02];
     SRWLOCK lock248;
-    int32_t playingSlotTableCount; // sub_7FF72AE45EF0 在 lock248 保护下遍历/扩容
-    int32_t unk254;
+    int32_t playingSlotTableCount; // sub_7FF72AE45EF0 在 lock248 保护下遍历/扩容；sub_7FF7289F7600 作为 push_back 计数并在末尾递增
+    int32_t playingSlotTableCapacity; // sub_7FF728A3D270 作为容量上限检查并在扩容成功后更新
     GraphSoundPlayingSlot *playingSlots258; // sub_7FF72AE45EF0 以 16 字节槽数组访问
     uint16_t activePlayingSlotCount; // sub_7FF72AE45EF0 新建槽时递增
     uint16_t unk262;
@@ -207,8 +208,8 @@ struct GraphSoundInstance {
     uint8_t unk2BB[0x005];
     void *currentRoom2C0;
     uint8_t unk2C8[0x008];
-    uint8_t stateByte2D0;
-    uint8_t stateByte2D1;
+    uint8_t stateByte2D0; // sub_7FF72AE35EB0 直接写入 a1
+    uint8_t stateByte2D1; // sub_7FF72AE35EB0 写 1，表示 +0x2D0 已更新
     uint8_t unk2D2[0x00E];
     uint8_t unk2E0[0x018];
     void *selfRef2F8;
