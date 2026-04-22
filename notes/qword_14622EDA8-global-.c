@@ -170,9 +170,12 @@ struct GraphSoundInstance {
     uint8_t stateByte180; // sub_7FF72AE1F780 运行时读取 bit1，并在虚调 slot+0x120 后复查；sub_7FF72AE191E0 检查 bit4；sub_7FF72AE35A80 直接重写 bit4/bit5
     uint8_t unk181;
     uint16_t postedSlotCount182; // sub_7FF72AE45EF0 成功 PostEvent 后递增；sub_7FF72AE454D0 清零
-    uint16_t stateWord184;
-    uint16_t lockedStateFlags186; // sub_7FF72AE26450 会置 0x0006；sub_7FF72AE45EF0 成功 PostEvent 后改成 (&0xF66F)|0x0890，随后置 0x0008，消费 a11 时清 0x1000；bit7 由 sub_7FF72AE462D0 在 lock248 保护下读取
-    uint8_t unk188[0x010];
+    uint16_t stateWord184; // sub_7FF72AE45C60 在无活动 playing slot 时等待归零
+    uint16_t lockedStateFlags186; // sub_7FF72AE26450 会置 0x0006；sub_7FF72AE45EF0 成功 PostEvent 后改成 (&0xF66F)|0x0890，随后置 0x0008，消费 a11 时清 0x1000；sub_7FF72AE45C60 会置 0x0010 并清 0x0008、按条件清 0x0800；bit7 由 sub_7FF72AE462D0 在 lock248 保护下读取
+    uint8_t unk188[0x004];
+    float scalar18C; // sub_7FF72AE45C60 与 scalar190 比较，并作为 SetScalingFactor 的输入之一
+    float scalar190; // sub_7FF72AE45C60 与 scalar18C 比较
+    uint8_t unk194[0x004];
     float scalar198;
     uint8_t unk19C[0x008];
     float scalar1A4; // sub_7FF72AE195E0 写入 min(1.0f, computedScale)
@@ -198,7 +201,16 @@ struct GraphSoundInstance {
     GraphSoundPlayingSlot *playingSlots258; // sub_7FF72AE45EF0 以 16 字节槽数组访问
     uint16_t activePlayingSlotCount; // sub_7FF72AE45EF0 新建槽时递增
     uint16_t unk262;
-    uint8_t unk264[0x044];
+    uint8_t unk264[0x004];
+    uint16_t stateWord268; // sub_7FF72AE45C60 在关键路径里写 1，并等待其归零后再继续
+    uint8_t unk26A[0x002];
+    float scalar26C; // sub_7FF72AE45C60 与 scalar270/scalar278 共同参与输出总线音量路径
+    float scalar270; // sub_7FF72AE45C60 与 scalar26C 比较
+    uint8_t unk274[0x002];
+    uint8_t stateByte276; // sub_7FF72AE45C60 为零时跳过一段 SetGameObjectOutputBusVolume 路径
+    uint8_t unk277;
+    float scalar278; // sub_7FF72AE45C60 与 scalar26C 相乘
+    uint8_t unk27C[0x02C];
     void *spatialNode2A8;
     uint32_t spatialDword2B0;
     uint32_t spatialDword2B4;
