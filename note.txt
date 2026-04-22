@@ -92,9 +92,20 @@ a3 来自 qword_7FF7B9CAED88 指向对象里的三个槽位：+0x88、+0x90、+0
 
 
 
-我回顾了下我的“跳过”操作，实际上是在 7FF7F3BE64CD 把 rax 改成0，那么是不是还有真正的原因导致播放被跳过？
+我回顾了下我的“跳过”操作，实际上是在 00007FF6EA43640D 把 rax 改成0
+
+.text:00007FF6EA436408 call    AcquireRuntimeObjectAndEnableOnStart
+.text:00007FF6EA43640D mov     rbp, [rsp+28h+arg_0]
+.text:00007FF6EA436412 mov     [rdi+0D8h], rax
+.text:00007FF6EA436419 test    rax, rax
+.text:00007FF6EA43641C jz      short loc_7FF6EA436431
+
+，经确认，关键就在这个赋值
 
 经过我测试，如果通过 修改 rip 的方式跳过，其实还会播放，我认为就是返回值为0决定了无法播放，那么从 DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject 对 AcquireRuntimeObjectAndEnableOnStart 的调用看， 是怎么影响无法播放的？
+
+
+发现，通过 RIP跳过赋值会发生连锁的多重播放？
 
 DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject
 
@@ -115,3 +126,33 @@ DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject
 .rdata:00007FF6EC21B6D8 dq offset sub_7FF6E8F299E0
 .rdata:00007FF6EC21B6E0 dq offset sub_7FF6E8F29AB0
 .rdata:00007FF6EC21B6E8 dq offset sub_7FF6EB13B010
+
+
+
+
+
+v1 = sub_7FF652E6A880(qword_7FF65A981220, 0, a1, 0);
+
+.data:00007FF65A981220 qword_7FF65A981220 dq 578B2E0FA00h      ; DATA XREF: sub_7FF650944370+5B↑r
+.data:00007FF65A981220                                         ; sub_7FF65097B8E0+28↑r ...
+
+debug6718:00000578B2E0FA00 db 0E0h
+debug6718:00000578B2E0FA01 db    3
+debug6718:00000578B2E0FA02 db 0C2h
+debug6718:00000578B2E0FA03 db  53h ; S
+debug6718:00000578B2E0FA04 db 0F6h
+debug6718:00000578B2E0FA05 db  7Fh ; 
+
+7ff653c203e0
+
+.rdata:00007FF653C203E0 ; const SoundSystem::`vftable'
+.rdata:00007FF653C203E0 ??_7SoundSystem@@6B@ dq offset sub_7FF652E6A590
+
+从 GraphSoundResource new 出 GraphSoundInstance ？
+
+已知 a3 是一个 GraphSoundResource实例指针，
+(__int64 *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a3 + 32LL))(a3);
+这里调用的是哪个函数？ -> dq offset sub_7FF652E8BEF0       ; +0x20
+哇偶，这里倒是对上了网友说的那个过程
+
+确认：不同的歌曲，有不同的 GraphSoundResource，而且是稳定的

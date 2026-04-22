@@ -1,5 +1,4 @@
 目标 hook 游戏的音乐播放函数， 令游戏内播放器能够加载并播放我在某一目录放置的音乐文件
-暂时以音乐替换为目标
 
 Ds2MusicPlayerExtendLink ： 通往 dll 的 visual studio 工程 的快捷方式
 
@@ -22,6 +21,10 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 没有我的明确允许，不准读取仓库文件
 
 没有我的明确允许不准写入 ida 数据库
+
+禁止调用 server_warmup
+
+不要并发调用 ida mcp
 
 ## 子 agent 模型合规闸门
 - 不准产生同时多个agent同时调用 ida mcp 的情况
