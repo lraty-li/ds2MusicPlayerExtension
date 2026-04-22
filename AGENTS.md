@@ -22,6 +22,8 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 没有我的明确允许不准写入 ida 数据库
 
+不准让我给你贴代码，贴寄存器值，通过 ida mcp 读取
+
 禁止调用 server_warmup
 
 不要并发调用 ida mcp
