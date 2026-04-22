@@ -93,7 +93,11 @@ struct GraphSoundInstance {
     float upZ;
     uint32_t stateFlags5C;
     uint16_t flags060;
-    uint8_t unk062[0x0DE];
+    uint8_t unk062[0x026];
+    void *soundStateIIRVftable088;
+    uint8_t soundStateIIR088[0x010];
+    void *soundStateIIRVftable0A0;
+    uint8_t unk0A8[0x098];
     uint8_t cachedState140[0x020];
     uint8_t initState160[0x010];
     void *unk170;
@@ -116,12 +120,15 @@ struct GraphSoundInstance {
     uint16_t unk262;
     uint8_t unk264[0x056];
     uint8_t counter2BA;
-    uint8_t unk2BB[0x065];
+    uint8_t unk2BB[0x025];
+    uint8_t unk2E0[0x018];
+    void *selfRef2F8;
+    uint8_t unk300[0x020];
     GraphSoundControlBlock *controlBlock320;
     GraphSoundInterface *soundInterface328;
-    float unk330;
-    float unk334;
-    float unk338;
+    float ctorFloat330;
+    float ctorFloat334;
+    float ctorFloat338;
     uint8_t pad33C[0x04];
 };
 

@@ -156,3 +156,9 @@ debug6718:00000578B2E0FA05 db  7Fh ;
 哇偶，这里倒是对上了网友说的那个过程
 
 确认：不同的歌曲，有不同的 GraphSoundResource，而且是稳定的
+
+
+GraphSoundInstance{
+
+SoundStateIIR
+}
