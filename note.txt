@@ -102,6 +102,10 @@ a3 来自 qword_7FF7B9CAED88 指向对象里的三个槽位：+0x88、+0x90、+0
 
 ，经确认，关键就在这个赋值
 
+*(_QWORD *)(a1 + 216) = v9;
+a1: DSUIConstructionCustomizeMenuFunction
+v9: GraphSoundInstance
+
 经过我测试，如果通过 修改 rip 的方式跳过，其实还会播放，我认为就是返回值为0决定了无法播放，那么从 DSUIConstructionCustomizeMenuFunction_StartMusicEntryRuntimeObject 对 AcquireRuntimeObjectAndEnableOnStart 的调用看， 是怎么影响无法播放的？
 
 
@@ -162,3 +166,14 @@ GraphSoundInstance{
 
 SoundStateIIR
 }
+
+
+
+
+sub_7FF6CAC37F80
+_RAX = (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a2 + 32LL))(a2); // 这里调用 SoundResource_CreateGraphSoundInstance
+// 建筑 - 音乐定制- 鼠标 hover触发
+
+7FF6CAFEA880
+v7 = (__int64 *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a3 + 32LL))(a3);
+// 建筑 - 音乐定制- 鼠标 点击启动音乐触发

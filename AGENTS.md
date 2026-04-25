@@ -24,8 +24,6 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 不准让我给你贴代码，贴寄存器值，通过 ida mcp 读取
 
-禁止调用 server_warmup
-
 不要并发调用 ida mcp
 
 ## 子 agent 模型合规闸门

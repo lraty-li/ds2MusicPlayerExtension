@@ -34,8 +34,8 @@ struct GraphSoundResource {
     GraphSoundResourceVftable *vftable;
     volatile int32_t refCount;
     int32_t resourceKind;
-    uint64_t keyLo;
-    uint64_t keyHi;
+    uint64_t lookupKeyLo; // [self+0x10] sub_7FF6CB02D8E0 直接接收 &self[+0x10]；sub_7FF6CB04B2F0 在 a2!=0 时同样取 a2+0x10 作为键低 64 位，a2==0 时退到全 0 常量键
+    uint64_t lookupKeyHi; // [self+0x18] 上述 16 字节键的高 64 位；sub_7FF6CB04B2F0 用该键索引一张 40 字节槽表，sub_7FF6C91D3A10 证明槽布局为 +0x00/+0x08=键、+0x10..+0x1F=16 字节值、+0x20=哈希；在该调用点里值区随后被写成 GraphSoundResource* 与计数
     uint8_t unk020[0x0B0];
     int64_t unk0D0[55]; // 覆盖到 +0x287；sub_7FF72AE17BE0 会读取其中 +0x220 起的 int32 索引表，-1 表示无槽
     uint64_t unk288;
