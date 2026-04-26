@@ -48,6 +48,14 @@ typedef char static_assert_GraphProgramResource_size[
  * 0xC0      EventFunctionIndexMap   Array_EventFunctionMapping
  * 0xE0      RequiredVirtualTypes    Array_Ref_VirtualRTTIResource
  *
+ * ExposedDataResource 字段细节：
+ * - 字段表项位于 0x7FF72C88AED8。
+ * - 字段名字符串为 ExposedDataResource。
+ * - offset_code 为 0x500B8，低位偏移为 0xB8。
+ * - 字段类型描述为 0x7FF72C822DF8，类型名为 Ref_NodeConstantsResource。
+ * - Ref 包装指向 NodeConstantsResource 类型描述 0x7FF72E4FE2F0。
+ * - 析构函数读取 a1[23]，也就是 0xB8，非空时执行引用释放。
+ *
  * 构造函数 sub_7FF72A946990：
  * - 设置 GraphProgramResource vftable。
  * - 将 0x08、0x10、0x18、0x20、0x28、0x30、0x38 清零。
