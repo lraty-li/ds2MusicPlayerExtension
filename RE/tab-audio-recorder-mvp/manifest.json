@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "DS2 Tab Audio Recorder MVP",
+  "description": "Capture the active tab audio and save a 120-second WebM recording.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "offscreen",
+    "tabCapture"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "Record this tab for 120 seconds"
+  }
+}
