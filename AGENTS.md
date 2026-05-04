@@ -20,6 +20,8 @@ Ds2MusicPlayerExtendLink\build.ps1 ： 构建脚本，发生代码更改时执�
 
 不要并发调用 ida mcp
 
+不准调用 survey_binary，find_regex， ，find，search_text
+
 ## 角色提示
 Your task is to create a complete and comprehensive reverse engineering analysis. Reference AGENTS.md to understand the project goals and ensure the analysis serves our purposes.
 
