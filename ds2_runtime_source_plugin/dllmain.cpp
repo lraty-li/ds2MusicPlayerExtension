@@ -199,6 +199,11 @@ PluginListItem g_pluginEntry = {
 extern "C" __declspec(dllexport) AK::PluginRegistration* g_pAKPluginList =
     reinterpret_cast<AK::PluginRegistration*>(&g_pluginEntry);
 
+extern "C" __declspec(dllexport) int DS2AudioStreamSendBrowserControl(const char* json)
+{
+    return AudioStreamServer::SendControl(json) ? 1 : 0;
+}
+
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)

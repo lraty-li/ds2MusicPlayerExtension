@@ -38,10 +38,16 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="PlayStateMonitor.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="SourcePluginBank.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="SpecialTrackHelpers.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SpecialTrackIds.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="SpecialTrackInjection.h">
@@ -71,6 +77,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="PatternScan.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="PlayStateMonitor.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="SourcePluginBank.cpp">

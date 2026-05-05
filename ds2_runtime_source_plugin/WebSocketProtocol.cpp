@@ -154,4 +154,29 @@ bool ReadBinaryFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
     if (opcode == 0x2) payloadBytes = static_cast<uint32_t>(length);
     return true;
 }
+
+bool SendTextFrame(SOCKET socket, const char* text)
+{
+    if (!text) return false;
+    const size_t length = strlen(text);
+    if (length > 65535) return false;
+
+    uint8_t header[4] = {};
+    int headerBytes = 2;
+    header[0] = 0x81;
+    if (length < 126)
+    {
+        header[1] = static_cast<uint8_t>(length);
+    }
+    else
+    {
+        header[1] = 126;
+        header[2] = static_cast<uint8_t>((length >> 8) & 0xFF);
+        header[3] = static_cast<uint8_t>(length & 0xFF);
+        headerBytes = 4;
+    }
+
+    return SendAll(socket, reinterpret_cast<const char*>(header), headerBytes) &&
+        SendAll(socket, text, static_cast<int>(length));
+}
 }

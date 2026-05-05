@@ -36,6 +36,15 @@ Use it:
 The extension badge shows `WAIT` while it is waiting for the game-side plugin,
 and `PCM` when audio is streaming.
 
+The extension runs in controlled mode. There is no popup UI; clicking the icon
+only starts or stops tab-audio streaming. Browser playback pause/resume is
+driven by the in-game player state through the local WebSocket connection.
+
+For NetEase Cloud Music, start playback manually in the page once before using
+the game-side controls. Chrome may reject a cold `play()` request until the page
+has received user interaction; after that first manual start, DS2 can take over
+pause/resume synchronization.
+
 ## Building a release package
 
 Run from the repository root:

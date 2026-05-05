@@ -2,14 +2,13 @@
 
 #include "SpecialTrackInjection.h"
 
+#include "SpecialTrackIds.h"
 #include "SpecialTrackHelpers.h"
 
 #include <sstream>
 
 namespace
 {
-constexpr uint32_t kCustomTrackId = 0xAD900001;
-constexpr uint32_t kCustomEventId = 0xAD100000;
 constexpr uint32_t kRejectedSentinelEvent = 82u;
 
 constexpr size_t kTrackCloneSize = 0x300;
@@ -104,7 +103,7 @@ bool BuildClonedChain(void* sourceGsr, CloneChainResult& result)
         result.oldEventId =
             *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(result.wwiseId) + kWwiseIdIdOffset);
         *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(result.wwiseId) + kWwiseIdIdOffset) =
-            kCustomEventId;
+            SpecialTrackIds::kCustomEventId;
 
         result.dsloEntries[0] = result.wwiseId;
         auto* newDslo = reinterpret_cast<RawArray*>(
@@ -135,7 +134,7 @@ void* CloneTrack(void* sourceTrack, void* sourceText, CloneChainResult& chain)
 
     memcpy(object, sourceTrack, kTrackCloneSize);
     SpecialTrackHelpers::ResetObjectHeader(object);
-    *reinterpret_cast<uint32_t*>(object + 0x20) = kCustomTrackId;
+    *reinterpret_cast<uint32_t*>(object + 0x20) = SpecialTrackIds::kCustomTrackId;
     *reinterpret_cast<uint16_t*>(object + 0x24) = 3600;
     *reinterpret_cast<int16_t*>(object + 0x26) = 30000;
     *reinterpret_cast<uint8_t*>(object + 0x28) = 1;
@@ -258,8 +257,8 @@ void Inject(void* systemResource, const Logger& logger)
     }
 
     std::ostringstream oss;
-    oss << "injected special music track id=0x" << std::hex << kCustomTrackId
-        << " event=0x" << kCustomEventId
+    oss << "injected special music track id=0x" << std::hex << SpecialTrackIds::kCustomTrackId
+        << " event=0x" << SpecialTrackIds::kCustomEventId
         << " sourceIndex=" << std::dec << sourceIndex
         << " sourceTitle=\"" << SpecialTrackHelpers::ReadTrackTitle(sourceTrack) << "\""
         << " sourceEvent=0x" << std::hex << sourceEvent

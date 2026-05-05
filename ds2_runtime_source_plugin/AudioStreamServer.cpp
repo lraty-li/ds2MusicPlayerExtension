@@ -233,4 +233,18 @@ uint32_t Read(float* output, uint32_t frames, uint32_t channels)
 {
     return AudioRingBuffer::Read(output, frames, channels);
 }
+
+bool SendControl(const char* json)
+{
+    SOCKET client = INVALID_SOCKET;
+    {
+        std::lock_guard<std::mutex> lock(g_socketMutex);
+        client = g_clientSocket;
+    }
+    if (client == INVALID_SOCKET || !json)
+    {
+        return false;
+    }
+    return WebSocketProtocol::SendTextFrame(client, json);
+}
 }

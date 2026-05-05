@@ -20,6 +20,45 @@ Chrome/Edge tabCapture
    - 连接到 `ds2_dll_music_resource.dll` 后显示 `PCM` 并开始推流。
 5. 再次点击扩展图标停止捕获。
 
+当前扩展处于受控模式：没有 popup 测试界面，点击扩展图标只负责开始/停止推流；暂停/恢复由游戏状态通过 WebSocket 控制。
+
+## 游戏暂停同步
+
+runtime DLL 会通过同一条 WebSocket 向扩展发送控制消息：
+
+```json
+{"type":"control","command":"pause","reason":"auto_block"}
+{"type":"control","command":"resume","reason":"auto_block"}
+{"type":"control","command":"pause","reason":"manual"}
+{"type":"control","command":"resume","reason":"manual"}
+```
+
+扩展收到后会先探测当前捕获 tab 的所有 frame，选择最像 active media session 的 frame 执行控制，并以游戏内播放器状态为准设置浏览器播放状态。游戏说暂停时只暂停仍在播放的媒体；游戏说恢复时只恢复仍处于暂停状态的媒体，避免把控制做成反复 toggle。
+
+`auto_block` 的自动暂停会延迟 1.5s 执行，用来保留某些场景下的游戏内渐弱效果；若这期间收到对应恢复消息，会取消本次暂停。
+
+控制脚本运行在页面 MAIN world，当前顺序为：
+
+```text
+YouTube adapter: movie_player.pauseVideo()/playVideo()
+网易云 adapter: 暂停用 audio.pause()；恢复用 MediaSession play handler
+通用 media adapter: 扫描 audio/video，包括 open shadow DOM
+兜底 click adapter: 点击带 Pause/Play 或 暂停/播放 标题的按钮
+```
+
+调试角标：
+
+```text
+PAUS/PLAY : 扩展收到了游戏控制消息并执行了页面控制脚本
+NOOP      : 页面脚本执行成功，但没有找到可暂停/恢复的媒体或按钮
+CTRL      : 页面控制脚本注入失败
+NOID      : 控制消息缺少目标 tabId
+```
+
+YouTube 和网易云已加入 `host_permissions`，更新扩展后浏览器可能要求重新确认权限。
+
+网易云冷启动播放受 Chrome autoplay policy 约束。如果页面从未由用户交互启动过有声播放，MediaSession handler 内部的 `audio.play()` 可能会被浏览器拒绝。使用网易云时必须先在页面手动播放一次，让浏览器授予该页面播放权限；之后再点击扩展图标推流，并由游戏侧接管暂停/恢复。
+
 ## PCM 包
 
 WebSocket binary payload：

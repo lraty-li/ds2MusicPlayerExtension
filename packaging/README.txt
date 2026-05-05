@@ -15,6 +15,11 @@ English
 5. Open a browser tab that plays audio, click the extension icon, then start
    the game. WAIT means the extension is waiting for the game plugin; PCM
    means audio is streaming.
+6. The extension is in controlled mode: clicking the icon only starts or stops
+   streaming. Pause/resume is controlled by the in-game player state.
+7. NetEase Cloud Music: manually start playback in the page once before using
+   game-side pause/resume. Chrome can reject a cold play request until the page
+   has received user interaction.
 
 中文
 
@@ -30,6 +35,10 @@ English
    然后选择 browser-extension 文件夹。
 5. 打开一个正在播放音频的浏览器标签页，点击扩展图标，再启动游戏。
    WAIT 表示扩展正在等待游戏插件；PCM 表示正在推流。
+6. 扩展处于受控模式：点击图标只负责开始或停止推流；暂停/恢复由游戏内
+   播放器状态控制。
+7. 网易云音乐：使用游戏内暂停/恢复前，请先在网页内手动播放一次。
+   Chrome 可能会拒绝没有用户交互的冷启动播放请求。
 
 Credits
 

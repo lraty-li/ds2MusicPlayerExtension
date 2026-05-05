@@ -288,6 +288,17 @@ tabCapture
 
 如果游戏端尚未启动或 DLL 尚未监听，扩展点击后显示 `WAIT`，保持捕获会话并每秒重试连接；连接成功后角标切换为 `PCM`。
 
+同一条 WebSocket 也用于游戏到浏览器的控制消息。当前已接入：
+
+```text
+游戏外部曲目 playing -> 自动暂停 state3  : browser pause
+游戏外部曲目 state4 -> playing         : browser resume
+游戏外部曲目 playing -> 手动暂停 state2  : browser pause
+游戏外部曲目 state2 -> playing         : browser resume
+```
+
+扩展通过 `chrome.scripting.executeScript()` 控制当前捕获 tab 中的 `audio/video` 元素；恢复时只恢复扩展此前暂停过的元素。
+
 `ds2_dll_music_resource.dll` 加载后会启动内置 WebSocket server：
 
 ```text

@@ -6,6 +6,7 @@ let socket = null;
 let sequence = 0n;
 let sampleRate = 48000;
 let streamUrl = null;
+let targetTabId = null;
 let connectTimer = null;
 let streamToken = 0;
 
@@ -30,6 +31,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "get-status") {
+    sendResponse({
+      active: !!capturedStream,
+      connected: !!socket && socket.readyState === WebSocket.OPEN,
+      tabId: targetTabId
+    });
+    return true;
+  }
+
   return false;
 });
 
@@ -37,6 +47,7 @@ async function startStream(message) {
   stopStream(false);
   const token = ++streamToken;
   streamUrl = message.streamUrl;
+  targetTabId = message.tabId;
 
   capturedStream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -118,6 +129,7 @@ async function connectSocket(token) {
     }
 
     socket = ws;
+    socket.onmessage = (event) => handleSocketMessage(event.data);
     socket.onclose = () => handleSocketClosed(ws);
     socket.onerror = () => handleSocketClosed(ws);
     chrome.runtime.sendMessage({ type: "stream-connected" });
@@ -135,6 +147,7 @@ function handleSocketClosed(ws) {
 
   socket.onclose = null;
   socket.onerror = null;
+  socket.onmessage = null;
   try {
     ws.close();
   } catch (_) {
@@ -142,6 +155,28 @@ function handleSocketClosed(ws) {
   socket = null;
   reportWaiting();
   scheduleConnect(1000);
+}
+
+function handleSocketMessage(data) {
+  if (typeof data !== "string") {
+    return;
+  }
+
+  let message = null;
+  try {
+    message = JSON.parse(data);
+  } catch (_) {
+    return;
+  }
+
+  if (message && message.type === "control") {
+    chrome.runtime.sendMessage({
+      type: "browser-control",
+      tabId: targetTabId,
+      command: message.command,
+      reason: message.reason || ""
+    });
+  }
 }
 
 function sendPcmChunk(message) {
@@ -202,6 +237,7 @@ function stopStream(notify = true) {
   workletNode = null;
   socket = null;
   streamUrl = null;
+  targetTabId = null;
   sequence = 0n;
 
   if (notify) {

@@ -5,6 +5,7 @@
 #include "HookUtils.h"
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
+#include "PlayStateMonitor.h"
 #include "SourcePluginBank.h"
 #include "WwisePluginRegistration.h"
 
@@ -90,6 +91,11 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
             MusicPlayerInjection::TryInstall(gameModule, g_initLogger);
         g_initLogger.Log(listenerInstalled ? "music player listener installed" :
                                              "music player listener install failed");
+
+        const bool playStateMonitorInstalled =
+            PlayStateMonitor::TryInstall(gameModule, g_initLogger);
+        g_initLogger.Log(playStateMonitorInstalled ? "play state monitor installed" :
+                                                     "play state monitor install failed");
 
         g_initLogger.Log("waiting before RegisterPluginDLL");
         Sleep(kRegisterDelayMs);
