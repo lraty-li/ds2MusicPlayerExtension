@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <windows.h>
 
-namespace AudioPipeReader
+namespace AudioStreamServer
 {
 void Start();
 void Stop();

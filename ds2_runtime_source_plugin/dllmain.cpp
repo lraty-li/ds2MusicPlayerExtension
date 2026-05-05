@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "AudioPipeReader.h"
+#include "AudioStreamServer.h"
 #include "PluginLog.h"
 #include "PluginParams.h"
 
@@ -111,7 +111,7 @@ public:
         const AkUInt32 channels = buffer->NumChannels() ?
             buffer->NumChannels() : 2;
         float* channel0 = buffer->GetChannel(0);
-        const uint32_t copied = AudioPipeReader::Read(channel0, frames, channels);
+        const uint32_t copied = AudioStreamServer::Read(channel0, frames, channels);
         for (uint32_t ch = 0; ch < channels; ++ch) {
             float* out = buffer->GetChannel(ch);
             for (AkUInt16 i = static_cast<AkUInt16>(copied); i < frames; ++i) {
@@ -125,7 +125,7 @@ public:
         if (executeCalls_ == 1 || (executeCalls_ % 200) == 0)
         {
             char msg[128] = {};
-            sprintf_s(msg, "plugin Execute calls=%u frames=%u channels=%u pipeFrames=%u",
+            sprintf_s(msg, "plugin Execute calls=%u frames=%u channels=%u streamFrames=%u",
                 executeCalls_, frames, channels, copied);
             Log(msg);
         }
@@ -209,11 +209,11 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(module);
         PluginLog::Reset();
         Log("DLL_PROCESS_ATTACH");
-        AudioPipeReader::Start();
+        AudioStreamServer::Start();
     }
     else if (reason == DLL_PROCESS_DETACH)
     {
-        AudioPipeReader::Stop();
+        AudioStreamServer::Stop();
         Log("DLL_PROCESS_DETACH");
     }
 

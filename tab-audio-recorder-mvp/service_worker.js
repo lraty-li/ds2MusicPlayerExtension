@@ -1,5 +1,5 @@
 const OFFSCREEN_DOCUMENT = "offscreen.html";
-const BRIDGE_URL = "ws://127.0.0.1:47832";
+const STREAM_URL = "ws://127.0.0.1:47832";
 
 let state = {
   streaming: false,
@@ -26,7 +26,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     const response = await chrome.runtime.sendMessage({
       type: "start-stream",
       streamId,
-      bridgeUrl: BRIDGE_URL
+      streamUrl: STREAM_URL
     });
     if (!response || !response.ok) {
       throw new Error(response && response.error ? response.error : "stream start failed");
@@ -71,7 +71,7 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT,
     reasons: ["USER_MEDIA"],
-    justification: "Capture tab audio and stream PCM to the local DS2 bridge."
+    justification: "Capture tab audio and stream PCM to the local DS2 runtime plugin."
   });
 }
 

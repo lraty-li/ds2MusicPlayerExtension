@@ -15,7 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AudioPipeReader.h">
+    <ClInclude Include="AudioRingBuffer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioStreamServer.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="framework.h">
@@ -30,9 +33,15 @@
     <ClInclude Include="PluginParams.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="WebSocketProtocol.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AudioPipeReader.cpp">
+    <ClCompile Include="AudioRingBuffer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioStreamServer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="dllmain.cpp">
@@ -45,6 +54,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="WebSocketProtocol.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

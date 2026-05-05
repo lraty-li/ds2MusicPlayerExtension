@@ -1,7 +1,7 @@
 class PcmChunkWorklet extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.chunkFrames = 960;
+    this.chunkFrames = 480;
     this.buffer = new Int16Array(this.chunkFrames * 2);
     this.offset = 0;
   }

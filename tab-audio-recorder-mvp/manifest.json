@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DS2 Tab Audio Recorder MVP",
-  "description": "Capture the active tab audio and stream PCM to a local DS2 audio bridge.",
+  "description": "Capture the active tab audio and stream PCM to the DS2 runtime plugin.",
   "version": "0.2.0",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -13,6 +13,6 @@
     "service_worker": "service_worker.js"
   },
   "action": {
-    "default_title": "Stream this tab to DS2 audio bridge"
+    "default_title": "Stream this tab to DS2"
   }
 }

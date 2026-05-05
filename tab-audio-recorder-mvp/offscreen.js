@@ -43,7 +43,7 @@ async function startStream(message) {
     video: false
   });
 
-  socket = await openSocket(message.bridgeUrl);
+  socket = await openSocket(message.streamUrl);
   audioContext = new AudioContext({ sampleRate });
   sampleRate = audioContext.sampleRate;
   await audioContext.audioWorklet.addModule("pcm-worklet.js");

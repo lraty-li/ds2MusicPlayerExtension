@@ -9,9 +9,7 @@
 ```text
 Chrome/Edge tabCapture
   -> AudioWorklet 输出 PCM16 stereo
-  -> WebSocket 发送到本地 bridge.js
-  -> Windows Named Pipe: \\.\pipe\ds2_tab_audio_pcm
-  -> ds2_dll_music_resource.dll 后台线程接收 PCM
+  -> WebSocket 发送到 ds2_dll_music_resource.dll 内置本地 server
   -> DLL 内 float 环形缓冲
   -> Wwise SourcePlugin::Execute()
   -> 游戏内特殊曲目播放浏览器音频
@@ -67,6 +65,8 @@ ds2_wwise2023_source_bank_project
 tab-audio-recorder-mvp
 ```
 
+当前方案不再需要手动启动 Node bridge，也不要求使用者安装 Node。
+
 2023 生成的合法 bank：
 
 ```text
@@ -89,7 +89,7 @@ ds2_dll_music_resource_authoring
   Wwise Authoring 插件工程：让 Wwise Authoring/Bank 生成侧识别自定义 SourcePlugin。
 
 tab-audio-recorder-mvp
-  浏览器 tabCapture/AudioWorklet/bridge MVP。
+  浏览器 tabCapture/AudioWorklet 推流扩展。
 ```
 
 ## 插件 ID
@@ -251,7 +251,7 @@ Ds2SourcePlugin::Init()
   -> 输出格式设置为 48000 Hz / stereo / float / non-interleaved
 
 Ds2SourcePlugin::Execute()
-  -> 从 AudioPipeReader 的 float 环形缓冲读取
+  -> 从 AudioStreamServer 的 float 环形缓冲读取
   -> 不足部分填 0.0f 静音
   -> eState = AK_DataReady
 ```
@@ -277,12 +277,6 @@ plugin Execute calls=1 frames=512 channels=2
 tab-audio-recorder-mvp
 ```
 
-运行：
-
-```powershell
-node .\tab-audio-recorder-mvp\bridge.js
-```
-
 扩展侧流程：
 
 ```text
@@ -292,10 +286,10 @@ tabCapture
   -> WebSocket ws://127.0.0.1:47832
 ```
 
-bridge 转发到 Named Pipe：
+`ds2_dll_music_resource.dll` 加载后会启动内置 WebSocket server：
 
 ```text
-\\.\pipe\ds2_tab_audio_pcm
+127.0.0.1:47832
 ```
 
 包格式：
@@ -305,20 +299,28 @@ u32 magic      0x44533241 ("DS2A")
 u16 version    1
 u16 channels   2
 u32 sampleRate 通常 48000
-u32 frameCount 当前通常 960
+u32 frameCount 当前通常 480
 u64 sequence
 u32 pcmBytes
 bytes PCM16 interleaved little-endian
 ```
 
-运行时 DLL 的 `AudioPipeReader` 后台线程读取该 pipe，将 PCM16 interleaved 转为 float stereo，并写入 4 秒环形缓冲。`Execute()` 在音频线程只做非阻塞读取，不等待 pipe 或 WebSocket。
+运行时 DLL 的 `AudioStreamServer` 后台线程接收 WebSocket binary frame，将 PCM16 interleaved 转为 float stereo，并写入低延迟环形缓冲。`Execute()` 在音频线程只做非阻塞读取，不等待 socket。
+
+当前包大小为 480 帧，约 10ms：
+
+```text
+480 frames * 2 channels * 2 bytes = 1920 bytes
+```
+
+环形缓冲会在积压超过约 100ms 时丢弃旧帧并回落到约 50ms，避免延迟随着推流时间持续堆积。
 
 正常日志示例：
 
 ```text
-audio pipe connected
-pipe pcm packets=251 frames=240960 drops=0
-pipe pcm packets=501 frames=480960 drops=0
+audio websocket listening on 127.0.0.1:47832
+audio websocket connected
+ws pcm packets=501 frames=240480 drops=0 buffered=...
 ```
 
 `drops=0` 说明浏览器到 DLL 的序号没有丢包。
@@ -359,7 +361,8 @@ createPlugin
 plugin GetPluginInfo source build=517633
 plugin Init format=48000 stereo float
 plugin Execute calls=...
-pipe pcm packets=... drops=0
+audio websocket connected
+ws pcm packets=... drops=0
 ```
 
 用户验证结果：
@@ -370,9 +373,8 @@ pipe pcm packets=... drops=0
 
 ## 后续可改进点
 
-1. 增加环形缓冲状态日志，例如当前可读帧数、欠载次数。
-2. 对浏览器采样率非 48000 的情况做重采样或拒绝并记录日志。
+1. 对浏览器采样率非 48000 的情况做重采样或更明确的拒绝日志。
+2. 增加游戏内“下一首/暂停”等操作到浏览器扩展的反向控制消息。
 3. 增加淡入/淡出，避免开始播放时缓冲不足导致突兀静音。
 4. 将特殊曲目名称固定为清晰可识别字符串。
-5. 把 `AudioPipeReader` 的日志统一到 `PluginLog`，减少重复日志实现。
-6. 将 Wwise 2023 bank 解析/模板生成脚本固化，避免手工同步模板。
+5. 将 Wwise 2023 bank 解析/模板生成脚本固化，避免手工同步模板。
