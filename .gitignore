@@ -2,3 +2,5 @@ Ds2MusicPlayerExtendLink
 __pycache__/
 notes/Music_Player_RESEARCH中文翻译.md
 notes/ChatGPT-文件翻译与音频分析.md
+build/
+dist/

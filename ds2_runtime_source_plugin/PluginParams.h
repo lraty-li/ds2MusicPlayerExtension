@@ -1,6 +1,6 @@
 #pragma once
 
-#include <AK/SoundEngine/Common/IAkPlugin.h>
+#include "WwisePluginAbi.h"
 
 AK::IAkPluginParam* CreateDS2MusicResourceParams(
     AK::IAkPluginMemAlloc* allocator);

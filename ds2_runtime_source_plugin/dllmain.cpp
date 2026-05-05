@@ -3,10 +3,7 @@
 #include "AudioStreamServer.h"
 #include "PluginLog.h"
 #include "PluginParams.h"
-
-#include <AK/SoundEngine/Common/IAkPlugin.h>
-
-#include <AK/SoundEngine/Common/AkSpeakerConfig.h>
+#include "WwisePluginAbi.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
