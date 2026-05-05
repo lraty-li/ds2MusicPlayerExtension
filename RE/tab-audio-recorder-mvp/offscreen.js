@@ -1,16 +1,18 @@
-let mediaRecorder = null;
 let capturedStream = null;
-let chunks = [];
-let stopTimer = 0;
-let activeFileName = "ds2-tab-audio.webm";
+let audioContext = null;
+let sourceNode = null;
+let workletNode = null;
+let socket = null;
+let sequence = 0n;
+let sampleRate = 48000;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
     return false;
   }
 
-  if (message.type === "start-recording") {
-    startRecording(message)
+  if (message.type === "start-stream") {
+    startStream(message)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {
         reportError(error);
@@ -19,8 +21,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === "stop-recording") {
-    stopRecording();
+  if (message.type === "stop-stream") {
+    stopStream();
     sendResponse({ ok: true });
     return true;
   }
@@ -28,9 +30,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-async function startRecording(message) {
-  stopRecording();
-  chunks = [];
+async function startStream(message) {
+  stopStream(false);
 
   capturedStream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -42,98 +43,94 @@ async function startRecording(message) {
     video: false
   });
 
-  activeFileName = message.fileName || "ds2-tab-audio.webm";
-  const options = pickRecorderOptions();
-  mediaRecorder = new MediaRecorder(capturedStream, options);
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data && event.data.size > 0) {
-      chunks.push(event.data);
-    }
-  };
-  mediaRecorder.onerror = (event) => reportError(event.error || event);
-  mediaRecorder.onstop = () => finishRecording();
-  mediaRecorder.start(1000);
+  socket = await openSocket(message.bridgeUrl);
+  audioContext = new AudioContext({ sampleRate });
+  sampleRate = audioContext.sampleRate;
+  await audioContext.audioWorklet.addModule("pcm-worklet.js");
 
-  stopTimer = setTimeout(() => stopRecording(), message.durationMs || 5000);
+  sourceNode = audioContext.createMediaStreamSource(capturedStream);
+  workletNode = new AudioWorkletNode(audioContext, "pcm-chunk-worklet", {
+    numberOfInputs: 1,
+    numberOfOutputs: 0,
+    channelCount: 2
+  });
+  workletNode.port.onmessage = (event) => sendPcmChunk(event.data);
+  sourceNode.connect(workletNode);
 }
 
-function stopRecording() {
-  if (stopTimer) {
-    clearTimeout(stopTimer);
-    stopTimer = 0;
-  }
+function openSocket(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => resolve(ws);
+    ws.onerror = () => reject(new Error(`WebSocket failed: ${url}`));
+    ws.onclose = () => {
+      if (socket === ws) {
+        reportError(new Error("WebSocket closed"));
+      }
+    };
+  });
+}
 
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
+function sendPcmChunk(message) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
     return;
   }
 
-  cleanupStream();
+  const pcm = message.pcm;
+  const frameCount = message.frames;
+  const headerBytes = 28;
+  const packet = new ArrayBuffer(headerBytes + pcm.byteLength);
+  const view = new DataView(packet);
+
+  view.setUint32(0, 0x44533241, true);
+  view.setUint16(4, 1, true);
+  view.setUint16(6, 2, true);
+  view.setUint32(8, sampleRate, true);
+  view.setUint32(12, frameCount, true);
+  view.setBigUint64(16, sequence++, true);
+  view.setUint32(24, pcm.byteLength, true);
+  new Uint8Array(packet, headerBytes).set(new Uint8Array(pcm));
+  socket.send(packet);
 }
 
-async function finishRecording() {
-  const mimeType = chunks[0] ? chunks[0].type : "audio/webm";
-  const recording = new Blob(chunks, { type: mimeType });
-
-  try {
-    if (!recording.size) {
-      throw new Error("Recording produced zero bytes.");
-    }
-
-    const dataUrl = await blobToDataUrl(recording);
-    chrome.runtime.sendMessage({
-      type: "recording-finished",
-      bytes: recording.size,
-      dataUrl,
-      fileName: activeFileName
-    });
-  } catch (error) {
-    reportError(error);
-  } finally {
-    cleanupStream();
+function stopStream(notify = true) {
+  if (workletNode) {
+    workletNode.port.onmessage = null;
+    workletNode.disconnect();
   }
-}
-
-function cleanupStream() {
+  if (sourceNode) {
+    sourceNode.disconnect();
+  }
+  if (audioContext) {
+    audioContext.close();
+  }
   if (capturedStream) {
     for (const track of capturedStream.getTracks()) {
       track.stop();
     }
   }
-
-  capturedStream = null;
-  mediaRecorder = null;
-  chunks = [];
-}
-
-function pickRecorderOptions() {
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm"
-  ];
-
-  for (const mimeType of candidates) {
-    if (MediaRecorder.isTypeSupported(mimeType)) {
-      return { mimeType };
-    }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
   }
 
-  return {};
-}
+  capturedStream = null;
+  audioContext = null;
+  sourceNode = null;
+  workletNode = null;
+  socket = null;
+  sequence = 0n;
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(blob);
-  });
+  if (notify) {
+    chrome.runtime.sendMessage({ type: "stream-stopped" });
+  }
 }
 
 function reportError(error) {
-  cleanupStream();
+  stopStream(false);
   chrome.runtime.sendMessage({
-    type: "recording-error",
+    type: "stream-error",
     error: String(error)
   });
 }

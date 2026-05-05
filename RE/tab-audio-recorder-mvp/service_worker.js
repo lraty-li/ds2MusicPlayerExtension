@@ -1,15 +1,14 @@
 const OFFSCREEN_DOCUMENT = "offscreen.html";
-const RECORD_MS = 5000;
+const BRIDGE_URL = "ws://127.0.0.1:47832";
 
 let state = {
-  recording: false,
-  tabId: null,
-  startedAt: 0
+  streaming: false,
+  tabId: null
 };
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (state.recording) {
-    await chrome.runtime.sendMessage({ type: "stop-recording" });
+  if (state.streaming) {
+    await chrome.runtime.sendMessage({ type: "stop-stream" });
     return;
   }
 
@@ -24,24 +23,21 @@ chrome.action.onClicked.addListener(async (tab) => {
       targetTabId: tab.id
     });
 
-    const fileName = makeFileName(tab.title || "tab-audio");
-    await chrome.runtime.sendMessage({
-      type: "start-recording",
+    const response = await chrome.runtime.sendMessage({
+      type: "start-stream",
       streamId,
-      durationMs: RECORD_MS,
-      fileName
+      bridgeUrl: BRIDGE_URL
     });
+    if (!response || !response.ok) {
+      throw new Error(response && response.error ? response.error : "stream start failed");
+    }
 
-    state = {
-      recording: true,
-      tabId: tab.id,
-      startedAt: Date.now()
-    };
-    setBadge("REC", "#b00020");
+    state = { streaming: true, tabId: tab.id };
+    setBadge("PCM", "#0057b8");
   } catch (error) {
-    state.recording = false;
+    state.streaming = false;
     setBadge("ERR", "#8b0000");
-    console.error("Failed to start tab recording:", error);
+    console.error("Failed to start PCM stream:", error);
   }
 });
 
@@ -50,41 +46,16 @@ chrome.runtime.onMessage.addListener((message) => {
     return;
   }
 
-  if (message.type === "recording-finished") {
-    finishDownload(message).catch((error) => {
-      setBadge("ERR", "#8b0000");
-      console.error("Failed to save tab recording:", error);
-    });
-    return true;
-  }
-
-  if (message.type === "recording-error") {
-    state.recording = false;
+  if (message.type === "stream-stopped") {
+    state = { streaming: false, tabId: null };
+    setBadge("OK", "#006b3c");
+    clearBadgeLater();
+  } else if (message.type === "stream-error") {
+    state = { streaming: false, tabId: null };
     setBadge("ERR", "#8b0000");
-    console.error("Tab recording error:", message.error);
+    console.error("PCM stream error:", message.error);
   }
 });
-
-async function finishDownload(message) {
-  state = {
-    recording: false,
-    tabId: null,
-    startedAt: 0
-  };
-
-  if (!message.dataUrl || !message.bytes) {
-    throw new Error("Recording is empty.");
-  }
-
-  await chrome.downloads.download({
-    url: message.dataUrl,
-    filename: message.fileName || "ds2-tab-audio.webm",
-    saveAs: false
-  });
-
-  setBadge("OK", "#006b3c");
-  clearBadgeLater();
-}
 
 async function ensureOffscreenDocument() {
   const documentUrl = chrome.runtime.getURL(OFFSCREEN_DOCUMENT);
@@ -100,19 +71,8 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT,
     reasons: ["USER_MEDIA"],
-    justification: "Capture tab audio and write a local test recording."
+    justification: "Capture tab audio and stream PCM to the local DS2 bridge."
   });
-}
-
-function makeFileName(title) {
-  const safeTitle = title
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `ds2-tab-audio-${stamp}-${safeTitle || "tab"}.webm`;
 }
 
 function setBadge(text, color) {
@@ -122,7 +82,7 @@ function setBadge(text, color) {
 
 function clearBadgeLater() {
   setTimeout(() => {
-    if (!state.recording) {
+    if (!state.streaming) {
       chrome.action.setBadgeText({ text: "" });
     }
   }, 5000);

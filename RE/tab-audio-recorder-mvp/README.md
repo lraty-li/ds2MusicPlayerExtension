@@ -1,46 +1,52 @@
-# 标签页音频录制 MVP
+# 标签页音频实时 PCM MVP
 
-这个目录是一个最小可行性验证：用 Chrome/Edge 扩展捕获当前标签页音频，录制 5 秒后自动下载 `webm/opus` 文件。
+这个目录现在验证实时链路：
 
-本验证只关注“浏览器标签页音频能否被导向插件侧链路”。它暂时不接游戏、不接本地进程，也不修改系统音频设备。
+```text
+Chrome/Edge tabCapture
+  -> AudioWorklet
+  -> PCM16 stereo chunks
+  -> ws://127.0.0.1:47832
+  -> bridge.js 统计接收
+```
 
-## 验证目标
+## 运行
 
-- 点击扩展按钮后，只捕获当前活动标签页。
-- 被捕获的标签页音频不再直接从系统扬声器播放。
-- 系统其他音频、游戏音频、其他应用音频不受影响。
-- 5 秒后自动生成本地录音文件。
-- 停止捕获后，标签页音频恢复正常播放。
+1. 启动本地 bridge：
 
-## 加载方式
+```powershell
+node E:\dev\code\game\DS2MusicPlayer\RE\tab-audio-recorder-mvp\bridge.js
+```
 
-1. 打开 Chrome 或 Edge。
-2. 进入 `chrome://extensions/` 或 `edge://extensions/`。
-3. 打开“开发者模式”。
-4. 选择“加载已解压的扩展程序”。
-5. 选择本目录：`E:\dev\code\game\DS2MusicPlayer\RE\tab-audio-recorder-mvp`。
+2. 在 Chrome/Edge 扩展页加载本目录。
+3. 打开一个播放音乐的标签页。
+4. 点击扩展图标，角标显示 `PCM`。
+5. bridge 控制台应输出 first packet 和每 5 秒统计。
+6. 再次点击扩展图标停止捕获。
 
-## 测试步骤
+## PCM 包
 
-1. 打开一个会播放音乐的网页标签页。
-2. 确认播放前系统能正常听到该标签页声音。
-3. 点击扩展图标，图标角标应显示 `REC`。
-4. 录制期间确认该标签页声音不再从系统直接播放。
-5. 同时播放系统其他声音，确认其他声音仍正常输出。
-6. 等待 5 秒，浏览器会下载一个 `ds2-tab-audio-*.webm` 文件。
-7. 播放下载的文件，确认内容是该标签页的音频。
+WebSocket binary payload：
 
-录制中再次点击扩展图标会提前停止并下载当前录音。
+```text
+u32 magic      "DS2A" little-endian
+u16 version    1
+u16 channels   2
+u32 sampleRate 通常 48000
+u32 frameCount 当前为 960
+u64 sequence
+u32 pcmBytes
+bytes PCM16 interleaved little-endian
+```
 
-## 判定结果
+每包约 20ms：
 
-如果录音文件内容正确，并且录制期间该标签页没有直接从系统扬声器播放，说明“标签页音频改道到插件侧”这条路线可行。
+```text
+960 frames * 2 channels * 2 bytes = 3840 bytes
+```
 
-下一步可以把 `MediaRecorder` 替换为 `AudioWorklet`，把 PCM 分块送到本地 helper、共享内存或命名管道，再由游戏内插件消费。
+## 下一步
 
-## 已知限制
-
-- 这是标签页粒度，不是窗口粒度。
-- 某些 DRM 或受保护媒体可能无法录制。
-- 录制格式由浏览器 `MediaRecorder` 决定，当前优先使用 `audio/webm;codecs=opus`。
-- 这个 MVP 只验证捕获和本地落盘，不验证低延迟实时播放。
+`bridge.js` 当前只做接收统计。下一步把它改成写共享内存 ring buffer，
+再由 `ds2_dll_music_resource.dll` 的后台线程读取。Wwise `Execute()` 只能
+非阻塞消费 ring buffer，不直接等待 WebSocket 或浏览器。
