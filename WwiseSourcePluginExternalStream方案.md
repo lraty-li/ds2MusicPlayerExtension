@@ -286,6 +286,8 @@ tabCapture
   -> WebSocket ws://127.0.0.1:47832
 ```
 
+如果游戏端尚未启动或 DLL 尚未监听，扩展点击后显示 `WAIT`，保持捕获会话并每秒重试连接；连接成功后角标切换为 `PCM`。
+
 `ds2_dll_music_resource.dll` 加载后会启动内置 WebSocket server：
 
 ```text

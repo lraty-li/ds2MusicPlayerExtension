@@ -3,7 +3,8 @@ const STREAM_URL = "ws://127.0.0.1:47832";
 
 let state = {
   streaming: false,
-  tabId: null
+  tabId: null,
+  status: "idle"
 };
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -23,6 +24,9 @@ chrome.action.onClicked.addListener(async (tab) => {
       targetTabId: tab.id
     });
 
+    state = { streaming: true, tabId: tab.id, status: "waiting" };
+    setBadge("WAIT", "#7a5c00");
+
     const response = await chrome.runtime.sendMessage({
       type: "start-stream",
       streamId,
@@ -32,10 +36,9 @@ chrome.action.onClicked.addListener(async (tab) => {
       throw new Error(response && response.error ? response.error : "stream start failed");
     }
 
-    state = { streaming: true, tabId: tab.id };
-    setBadge("PCM", "#0057b8");
+    setBadge("WAIT", "#7a5c00");
   } catch (error) {
-    state.streaming = false;
+    state = { streaming: false, tabId: null, status: "idle" };
     setBadge("ERR", "#8b0000");
     console.error("Failed to start PCM stream:", error);
   }
@@ -47,11 +50,21 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 
   if (message.type === "stream-stopped") {
-    state = { streaming: false, tabId: null };
+    state = { streaming: false, tabId: null, status: "idle" };
     setBadge("OK", "#006b3c");
     clearBadgeLater();
+  } else if (message.type === "stream-waiting") {
+    if (state.streaming) {
+      state.status = "waiting";
+      setBadge("WAIT", "#7a5c00");
+    }
+  } else if (message.type === "stream-connected") {
+    if (state.streaming) {
+      state.status = "streaming";
+      setBadge("PCM", "#0057b8");
+    }
   } else if (message.type === "stream-error") {
-    state = { streaming: false, tabId: null };
+    state = { streaming: false, tabId: null, status: "idle" };
     setBadge("ERR", "#8b0000");
     console.error("PCM stream error:", message.error);
   }

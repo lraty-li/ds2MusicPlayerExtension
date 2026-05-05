@@ -12,10 +12,12 @@ Chrome/Edge tabCapture
 
 ## 运行
 
-1. 启动游戏并确保 `ds2_dll_music_resource.dll` 已加载。
+1. 可以先启动游戏，也可以先点击扩展等待游戏启动。
 2. 在 Chrome/Edge 扩展页加载本目录。
 3. 打开一个播放音乐的标签页。
-4. 点击扩展图标，角标显示 `PCM` 后开始推流。
+4. 点击扩展图标。
+   - 游戏端尚未监听时显示 `WAIT`，扩展会自动重试连接。
+   - 连接到 `ds2_dll_music_resource.dll` 后显示 `PCM` 并开始推流。
 5. 再次点击扩展图标停止捕获。
 
 ## PCM 包
