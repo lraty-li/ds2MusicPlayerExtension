@@ -2,6 +2,7 @@
 
 #include "SpecialTrackInjection.h"
 
+#include "DynamicTrackTitleSync.h"
 #include "SpecialTrackIds.h"
 #include "SpecialTrackHelpers.h"
 
@@ -12,6 +13,7 @@ namespace
 constexpr uint32_t kRejectedSentinelEvent = 82u;
 
 constexpr size_t kTrackCloneSize = 0x300;
+constexpr size_t kAlbumCloneSize = 0x80;
 constexpr size_t kWwiseIdCloneSize = 0x30;
 constexpr size_t kNcrCloneSize = 0xC0;
 constexpr size_t kGprCloneSize = 0x100;
@@ -146,6 +148,22 @@ void* CloneTrack(void* sourceTrack, void* sourceText, CloneChainResult& chain)
     return object;
 }
 
+void* CloneAlbum(void* sourceAlbum, void* sourceText)
+{
+    if (!sourceAlbum) return nullptr;
+    auto* object = static_cast<uint8_t*>(SpecialTrackHelpers::HeapAllocZero(kAlbumCloneSize));
+    if (!object) return nullptr;
+    memcpy(object, sourceAlbum, kAlbumCloneSize);
+    SpecialTrackHelpers::ResetObjectHeader(object);
+    void* artistText = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceAlbum) + 0x30);
+    void* telopText = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceAlbum) + 0x40);
+    *reinterpret_cast<void**>(object + 0x30) =
+        SpecialTrackHelpers::CreateLocalizedText("", artistText ? artistText : sourceText);
+    *reinterpret_cast<void**>(object + 0x40) =
+        SpecialTrackHelpers::CreateLocalizedText("", telopText ? telopText : sourceText);
+    return object;
+}
+
 void* PickSourceTrack(RawArray* trackArray, uint32_t& outIndex, uint32_t& outEventId)
 {
     void* fallback = nullptr;
@@ -192,6 +210,7 @@ namespace SpecialTrackInjection
 void Reset()
 {
     g_injected = false;
+    DynamicTrackTitleSync::Reset();
 }
 
 void Inject(void* systemResource, const Logger& logger)
@@ -215,6 +234,7 @@ void Inject(void* systemResource, const Logger& logger)
     }
 
     void* sourceText = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceTrack) + 0x38);
+    void* sourceAlbum = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceTrack) + 0x30);
     void* sourceTrial = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceTrack) + 0x48);
 
     CloneChainResult chain;
@@ -229,6 +249,11 @@ void Inject(void* systemResource, const Logger& logger)
     {
         Log("music injection failed: could not clone track");
         return;
+    }
+    void* newAlbum = CloneAlbum(sourceAlbum, sourceText);
+    if (newAlbum)
+    {
+        *reinterpret_cast<void**>(static_cast<uint8_t*>(newTrack) + 0x30) = newAlbum;
     }
 
     const uint32_t oldCount = trackArray->count;
@@ -266,6 +291,7 @@ void Inject(void* systemResource, const Logger& logger)
         << " AllTracks " << std::dec << oldCount << "->" << newCount;
     Log(oss.str());
     Log("custom bank/source-plugin event is still required before audio can play");
+    DynamicTrackTitleSync::Start(newTrack, newAlbum, logger);
     g_injected = true;
 }
 }

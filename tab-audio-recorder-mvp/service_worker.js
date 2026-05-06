@@ -3,6 +3,7 @@ importScripts("media_control.js");
 const OFFSCREEN_DOCUMENT = "offscreen.html";
 const STREAM_URL = "ws://127.0.0.1:47832";
 const AUTO_PAUSE_DELAY_MS = 1500;
+const METADATA_POLL_MS = 2000;
 
 let state = {
   streaming: false,
@@ -11,6 +12,8 @@ let state = {
   lastControl: ""
 };
 let autoPauseTimer = null;
+let metadataTimer = null;
+let lastMetadataKey = "";
 
 chrome.action.onClicked.addListener((tab) => {
   const tabId = tab && typeof tab.id === "number" ? tab.id : null;
@@ -24,6 +27,7 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((message) => {
   if (!message || typeof message.type !== "string") return false;
   if (message.type === "stream-stopped") {
+    stopMetadataPolling();
     state = { streaming: false, tabId: null, status: "idle", lastControl: "" };
     setBadge("OK", "#006b3c");
     clearBadgeLater();
@@ -36,10 +40,13 @@ chrome.runtime.onMessage.addListener((message) => {
     if (state.streaming) {
       state.status = "streaming";
       setBadge("PCM", "#0057b8");
+      lastMetadataKey = "";
+      startMetadataPolling();
     }
   } else if (message.type === "browser-control") {
     scheduleBrowserControl(message);
   } else if (message.type === "stream-error") {
+    stopMetadataPolling();
     state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
     setBadge("ERR", "#8b0000");
     console.error("PCM stream error:", message.error);
@@ -162,6 +169,7 @@ async function readOffscreenStatus() {
 
 async function stopActiveStream() {
   clearAutoPauseTimer();
+  stopMetadataPolling();
   try {
     await chrome.runtime.sendMessage({ type: "stop-stream" });
     state = { streaming: false, tabId: null, status: "idle", lastControl: "" };
@@ -170,6 +178,40 @@ async function stopActiveStream() {
     setBadge("OK", "#006b3c");
     clearBadgeLater();
   }
+}
+
+function startMetadataPolling() {
+  if (metadataTimer) return;
+  collectAndSendMetadata();
+  metadataTimer = setInterval(collectAndSendMetadata, METADATA_POLL_MS);
+}
+
+function stopMetadataPolling() {
+  if (!metadataTimer) return;
+  clearInterval(metadataTimer);
+  metadataTimer = null;
+  lastMetadataKey = "";
+}
+
+async function collectAndSendMetadata() {
+  if (!state.streaming || typeof state.tabId !== "number") return;
+  const result = await readBrowserMetadata(state.tabId);
+  if (!result.ok || !result.metadata || !result.metadata.title) return;
+
+  const metadata = result.metadata;
+  const key = `${metadata.title}\n${metadata.artist || ""}`;
+  if (key === lastMetadataKey) return;
+  lastMetadataKey = key;
+
+  chrome.runtime.sendMessage({
+    type: "metadata-update",
+    metadata: {
+      title: metadata.title,
+      artist: metadata.artist || "",
+      adapter: metadata.adapter || "",
+      host: metadata.host || ""
+    }
+  });
 }
 
 async function ensureOffscreenDocument() {

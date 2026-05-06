@@ -3,6 +3,7 @@
 #include "AudioStreamServer.h"
 
 #include "AudioRingBuffer.h"
+#include "BrowserMetadata.h"
 #include "PluginLog.h"
 #include "WebSocketProtocol.h"
 
@@ -129,9 +130,17 @@ void HandleClient(SOCKET socket)
     while (!ShouldStop())
     {
         uint32_t payloadBytes = 0;
-        if (!WebSocketProtocol::ReadBinaryFrame(socket, payload,
-            sizeof(payload), payloadBytes)) break;
+        uint8_t opcode = 0;
+        if (!WebSocketProtocol::ReadFrame(socket, payload,
+            sizeof(payload), payloadBytes, opcode)) break;
         if (payloadBytes == 0) continue;
+        if (opcode == 0x1)
+        {
+            payload[min(payloadBytes, kMaxPacketBytes - 1)] = 0;
+            BrowserMetadata::UpdateFromJson(reinterpret_cast<const char*>(payload));
+            continue;
+        }
+        if (opcode != 0x2) continue;
 
         const uint32_t frameCount = payloadBytes >= 16 ? ReadLE32(payload + 12) : 0;
         const uint64_t seq = payloadBytes >= 24 ? ReadLE64(payload + 16) : UINT64_MAX;
@@ -246,5 +255,15 @@ bool SendControl(const char* json)
         return false;
     }
     return WebSocketProtocol::SendTextFrame(client, json);
+}
+
+int ReadMetadataTitle(char* output, uint32_t outputBytes)
+{
+    return BrowserMetadata::ReadTitle(output, outputBytes);
+}
+
+int ReadMetadata(char* title, uint32_t titleBytes, char* artist, uint32_t artistBytes)
+{
+    return BrowserMetadata::Read(title, titleBytes, artist, artistBytes);
 }
 }

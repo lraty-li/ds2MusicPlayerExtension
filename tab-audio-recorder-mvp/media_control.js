@@ -26,6 +26,21 @@ async function handleBrowserControl(message, fallbackTabId) {
   }
 }
 
+async function readBrowserMetadata(fallbackTabId) {
+  const tabId = fallbackTabId;
+  if (typeof tabId !== "number") return { ok: false, error: "NOID" };
+
+  try {
+    await injectPageControl(tabId, { allFrames: true });
+    const results = await callPageControl(tabId, { allFrames: true }, "metadata", "");
+    const metadata = selectMetadataResult(results);
+    return metadata ? { ok: true, metadata } : { ok: false, error: "NOMETA" };
+  } catch (error) {
+    console.error("Failed to read DS2 browser metadata:", error);
+    return { ok: false, error: String(error) };
+  }
+}
+
 async function injectPageControl(tabId, target) {
   await chrome.scripting.executeScript({
     target: Object.assign({ tabId }, target),
@@ -46,6 +61,25 @@ async function callPageControl(tabId, target, method, command) {
 function callInjectedPageControl(method, command) {
   if (!window.__ds2PageMediaControl) return null;
   return window.__ds2PageMediaControl[method](command);
+}
+
+function selectMetadataResult(results) {
+  let best = null;
+  for (const item of results || []) {
+    if (!item || !item.result || !item.result.title) continue;
+    const score = item.result.score || 0;
+    if (!best || score > best.score) {
+      best = {
+        title: item.result.title,
+        artist: item.result.artist || "",
+        score,
+        frameId: item.frameId,
+        adapter: item.result.adapter || "",
+        host: item.result.host || ""
+      };
+    }
+  }
+  return best;
 }
 
 function selectControlFrame(results) {

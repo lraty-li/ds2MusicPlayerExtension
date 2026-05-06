@@ -9,7 +9,6 @@ let streamUrl = null;
 let targetTabId = null;
 let connectTimer = null;
 let streamToken = 0;
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
     return false;
@@ -37,6 +36,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       connected: !!socket && socket.readyState === WebSocket.OPEN,
       tabId: targetTabId
     });
+    return true;
+  }
+
+  if (message.type === "metadata-update") {
+    sendMetadata(message.metadata);
+    sendResponse({ ok: true });
     return true;
   }
 
@@ -176,6 +181,25 @@ function handleSocketMessage(data) {
       command: message.command,
       reason: message.reason || ""
     });
+  }
+}
+
+function sendMetadata(metadata) {
+  if (!socket || socket.readyState !== WebSocket.OPEN || !metadata) {
+    return;
+  }
+
+  const payload = {
+    type: "metadata",
+    title: String(metadata.title || "").slice(0, 512),
+    artist: String(metadata.artist || "").slice(0, 512),
+    adapter: String(metadata.adapter || ""),
+    host: String(metadata.host || "")
+  };
+  try {
+    socket.send(JSON.stringify(payload));
+  } catch (_) {
+    handleSocketClosed(socket);
   }
 }
 
