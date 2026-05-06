@@ -204,6 +204,18 @@ extern "C" __declspec(dllexport) int DS2AudioStreamSendBrowserControl(const char
     return AudioStreamServer::SendControl(json) ? 1 : 0;
 }
 
+extern "C" __declspec(dllexport) int DS2AudioStreamReadMetadataTitle(
+    char* output, unsigned int outputBytes)
+{
+    return AudioStreamServer::ReadMetadataTitle(output, outputBytes);
+}
+
+extern "C" __declspec(dllexport) int DS2AudioStreamReadMetadata(
+    char* title, unsigned int titleBytes, char* artist, unsigned int artistBytes)
+{
+    return AudioStreamServer::ReadMetadata(title, titleBytes, artist, artistBytes);
+}
+
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)

@@ -123,13 +123,14 @@ bool Accept(SOCKET socket)
     return SendAll(socket, response, static_cast<int>(strlen(response)));
 }
 
-bool ReadBinaryFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
-    uint32_t& payloadBytes)
+bool ReadFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
+    uint32_t& payloadBytes, uint8_t& opcode)
 {
     payloadBytes = 0;
+    opcode = 0;
     uint8_t header[2] = {};
     if (!RecvAll(socket, header, sizeof(header))) return false;
-    const uint8_t opcode = header[0] & 0x0F;
+    opcode = header[0] & 0x0F;
     const bool masked = (header[1] & 0x80) != 0;
     uint64_t length = header[1] & 0x7F;
     if (opcode == 0x8) return false;
@@ -151,7 +152,16 @@ bool ReadBinaryFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
     if (!RecvAll(socket, mask, sizeof(mask))) return false;
     if (!RecvAll(socket, payload, static_cast<int>(length))) return false;
     for (uint64_t i = 0; i < length; ++i) payload[i] ^= mask[i & 3];
-    if (opcode == 0x2) payloadBytes = static_cast<uint32_t>(length);
+    payloadBytes = static_cast<uint32_t>(length);
+    return true;
+}
+
+bool ReadBinaryFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
+    uint32_t& payloadBytes)
+{
+    uint8_t opcode = 0;
+    if (!ReadFrame(socket, payload, maxBytes, payloadBytes, opcode)) return false;
+    if (opcode != 0x2) payloadBytes = 0;
     return true;
 }
 

@@ -152,6 +152,7 @@
   <ItemGroup>
     <ClInclude Include="AudioRingBuffer.h" />
     <ClInclude Include="AudioStreamServer.h" />
+    <ClInclude Include="BrowserMetadata.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PluginLog.h" />
@@ -162,6 +163,7 @@
   <ItemGroup>
     <ClCompile Include="AudioRingBuffer.cpp" />
     <ClCompile Include="AudioStreamServer.cpp" />
+    <ClCompile Include="BrowserMetadata.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="PluginLog.cpp" />
     <ClCompile Include="PluginParams.cpp" />
