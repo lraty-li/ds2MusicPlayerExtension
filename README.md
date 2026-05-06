@@ -5,6 +5,10 @@ DS2MusicPlayer adds a special music-player track to Death Stranding 2. When the
 track is played in game, audio is streamed from a Chrome/Edge tab through a
 runtime Wwise SourcePlugin.
 
+## Preview
+
+[bilibili](https://www.bilibili.com/video/BV1t1RrBNEjm/)
+
 ## User installation
 
 Download the latest `DS2MusicPlayer-*.zip` from GitHub Releases and extract it.

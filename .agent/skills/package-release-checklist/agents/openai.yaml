@@ -1,0 +1,4 @@
+interface:
+  display_name: "Package Release Checklist"
+  short_description: "Strict release packaging checks."
+  default_prompt: "Use $package-release-checklist to verify this project is ready for packaging, tagging, and release."
