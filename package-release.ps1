@@ -88,6 +88,9 @@ function Copy-BrowserExtension {
     $files = @(
         "manifest.json",
         "service_worker.js",
+        "media_control.js",
+        "media_session_hook.js",
+        "page_control.js",
         "offscreen.html",
         "offscreen.js",
         "pcm-worklet.js",
