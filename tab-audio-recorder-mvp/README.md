@@ -45,7 +45,7 @@ adapters/netease.js: 暂停用 audio.pause()；恢复点击网易云播放栏按
 adapters/media_session_hook.js: 无站点 adapter 时调用网页通过 Media Session 注册的 play/pause handler
 ```
 
-Media Session hook 只作为 fallback adapter 存在：YouTube、网易云等有站点 adapter 的页面不会走 hook 控制；没有站点 adapter 的页面才尝试调用网页通过 `navigator.mediaSession.setActionHandler()` 注册的 handler。hook 需要在网页早期运行才能捕获 handler，因此扩展会在所有网页和 frame 注入轻量 hook；标准 Media Session API 仍用于读取网页提供的 title/artist 元数据。扩展更新或重载后，已打开的网页需要刷新一次，hook 才能捕获网页重新注册的 handler。
+Media Session hook 只作为 fallback adapter 存在：YouTube、网易云等有站点 adapter 的页面不会走 hook 控制。为降低对网页加载的影响，早期 hook 只注入到 Spotify 域名；其他未知站点只会在控制时动态注入，可能无法捕获已经注册过的 handler。标准 Media Session API 仍用于读取网页提供的 title/artist 元数据。扩展更新或重载后，已打开的 Spotify 页面需要刷新一次，hook 才能捕获网页重新注册的 handler。
 
 调试角标：
 
@@ -56,7 +56,7 @@ CTRL      : 页面控制脚本注入失败
 NOID      : 控制消息缺少目标 tabId
 ```
 
-扩展使用 `<all_urls>` 权限，以便在没有站点 adapter 的网页上尽早安装 Media Session hook。更新扩展后浏览器可能要求重新确认权限。
+扩展只为 YouTube、网易云和 Spotify 请求站点权限；Spotify 需要早期 hook 来兼容 Media Session 控制。更新扩展后浏览器可能要求重新确认权限。
 
 网易云冷启动播放受 Chrome autoplay policy 约束。如果页面从未由用户交互启动过有声播放，脚本侧恢复仍可能被浏览器拒绝。网易云 adapter 不直接调用 `audio.play()`，而是点击页面播放栏按钮，避免直接 `audio.play()` 曾出现的从头播放问题。
 
