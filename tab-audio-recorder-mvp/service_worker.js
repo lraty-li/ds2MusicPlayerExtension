@@ -1,4 +1,4 @@
-importScripts("media_control.js", "service_panel.js");
+importScripts("media_control.js");
 
 const OFFSCREEN_DOCUMENT = "offscreen.html";
 const STREAM_URL = "ws://127.0.0.1:47832";
@@ -14,9 +14,15 @@ let state = {
 let autoPauseTimer = null;
 let metadataTimer = null;
 let lastMetadataKey = "";
-let lastSentMetadata = null;
-let lastReadMetadata = null;
-let lastControlResult = null;
+
+chrome.action.onClicked.addListener((tab) => {
+  const tabId = tab && typeof tab.id === "number" ? tab.id : null;
+  toggleStream(tabId).catch((error) => {
+    state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
+    setBadge("ERR", "#8b0000");
+    console.error("Failed to toggle PCM stream:", error);
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") return false;
@@ -44,18 +50,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
     setBadge("ERR", "#8b0000");
     console.error("PCM stream error:", message.error);
-  } else if (message.type.startsWith("popup-")) {
-    handlePopupMessage(message)
-      .then(sendResponse)
-      .catch((error) => sendResponse({ ok: false, error: String(error) }));
-    return true;
   }
 
   return false;
 });
 
 async function toggleStream(tabId, streamId) {
-  await syncStreamState();
   const status = await readOffscreenStatus();
   if (state.streaming || status.active) {
     await stopActiveStream();
@@ -73,7 +73,7 @@ function scheduleBrowserControl(message) {
     clearAutoPauseTimer();
     autoPauseTimer = setTimeout(() => {
       autoPauseTimer = null;
-      runAndStoreBrowserControl(message);
+      runBrowserControl(message);
     }, AUTO_PAUSE_DELAY_MS);
     return;
   }
@@ -88,7 +88,7 @@ function scheduleBrowserControl(message) {
     clearAutoPauseTimer();
   }
 
-  runAndStoreBrowserControl(message);
+  runBrowserControl(message);
 }
 
 function clearAutoPauseTimer() {
@@ -218,9 +218,6 @@ async function collectAndSendMetadata() {
     });
   } catch (_) {
     return;
-  }
-  if (response && response.sent) {
-    lastSentMetadata = Object.assign({}, response.metadata, { sentAt: new Date().toISOString() });
   }
 }
 

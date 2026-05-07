@@ -15,12 +15,12 @@ Chrome/Edge tabCapture
 1. 可以先启动游戏，也可以先点击扩展等待游戏启动。
 2. 在 Chrome/Edge 扩展页加载本目录。
 3. 打开一个播放音乐的标签页。
-4. 点击扩展图标打开测试面板，再点击 `Start / Stop`。
+4. 点击扩展图标。
    - 游戏端尚未监听时显示 `WAIT`，扩展会自动重试连接。
    - 连接到 `ds2_dll_music_resource.dll` 后显示 `PCM` 并开始推流。
-5. 再次点击 `Start / Stop` 停止捕获。
+5. 再次点击扩展图标停止捕获。
 
-当前扩展带有 popup 测试面板。面板中的 `Pause` / `Resume` 会直接对当前标签页执行与游戏侧相同的控制路径；`Read Metadata` 会显示当前标签页可读取到的 title/artist；`Last Metadata Sent To Game` 显示最近一次通过 WebSocket 发给 runtime DLL 的元数据。
+当前扩展处于受控模式：没有 popup 测试界面，点击扩展图标只负责开始/停止推流；暂停/恢复由游戏状态通过 WebSocket 控制。
 
 ## 游戏暂停同步
 
@@ -45,7 +45,7 @@ adapters/netease.js: 暂停用 audio.pause()；恢复点击网易云播放栏按
 adapters/media_session_hook.js: 无站点 adapter 时调用网页通过 Media Session 注册的 play/pause handler
 ```
 
-Media Session hook 只作为 fallback adapter 存在：YouTube、网易云等有站点 adapter 的页面不会走 hook 控制；没有站点 adapter 的页面才尝试调用网页通过 `navigator.mediaSession.setActionHandler()` 注册的 handler。hook 需要在网页早期运行才能捕获 handler，因此扩展会在所有网页注入轻量 hook；标准 Media Session API 仍用于读取网页提供的 title/artist 元数据。
+Media Session hook 只作为 fallback adapter 存在：YouTube、网易云等有站点 adapter 的页面不会走 hook 控制；没有站点 adapter 的页面才尝试调用网页通过 `navigator.mediaSession.setActionHandler()` 注册的 handler。hook 需要在网页早期运行才能捕获 handler，因此扩展会在所有网页和 frame 注入轻量 hook；标准 Media Session API 仍用于读取网页提供的 title/artist 元数据。扩展更新或重载后，已打开的网页需要刷新一次，hook 才能捕获网页重新注册的 handler。
 
 调试角标：
 

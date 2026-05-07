@@ -20,7 +20,9 @@ async function handleBrowserControl(message, fallbackTabId) {
       frameId: item.frameId,
       result: item.result
     })));
-    if (typeof bestFrameId !== "number") return { ok: false, error: "NOOP" };
+    if (typeof bestFrameId !== "number") {
+      return { ok: false, error: "NOOP", probes: summarizeProbes(probes) };
+    }
 
     await injectPageControl(tabId, { frameIds: [bestFrameId] });
     const results = await callPageControl(tabId, { frameIds: [bestFrameId] }, "control", command);
@@ -95,6 +97,16 @@ function selectControlFrame(results) {
     if (!best || score > best.score) best = { frameId: item.frameId, score };
   }
   return best && best.score > 0 ? best.frameId : null;
+}
+
+function summarizeProbes(results) {
+  return (results || []).map((item) => ({
+    frameId: item && item.frameId,
+    adapter: item && item.result && item.result.adapter || "",
+    host: item && item.result && item.result.host || "",
+    score: item && item.result && item.result.score || 0,
+    hasSession: !!(item && item.result && item.result.hasSession)
+  }));
 }
 
 function summarizeControlResults(command, results) {

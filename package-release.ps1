@@ -88,7 +88,6 @@ function Copy-BrowserExtension {
     $files = @(
         "manifest.json",
         "service_worker.js",
-        "service_panel.js",
         "media_control.js",
         "page_control.js",
         "adapters\youtube.js",
@@ -97,9 +96,6 @@ function Copy-BrowserExtension {
         "offscreen.html",
         "offscreen.js",
         "pcm-worklet.js",
-        "popup.html",
-        "popup.js",
-        "popup.css",
         "README.md"
     )
     New-Item -ItemType Directory -Path $extensionDir -Force | Out-Null
