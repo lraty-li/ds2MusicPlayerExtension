@@ -15,12 +15,12 @@ Chrome/Edge tabCapture
 1. 可以先启动游戏，也可以先点击扩展等待游戏启动。
 2. 在 Chrome/Edge 扩展页加载本目录。
 3. 打开一个播放音乐的标签页。
-4. 点击扩展图标。
+4. 点击扩展图标打开测试面板，再点击 `Start / Stop`。
    - 游戏端尚未监听时显示 `WAIT`，扩展会自动重试连接。
    - 连接到 `ds2_dll_music_resource.dll` 后显示 `PCM` 并开始推流。
-5. 再次点击扩展图标停止捕获。
+5. 再次点击 `Start / Stop` 停止捕获。
 
-当前扩展处于受控模式：没有 popup 测试界面，点击扩展图标只负责开始/停止推流；暂停/恢复由游戏状态通过 WebSocket 控制。
+当前扩展带有 popup 测试面板。面板中的 `Pause` / `Resume` 会直接对当前标签页执行与游戏侧相同的控制路径；`Read Metadata` 会显示当前标签页可读取到的 title/artist；`Last Metadata Sent To Game` 显示最近一次通过 WebSocket 发给 runtime DLL 的元数据。
 
 ## 游戏暂停同步
 
@@ -33,31 +33,32 @@ runtime DLL 会通过同一条 WebSocket 向扩展发送控制消息：
 {"type":"control","command":"resume","reason":"manual"}
 ```
 
-扩展收到后会先探测当前捕获 tab 的所有 frame，选择最像 active media session 的 frame 执行控制，并以游戏内播放器状态为准设置浏览器播放状态。游戏说暂停时只暂停仍在播放的媒体；游戏说恢复时只恢复仍处于暂停状态的媒体，避免把控制做成反复 toggle。
+扩展收到后会先探测当前捕获 tab 的所有 frame，选择最像 active media 的 frame 执行控制，并以游戏内播放器状态为准设置浏览器播放状态。游戏说暂停时只暂停仍在播放的媒体；游戏说恢复时只恢复仍处于暂停状态的媒体，避免把控制做成反复 toggle。
 
 `auto_block` 的自动暂停会延迟 1.5s 执行，用来保留某些场景下的游戏内渐弱效果；若这期间收到对应恢复消息，会取消本次暂停。
 
 控制脚本运行在页面 MAIN world，当前顺序为：
 
 ```text
-YouTube adapter: movie_player.pauseVideo()/playVideo()
-网易云 adapter: 暂停用 audio.pause()；恢复用 MediaSession play handler
-通用 media adapter: 扫描 audio/video，包括 open shadow DOM
-兜底 click adapter: 点击带 Pause/Play 或 暂停/播放 标题的按钮
+adapters/youtube.js: movie_player.pauseVideo()/playVideo()
+adapters/netease.js: 暂停用 audio.pause()；恢复点击网易云播放栏按钮
+adapters/media_session_hook.js: 无站点 adapter 时调用网页通过 Media Session 注册的 play/pause handler
 ```
+
+Media Session hook 只作为 fallback adapter 存在：YouTube、网易云等有站点 adapter 的页面不会走 hook 控制；没有站点 adapter 的页面才尝试调用网页通过 `navigator.mediaSession.setActionHandler()` 注册的 handler。hook 需要在网页早期运行才能捕获 handler，因此扩展会在所有网页注入轻量 hook；标准 Media Session API 仍用于读取网页提供的 title/artist 元数据。
 
 调试角标：
 
 ```text
 PAUS/PLAY : 扩展收到了游戏控制消息并执行了页面控制脚本
-NOOP      : 页面脚本执行成功，但没有找到可暂停/恢复的媒体或按钮
+NOOP      : 页面脚本执行成功，但没有找到可暂停/恢复的媒体，或当前 adapter 未支持该命令
 CTRL      : 页面控制脚本注入失败
 NOID      : 控制消息缺少目标 tabId
 ```
 
-YouTube 和网易云已加入 `host_permissions`，更新扩展后浏览器可能要求重新确认权限。
+扩展使用 `<all_urls>` 权限，以便在没有站点 adapter 的网页上尽早安装 Media Session hook。更新扩展后浏览器可能要求重新确认权限。
 
-网易云冷启动播放受 Chrome autoplay policy 约束。如果页面从未由用户交互启动过有声播放，MediaSession handler 内部的 `audio.play()` 可能会被浏览器拒绝。使用网易云时必须先在页面手动播放一次，让浏览器授予该页面播放权限；之后再点击扩展图标推流，并由游戏侧接管暂停/恢复。
+网易云冷启动播放受 Chrome autoplay policy 约束。如果页面从未由用户交互启动过有声播放，脚本侧恢复仍可能被浏览器拒绝。网易云 adapter 不直接调用 `audio.play()`，而是点击页面播放栏按钮，避免直接 `audio.play()` 曾出现的从头播放问题。
 
 ## PCM 包
 

@@ -1,4 +1,9 @@
-const PAGE_CONTROL_FILE = "page_control.js";
+const PAGE_CONTROL_FILES = [
+  "page_control.js",
+  "adapters/youtube.js",
+  "adapters/netease.js",
+  "adapters/media_session_hook.js"
+];
 
 async function handleBrowserControl(message, fallbackTabId) {
   const tabId = typeof message.tabId === "number" ? message.tabId : fallbackTabId;
@@ -45,7 +50,7 @@ async function injectPageControl(tabId, target) {
   await chrome.scripting.executeScript({
     target: Object.assign({ tabId }, target),
     world: "MAIN",
-    files: [PAGE_CONTROL_FILE]
+    files: PAGE_CONTROL_FILES
   });
 }
 
@@ -93,21 +98,19 @@ function selectControlFrame(results) {
 }
 
 function summarizeControlResults(command, results) {
-  const summary = { ok: true, command, media: 0, changed: 0, clicked: 0, session: 0, already: 0 };
+  const summary = { ok: true, command, media: 0, changed: 0, clicked: 0, already: 0 };
   for (const item of results || []) {
     if (!item || !item.result) continue;
     summary.media += item.result.media || 0;
     summary.changed += item.result.changed || 0;
     summary.clicked += item.result.clicked || 0;
-    summary.session += item.result.session || 0;
     summary.already += item.result.already || 0;
   }
   console.log(
     `DS2 media ${command}: media=${summary.media} changed=${summary.changed} ` +
-    `clicked=${summary.clicked} session=${summary.session} already=${summary.already}`
+    `clicked=${summary.clicked} already=${summary.already}`
   );
-  if (summary.changed === 0 && summary.clicked === 0 &&
-    summary.session === 0 && summary.already === 0) {
+  if (summary.changed === 0 && summary.already === 0) {
     summary.ok = false;
     summary.error = "NOOP";
   }

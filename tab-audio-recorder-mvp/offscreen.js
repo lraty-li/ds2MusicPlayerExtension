@@ -40,8 +40,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "metadata-update") {
-    sendMetadata(message.metadata);
-    sendResponse({ ok: true });
+    sendResponse(sendMetadata(message.metadata));
     return true;
   }
 
@@ -186,7 +185,7 @@ function handleSocketMessage(data) {
 
 function sendMetadata(metadata) {
   if (!socket || socket.readyState !== WebSocket.OPEN || !metadata) {
-    return;
+    return { ok: false, sent: false, error: "socket closed" };
   }
 
   const payload = {
@@ -198,8 +197,10 @@ function sendMetadata(metadata) {
   };
   try {
     socket.send(JSON.stringify(payload));
+    return { ok: true, sent: true, metadata: payload };
   } catch (_) {
     handleSocketClosed(socket);
+    return { ok: false, sent: false, error: "send failed" };
   }
 }
 

@@ -1,4 +1,4 @@
-importScripts("media_control.js");
+importScripts("media_control.js", "service_panel.js");
 
 const OFFSCREEN_DOCUMENT = "offscreen.html";
 const STREAM_URL = "ws://127.0.0.1:47832";
@@ -14,17 +14,11 @@ let state = {
 let autoPauseTimer = null;
 let metadataTimer = null;
 let lastMetadataKey = "";
+let lastSentMetadata = null;
+let lastReadMetadata = null;
+let lastControlResult = null;
 
-chrome.action.onClicked.addListener((tab) => {
-  const tabId = tab && typeof tab.id === "number" ? tab.id : null;
-  toggleStream(tabId).catch((error) => {
-    state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
-    setBadge("ERR", "#8b0000");
-    console.error("Failed to toggle PCM stream:", error);
-  });
-});
-
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") return false;
   if (message.type === "stream-stopped") {
     stopMetadataPolling();
@@ -50,12 +44,18 @@ chrome.runtime.onMessage.addListener((message) => {
     state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
     setBadge("ERR", "#8b0000");
     console.error("PCM stream error:", message.error);
+  } else if (message.type.startsWith("popup-")) {
+    handlePopupMessage(message)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ ok: false, error: String(error) }));
+    return true;
   }
 
   return false;
 });
 
 async function toggleStream(tabId, streamId) {
+  await syncStreamState();
   const status = await readOffscreenStatus();
   if (state.streaming || status.active) {
     await stopActiveStream();
@@ -73,7 +73,7 @@ function scheduleBrowserControl(message) {
     clearAutoPauseTimer();
     autoPauseTimer = setTimeout(() => {
       autoPauseTimer = null;
-      runBrowserControl(message);
+      runAndStoreBrowserControl(message);
     }, AUTO_PAUSE_DELAY_MS);
     return;
   }
@@ -88,7 +88,7 @@ function scheduleBrowserControl(message) {
     clearAutoPauseTimer();
   }
 
-  runBrowserControl(message);
+  runAndStoreBrowserControl(message);
 }
 
 function clearAutoPauseTimer() {
@@ -173,6 +173,8 @@ async function stopActiveStream() {
   try {
     await chrome.runtime.sendMessage({ type: "stop-stream" });
     state = { streaming: false, tabId: null, status: "idle", lastControl: "" };
+    setBadge("OK", "#006b3c");
+    clearBadgeLater();
   } catch (_) {
     state = { streaming: false, tabId: null, status: "idle", lastControl: "" };
     setBadge("OK", "#006b3c");
@@ -203,15 +205,23 @@ async function collectAndSendMetadata() {
   if (key === lastMetadataKey) return;
   lastMetadataKey = key;
 
-  chrome.runtime.sendMessage({
-    type: "metadata-update",
-    metadata: {
-      title: metadata.title,
-      artist: metadata.artist || "",
-      adapter: metadata.adapter || "",
-      host: metadata.host || ""
-    }
-  });
+  let response = null;
+  try {
+    response = await chrome.runtime.sendMessage({
+      type: "metadata-update",
+      metadata: {
+        title: metadata.title,
+        artist: metadata.artist || "",
+        adapter: metadata.adapter || "",
+        host: metadata.host || ""
+      }
+    });
+  } catch (_) {
+    return;
+  }
+  if (response && response.sent) {
+    lastSentMetadata = Object.assign({}, response.metadata, { sentAt: new Date().toISOString() });
+  }
 }
 
 async function ensureOffscreenDocument() {
