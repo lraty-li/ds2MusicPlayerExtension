@@ -2,6 +2,7 @@
 
 #include "WwisePluginRegistration.h"
 
+#include "GameSymbols.h"
 #include "HookUtils.h"
 
 #include <sstream>
@@ -9,11 +10,8 @@
 
 namespace
 {
-constexpr uintptr_t kRegisterPluginDllRva = 0x28A1330;
 constexpr wchar_t kPluginName[] = L"ds2_dll_music_resource";
 constexpr wchar_t kPluginDllName[] = L"ds2_dll_music_resource.dll";
-
-using FnRegisterPluginDll = int(__fastcall*)(const wchar_t* pluginName, const wchar_t* basePath);
 
 std::wstring ParentDirectory(std::wstring path)
 {
@@ -90,25 +88,21 @@ bool TryRegister(HMODULE gameModule, HMODULE selfModule, const Logger& logger)
         return false;
     }
 
-    const uintptr_t registerAddress =
-        reinterpret_cast<uintptr_t>(gameModule) + kRegisterPluginDllRva;
-    if (!HookUtils::IsAddressRangeInModule(gameModule, registerAddress, 16))
+    const GameSymbols::ResolvedSymbols symbols = GameSymbols::Resolve(gameModule, logger);
+    if (!symbols.registerPluginDll)
     {
-        logger.Log("stream plugin register skipped: RegisterPluginDLL address outside module");
+        logger.Log("stream plugin register skipped: RegisterPluginDLL unresolved");
         return false;
     }
 
     {
         std::ostringstream oss;
-        oss << "RegisterPluginDLL address=" << HookUtils::HexU64(registerAddress)
-            << " pluginName=" << HookUtils::NarrowUtf8(kPluginName)
+        oss << "RegisterPluginDLL pluginName=" << HookUtils::NarrowUtf8(kPluginName)
             << " basePath=" << HookUtils::NarrowUtf8(pluginDir);
         logger.Log(oss.str());
     }
 
-    const auto registerPluginDll =
-        reinterpret_cast<FnRegisterPluginDll>(registerAddress);
-    const int result = registerPluginDll(kPluginName, pluginDir.c_str());
+    const int result = symbols.registerPluginDll(kPluginName, pluginDir.c_str());
 
     std::ostringstream oss;
     oss << "RegisterPluginDLL result=" << result;

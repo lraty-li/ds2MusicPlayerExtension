@@ -114,6 +114,7 @@
   <ItemGroup>
     <ClInclude Include="DynamicTrackTitleSync.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="GameSymbols.h" />
     <ClInclude Include="DecimaTypes.h" />
     <ClInclude Include="GeneratedSourcePluginTemplates.h" />
     <ClInclude Include="Hooks.h" />
@@ -132,6 +133,7 @@
   <ItemGroup>
     <ClCompile Include="DynamicTrackTitleSync.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="GameSymbols.cpp" />
     <ClCompile Include="GeneratedSourcePluginTemplates.cpp" />
     <ClCompile Include="Hooks.cpp" />
     <ClCompile Include="HookUtils.cpp" />

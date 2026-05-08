@@ -1,5 +1,14 @@
 $ErrorActionPreference = "Stop"
 
+$pathValue = $env:Path
+if (-not $pathValue) {
+    $pathValue = $env:PATH
+}
+[Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+if ($pathValue) {
+    [Environment]::SetEnvironmentVariable("Path", $pathValue, "Process")
+}
+
 $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\amd64\MSBuild.exe"
 $solution = Join-Path $PSScriptRoot "Ds2MusicPlayerExtend.sln"
 
