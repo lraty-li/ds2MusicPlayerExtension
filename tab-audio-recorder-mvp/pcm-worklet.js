@@ -2,7 +2,7 @@ class PcmChunkWorklet extends AudioWorkletProcessor {
   constructor() {
     super();
     this.chunkFrames = 480;
-    this.buffer = new Int16Array(this.chunkFrames * 2);
+    this.buffer = new Float32Array(this.chunkFrames * 2);
     this.offset = 0;
   }
 
@@ -29,21 +29,16 @@ class PcmChunkWorklet extends AudioWorkletProcessor {
 
   writeFrame(left, right) {
     const index = this.offset * 2;
-    this.buffer[index] = this.floatToPcm16(left);
-    this.buffer[index + 1] = this.floatToPcm16(right);
+    this.buffer[index] = left || 0;
+    this.buffer[index + 1] = right || 0;
     this.offset++;
 
     if (this.offset >= this.chunkFrames) {
-      const pcm = this.buffer.buffer;
-      this.port.postMessage({ pcm, frames: this.chunkFrames }, [pcm]);
-      this.buffer = new Int16Array(this.chunkFrames * 2);
+      const audio = this.buffer.buffer;
+      this.port.postMessage({ audio, frames: this.chunkFrames }, [audio]);
+      this.buffer = new Float32Array(this.chunkFrames * 2);
       this.offset = 0;
     }
-  }
-
-  floatToPcm16(value) {
-    const clamped = Math.max(-1, Math.min(1, value || 0));
-    return clamped < 0 ? clamped * 32768 : clamped * 32767;
   }
 }
 

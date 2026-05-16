@@ -8,7 +8,7 @@
 
 ```text
 Chrome/Edge tabCapture
-  -> AudioWorklet 输出 PCM16 stereo
+  -> AudioWorklet 输出 Float32LE stereo
   -> WebSocket 发送到 ds2_dll_music_resource.dll 内置本地 server
   -> DLL 内 float 环形缓冲
   -> Wwise SourcePlugin::Execute()
@@ -282,7 +282,7 @@ tab-audio-recorder-mvp
 ```text
 tabCapture
   -> AudioWorklet
-  -> PCM16 stereo chunk
+  -> Float32LE stereo chunk
   -> WebSocket ws://127.0.0.1:47832
 ```
 
@@ -305,7 +305,22 @@ tabCapture
 127.0.0.1:47832
 ```
 
-包格式：
+默认包格式为 v2 Float32LE，保留 v1 PCM16 兼容解析：
+
+```text
+u32 magic        0x44533241 ("DS2A")
+u16 version      2
+u16 channels     2
+u32 sampleRate   通常 48000
+u32 frameCount   当前通常 480
+u64 sequence
+u32 payloadBytes
+u16 sampleFormat 2 = Float32LE
+u16 headerBytes  32
+bytes Float32 interleaved little-endian
+```
+
+旧 v1 PCM16 包格式：
 
 ```text
 u32 magic      0x44533241 ("DS2A")
@@ -318,12 +333,13 @@ u32 pcmBytes
 bytes PCM16 interleaved little-endian
 ```
 
-运行时 DLL 的 `AudioStreamServer` 后台线程接收 WebSocket binary frame，将 PCM16 interleaved 转为 float stereo，并写入低延迟环形缓冲。`Execute()` 在音频线程只做非阻塞读取，不等待 socket。
+运行时 DLL 的 `AudioStreamServer` 后台线程接收 WebSocket binary frame，将 Float32LE interleaved 直接写入低延迟 float 环形缓冲；旧 PCM16 v1 包会先转换为 float。`Execute()` 在音频线程只做非阻塞读取，不等待 socket。
 
 当前包大小为 480 帧，约 10ms：
 
 ```text
-480 frames * 2 channels * 2 bytes = 1920 bytes
+Float32 v2: 480 frames * 2 channels * 4 bytes = 3840 bytes
+PCM16 v1  : 480 frames * 2 channels * 2 bytes = 1920 bytes
 ```
 
 环形缓冲会在积压超过约 100ms 时丢弃旧帧并回落到约 50ms，避免延迟随着推流时间持续堆积。
@@ -333,7 +349,7 @@ bytes PCM16 interleaved little-endian
 ```text
 audio websocket listening on 127.0.0.1:47832
 audio websocket connected
-ws pcm packets=501 frames=240480 drops=0 buffered=...
+ws audio packets=501 frames=240480 drops=0 buffered=...
 ```
 
 `drops=0` 说明浏览器到 DLL 的序号没有丢包。
@@ -375,7 +391,7 @@ plugin GetPluginInfo source build=517633
 plugin Init format=48000 stereo float
 plugin Execute calls=...
 audio websocket connected
-ws pcm packets=... drops=0
+ws audio packets=... drops=0
 ```
 
 用户验证结果：

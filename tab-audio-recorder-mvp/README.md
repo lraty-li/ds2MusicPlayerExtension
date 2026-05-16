@@ -5,7 +5,7 @@
 ```text
 Chrome/Edge tabCapture
   -> AudioWorklet
-  -> PCM16 stereo chunks
+  -> Float32LE stereo chunks
   -> ws://127.0.0.1:47832
   -> ds2_dll_music_resource.dll 内置 WebSocket server
 ```
@@ -60,9 +60,33 @@ NOID      : 控制消息缺少目标 tabId
 
 网易云冷启动播放受 Chrome autoplay policy 约束。如果页面从未由用户交互启动过有声播放，脚本侧恢复仍可能被浏览器拒绝。网易云 adapter 不直接调用 `audio.play()`，而是点击页面播放栏按钮，避免直接 `audio.play()` 曾出现的从头播放问题。
 
-## PCM 包
+## 音频包
 
-WebSocket binary payload：
+默认发送 v2 Float32LE，避免 WebAudio Float32 被量化到 PCM16 后再还原。
+运行时 DLL 仍兼容旧 v1 PCM16 包。
+
+WebSocket binary payload v2：
+
+```text
+u32 magic        "DS2A" little-endian
+u16 version      2
+u16 channels     2
+u32 sampleRate   48000
+u32 frameCount   当前为 480
+u64 sequence
+u32 payloadBytes
+u16 sampleFormat 2 = Float32LE
+u16 headerBytes  32
+bytes Float32 interleaved little-endian
+```
+
+每包约 10ms：
+
+```text
+480 frames * 2 channels * 4 bytes = 3840 bytes
+```
+
+旧 v1 PCM16 payload：
 
 ```text
 u32 magic      "DS2A" little-endian
@@ -73,10 +97,4 @@ u32 frameCount 当前为 480
 u64 sequence
 u32 pcmBytes
 bytes PCM16 interleaved little-endian
-```
-
-每包约 10ms：
-
-```text
-480 frames * 2 channels * 2 bytes = 1920 bytes
 ```

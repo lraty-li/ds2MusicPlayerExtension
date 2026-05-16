@@ -150,6 +150,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AudioPacketProtocol.h" />
     <ClInclude Include="AudioRingBuffer.h" />
     <ClInclude Include="AudioStreamServer.h" />
     <ClInclude Include="BrowserMetadata.h" />
@@ -161,6 +162,7 @@
     <ClInclude Include="WwisePluginAbi.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AudioPacketProtocol.cpp" />
     <ClCompile Include="AudioRingBuffer.cpp" />
     <ClCompile Include="AudioStreamServer.cpp" />
     <ClCompile Include="BrowserMetadata.cpp" />

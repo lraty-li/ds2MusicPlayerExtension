@@ -9,6 +9,9 @@ let streamUrl = null;
 let targetTabId = null;
 let connectTimer = null;
 let streamToken = 0;
+const PACKET_VERSION_FLOAT32 = 2;
+const SAMPLE_FORMAT_FLOAT32 = 2;
+const AUDIO_HEADER_BYTES = 32;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
     return false;
@@ -73,7 +76,7 @@ async function startStream(message) {
     numberOfOutputs: 0,
     channelCount: 2
   });
-  workletNode.port.onmessage = (event) => sendPcmChunk(event.data);
+  workletNode.port.onmessage = (event) => sendAudioChunk(event.data);
   sourceNode.connect(workletNode);
   reportWaiting();
   scheduleConnect(0, token);
@@ -204,25 +207,26 @@ function sendMetadata(metadata) {
   }
 }
 
-function sendPcmChunk(message) {
+function sendAudioChunk(message) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return;
   }
 
-  const pcm = message.pcm;
+  const audio = message.audio;
   const frameCount = message.frames;
-  const headerBytes = 28;
-  const packet = new ArrayBuffer(headerBytes + pcm.byteLength);
+  const packet = new ArrayBuffer(AUDIO_HEADER_BYTES + audio.byteLength);
   const view = new DataView(packet);
 
   view.setUint32(0, 0x44533241, true);
-  view.setUint16(4, 1, true);
+  view.setUint16(4, PACKET_VERSION_FLOAT32, true);
   view.setUint16(6, 2, true);
   view.setUint32(8, sampleRate, true);
   view.setUint32(12, frameCount, true);
   view.setBigUint64(16, sequence++, true);
-  view.setUint32(24, pcm.byteLength, true);
-  new Uint8Array(packet, headerBytes).set(new Uint8Array(pcm));
+  view.setUint32(24, audio.byteLength, true);
+  view.setUint16(28, SAMPLE_FORMAT_FLOAT32, true);
+  view.setUint16(30, AUDIO_HEADER_BYTES, true);
+  new Uint8Array(packet, AUDIO_HEADER_BYTES).set(new Uint8Array(audio));
   try {
     socket.send(packet);
   } catch (_) {

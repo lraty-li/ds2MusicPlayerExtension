@@ -2,6 +2,7 @@
 
 #include "AudioStreamServer.h"
 
+#include "AudioPacketProtocol.h"
 #include "AudioRingBuffer.h"
 #include "BrowserMetadata.h"
 #include "PluginLog.h"
@@ -11,25 +12,12 @@
 
 #include <cstdio>
 #include <cstdint>
-#include <cstring>
 #include <mutex>
 
 namespace
 {
 constexpr uint16_t kPort = 47832;
-constexpr uint32_t kMagic = 0x44533241;
-constexpr uint16_t kPacketVersion = 1;
-constexpr uint32_t kExpectedRate = 48000;
 constexpr uint32_t kMaxPacketBytes = 65536;
-constexpr uint16_t kMaxChannels = 2;
-
-struct PcmPacket
-{
-    const uint8_t* pcm = nullptr;
-    uint16_t channels = 0;
-    uint32_t frames = 0;
-    uint64_t sequence = 0;
-};
 
 std::mutex g_socketMutex;
 HANDLE g_thread = nullptr;
@@ -75,60 +63,42 @@ void CloseOwnedSocket(SOCKET& target, SOCKET& socket)
     else socket = INVALID_SOCKET;
 }
 
-uint32_t ReadLE32(const uint8_t* data)
+void PushPacket(const AudioPacketProtocol::Packet& packet)
 {
-    uint32_t value = 0;
-    memcpy(&value, data, sizeof(value));
-    return value;
+    if (packet.format == AudioPacketProtocol::SampleFormat::Float32)
+    {
+        AudioRingBuffer::PushFloat32(packet.payload, packet.frames, packet.channels);
+        return;
+    }
+    AudioRingBuffer::PushPcm16(packet.payload, packet.frames, packet.channels);
 }
 
-uint16_t ReadLE16(const uint8_t* data)
+void LogStats(uint64_t packets, uint64_t frames, uint64_t drops,
+    uint32_t maxPacketGapMs)
 {
-    uint16_t value = 0;
-    memcpy(&value, data, sizeof(value));
-    return value;
-}
-
-uint64_t ReadLE64(const uint8_t* data)
-{
-    uint64_t value = 0;
-    memcpy(&value, data, sizeof(value));
-    return value;
-}
-
-bool TryParsePcmPacket(const uint8_t* packet, uint32_t packetBytes,
-    PcmPacket& parsed)
-{
-    parsed = {};
-    if (!packet || packetBytes < 28 || ReadLE32(packet) != kMagic) return false;
-    const uint16_t version = ReadLE16(packet + 4);
-    const uint16_t channels = ReadLE16(packet + 6);
-    const uint32_t rate = ReadLE32(packet + 8);
-    const uint32_t frames = ReadLE32(packet + 12);
-    const uint64_t sequence = ReadLE64(packet + 16);
-    const uint32_t pcmBytes = ReadLE32(packet + 24);
-    const uint64_t expectedBytes =
-        static_cast<uint64_t>(frames) * channels * sizeof(int16_t);
-    if (version != kPacketVersion || rate != kExpectedRate) return false;
-    if (channels == 0 || channels > kMaxChannels || frames == 0) return false;
-    if (pcmBytes != packetBytes - 28 || expectedBytes != pcmBytes) return false;
-
-    parsed.pcm = packet + 28;
-    parsed.channels = channels;
-    parsed.frames = frames;
-    parsed.sequence = sequence;
-    return true;
-}
-
-void LogStats(uint64_t packets, uint64_t frames, uint64_t drops)
-{
-    char line[192] = {};
-    sprintf_s(line, "ws pcm packets=%llu frames=%llu drops=%llu buffered=%u underruns=%llu",
+    const AudioRingBuffer::Stats stats = AudioRingBuffer::SnapshotStats(true);
+    char line[512] = {};
+    sprintf_s(line,
+        "audio stats packets=%llu frames=%llu drops=%llu packetGapMaxMs=%u "
+        "buffered=%u min=%u max=%u underruns=%llu lockMisses=%llu "
+        "shortReads=%llu silenceFrames=%llu read=%llu/%llu pushed=%llu "
+        "trimmed=%llu overwritten=%llu",
         static_cast<unsigned long long>(packets),
         static_cast<unsigned long long>(frames),
         static_cast<unsigned long long>(drops),
-        AudioRingBuffer::AvailableFrames(),
-        static_cast<unsigned long long>(AudioRingBuffer::Underruns()));
+        maxPacketGapMs,
+        stats.availableFrames,
+        stats.minAvailableFrames,
+        stats.maxAvailableFrames,
+        static_cast<unsigned long long>(stats.underruns),
+        static_cast<unsigned long long>(stats.lockMisses),
+        static_cast<unsigned long long>(stats.shortReads),
+        static_cast<unsigned long long>(stats.silenceFrames),
+        static_cast<unsigned long long>(stats.readFramesCopied),
+        static_cast<unsigned long long>(stats.readFramesRequested),
+        static_cast<unsigned long long>(stats.pushFrames),
+        static_cast<unsigned long long>(stats.trimmedFrames),
+        static_cast<unsigned long long>(stats.overwrittenFrames));
     Log(line);
 }
 
@@ -142,6 +112,9 @@ void HandleClient(SOCKET socket)
     uint64_t drops = 0;
     uint64_t lastSeq = UINT64_MAX;
     uint64_t lastLogTick = GetTickCount64();
+    uint64_t lastPacketTick = 0;
+    uint32_t maxPacketGapMs = 0;
+    AudioRingBuffer::SnapshotStats(true);
     while (!ShouldStop())
     {
         uint32_t payloadBytes = 0;
@@ -157,8 +130,19 @@ void HandleClient(SOCKET socket)
         }
         if (opcode != 0x2) continue;
 
-        PcmPacket packet = {};
-        if (!TryParsePcmPacket(payload, payloadBytes, packet)) continue;
+        AudioPacketProtocol::Packet packet = {};
+        if (!AudioPacketProtocol::TryParse(payload, payloadBytes, packet)) continue;
+
+        const uint64_t now = GetTickCount64();
+        if (lastPacketTick != 0)
+        {
+            const uint64_t gap = now - lastPacketTick;
+            if (gap > maxPacketGapMs)
+            {
+                maxPacketGapMs = static_cast<uint32_t>(gap);
+            }
+        }
+        lastPacketTick = now;
 
         if (lastSeq != UINT64_MAX && packet.sequence != lastSeq + 1)
         {
@@ -167,12 +151,12 @@ void HandleClient(SOCKET socket)
         lastSeq = packet.sequence;
         ++packets;
         frames += packet.frames;
-        AudioRingBuffer::PushPcm16(packet.pcm, packet.frames, packet.channels);
+        PushPacket(packet);
 
-        const uint64_t now = GetTickCount64();
         if (now - lastLogTick >= 5000)
         {
-            LogStats(packets, frames, drops);
+            LogStats(packets, frames, drops, maxPacketGapMs);
+            maxPacketGapMs = 0;
             lastLogTick = now;
         }
     }
