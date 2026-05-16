@@ -12,6 +12,7 @@ x64/
 Win32/
 ipch/
 ds2_dll_.93acd277/
+verify_runtime_plugin/
 
 # C/C++ build artifacts
 *.obj
@@ -30,4 +31,3 @@ ds2_dll_.93acd277/
 *.exe
 *.lib
 *.exp
-

@@ -18,8 +18,18 @@ namespace
 {
 constexpr uint16_t kPort = 47832;
 constexpr uint32_t kMagic = 0x44533241;
+constexpr uint16_t kPacketVersion = 1;
 constexpr uint32_t kExpectedRate = 48000;
 constexpr uint32_t kMaxPacketBytes = 65536;
+constexpr uint16_t kMaxChannels = 2;
+
+struct PcmPacket
+{
+    const uint8_t* pcm = nullptr;
+    uint16_t channels = 0;
+    uint32_t frames = 0;
+    uint64_t sequence = 0;
+};
 
 std::mutex g_socketMutex;
 HANDLE g_thread = nullptr;
@@ -86,23 +96,28 @@ uint64_t ReadLE64(const uint8_t* data)
     return value;
 }
 
-bool IsValidPcmPacket(const uint8_t* packet, uint32_t packetBytes)
+bool TryParsePcmPacket(const uint8_t* packet, uint32_t packetBytes,
+    PcmPacket& parsed)
 {
-    if (packetBytes < 28 || ReadLE32(packet) != kMagic) return false;
+    parsed = {};
+    if (!packet || packetBytes < 28 || ReadLE32(packet) != kMagic) return false;
+    const uint16_t version = ReadLE16(packet + 4);
     const uint16_t channels = ReadLE16(packet + 6);
     const uint32_t rate = ReadLE32(packet + 8);
     const uint32_t frames = ReadLE32(packet + 12);
+    const uint64_t sequence = ReadLE64(packet + 16);
     const uint32_t pcmBytes = ReadLE32(packet + 24);
-    if (rate != kExpectedRate || 28 + pcmBytes != packetBytes) return false;
-    return pcmBytes >= frames * channels * sizeof(int16_t);
-}
+    const uint64_t expectedBytes =
+        static_cast<uint64_t>(frames) * channels * sizeof(int16_t);
+    if (version != kPacketVersion || rate != kExpectedRate) return false;
+    if (channels == 0 || channels > kMaxChannels || frames == 0) return false;
+    if (pcmBytes != packetBytes - 28 || expectedBytes != pcmBytes) return false;
 
-void HandlePacket(const uint8_t* packet, uint32_t packetBytes)
-{
-    if (!IsValidPcmPacket(packet, packetBytes)) return;
-    const uint16_t channels = ReadLE16(packet + 6);
-    const uint32_t frames = ReadLE32(packet + 12);
-    AudioRingBuffer::PushPcm16(packet + 28, frames, channels);
+    parsed.pcm = packet + 28;
+    parsed.channels = channels;
+    parsed.frames = frames;
+    parsed.sequence = sequence;
+    return true;
 }
 
 void LogStats(uint64_t packets, uint64_t frames, uint64_t drops)
@@ -142,16 +157,17 @@ void HandleClient(SOCKET socket)
         }
         if (opcode != 0x2) continue;
 
-        const uint32_t frameCount = payloadBytes >= 16 ? ReadLE32(payload + 12) : 0;
-        const uint64_t seq = payloadBytes >= 24 ? ReadLE64(payload + 16) : UINT64_MAX;
-        if (lastSeq != UINT64_MAX && seq != lastSeq + 1)
+        PcmPacket packet = {};
+        if (!TryParsePcmPacket(payload, payloadBytes, packet)) continue;
+
+        if (lastSeq != UINT64_MAX && packet.sequence != lastSeq + 1)
         {
-            drops += seq > lastSeq ? seq - lastSeq - 1 : 1;
+            drops += packet.sequence > lastSeq ? packet.sequence - lastSeq - 1 : 1;
         }
-        lastSeq = seq;
+        lastSeq = packet.sequence;
         ++packets;
-        frames += frameCount;
-        HandlePacket(payload, payloadBytes);
+        frames += packet.frames;
+        AudioRingBuffer::PushPcm16(packet.pcm, packet.frames, packet.channels);
 
         const uint64_t now = GetTickCount64();
         if (now - lastLogTick >= 5000)
@@ -238,9 +254,9 @@ void Stop()
     }
 }
 
-uint32_t Read(float* output, uint32_t frames, uint32_t channels)
+uint32_t Read(float* const* outputs, uint32_t frames, uint32_t channels)
 {
-    return AudioRingBuffer::Read(output, frames, channels);
+    return AudioRingBuffer::Read(outputs, frames, channels);
 }
 
 bool SendControl(const char* json)

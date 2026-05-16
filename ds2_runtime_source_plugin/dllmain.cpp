@@ -16,8 +16,8 @@ constexpr uint32_t kPluginId = 0x101;
 constexpr uint32_t kWwiseBuildVersion = 517633;
 constexpr uint32_t kSampleRate = 48000;
 constexpr float kToneHz = 440.0f;
-constexpr float kToneGain = 0.18f;
 constexpr float kPi = 3.14159265358979323846f;
+constexpr uint32_t kMaxOutputChannels = 8;
 
 void Log(const char* text)
 {
@@ -105,13 +105,24 @@ public:
         }
 
         const AkUInt16 frames = buffer->MaxFrames();
-        const AkUInt32 channels = buffer->NumChannels() ?
-            buffer->NumChannels() : 2;
-        float* channel0 = buffer->GetChannel(0);
-        const uint32_t copied = AudioStreamServer::Read(channel0, frames, channels);
-        for (uint32_t ch = 0; ch < channels; ++ch) {
+        uint32_t channels = buffer->NumChannels() ? buffer->NumChannels() : 2;
+        if (channels > kMaxOutputChannels)
+        {
+            channels = kMaxOutputChannels;
+        }
+
+        float* outputs[kMaxOutputChannels] = {};
+        for (uint32_t ch = 0; ch < channels; ++ch)
+        {
+            outputs[ch] = buffer->GetChannel(ch);
+        }
+
+        const uint32_t copied = AudioStreamServer::Read(outputs, frames, channels);
+        for (uint32_t ch = 0; ch < channels; ++ch)
+        {
             float* out = buffer->GetChannel(ch);
-            for (AkUInt16 i = static_cast<AkUInt16>(copied); i < frames; ++i) {
+            for (AkUInt16 i = static_cast<AkUInt16>(copied); i < frames; ++i)
+            {
                 out[i] = 0.0f;
             }
         }

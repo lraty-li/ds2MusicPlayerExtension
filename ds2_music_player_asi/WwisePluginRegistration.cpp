@@ -13,6 +13,65 @@ namespace
 constexpr wchar_t kPluginName[] = L"ds2_dll_music_resource";
 constexpr wchar_t kPluginDllName[] = L"ds2_dll_music_resource.dll";
 
+struct SehFailure
+{
+    DWORD code = 0;
+    void* address = nullptr;
+};
+
+struct PluginListInfo
+{
+    void* entry = nullptr;
+    uint32_t type = 0;
+    uint32_t company = 0;
+    uint32_t plugin = 0;
+    void* create = nullptr;
+    void* params = nullptr;
+};
+
+int CaptureSeh(EXCEPTION_POINTERS* info, SehFailure* failure)
+{
+    if (info && info->ExceptionRecord && failure)
+    {
+        failure->code = info->ExceptionRecord->ExceptionCode;
+        failure->address = info->ExceptionRecord->ExceptionAddress;
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+bool TryReadPluginList(void* pluginListExport, PluginListInfo* info)
+{
+    __try
+    {
+        auto* entry = *reinterpret_cast<uint8_t**>(pluginListExport);
+        info->entry = entry;
+        info->type = *(entry + 0x08);
+        info->company = *reinterpret_cast<uint32_t*>(entry + 0x0C);
+        info->plugin = *reinterpret_cast<uint32_t*>(entry + 0x10);
+        info->create = *reinterpret_cast<void**>(entry + 0x18);
+        info->params = *reinterpret_cast<void**>(entry + 0x20);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+bool SafeRegisterPluginDll(GameSymbols::RegisterPluginDllFn registerPluginDll,
+    const wchar_t* name, const wchar_t* dir, int* result, SehFailure* failure)
+{
+    __try
+    {
+        *result = registerPluginDll(name, dir);
+        return true;
+    }
+    __except (CaptureSeh(GetExceptionInformation(), failure))
+    {
+        return false;
+    }
+}
+
 std::wstring ParentDirectory(std::wstring path)
 {
     const size_t pos = path.find_last_of(L"\\/");
@@ -40,6 +99,25 @@ std::wstring JoinPath(const std::wstring& dir, const wchar_t* file)
     }
     result += file;
     return result;
+}
+
+void LogPluginList(void* pluginListExport, const Logger& logger)
+{
+    PluginListInfo info;
+    if (TryReadPluginList(pluginListExport, &info))
+    {
+        std::ostringstream oss;
+        oss << "g_pAKPluginList export=" << pluginListExport
+            << " entry=" << info.entry
+            << " type=" << info.type
+            << " company=" << info.company
+            << " plugin=" << info.plugin
+            << " create=" << info.create
+            << " params=" << info.params;
+        logger.Log(oss.str());
+        return;
+    }
+    logger.Log("g_pAKPluginList probe failed");
 }
 }
 
@@ -87,6 +165,7 @@ bool TryRegister(HMODULE gameModule, HMODULE selfModule, const Logger& logger)
         logger.Log("stream plugin skipped: g_pAKPluginList export missing");
         return false;
     }
+    LogPluginList(pluginList, logger);
 
     const GameSymbols::ResolvedSymbols symbols = GameSymbols::Resolve(gameModule, logger);
     if (!symbols.registerPluginDll)
@@ -102,7 +181,17 @@ bool TryRegister(HMODULE gameModule, HMODULE selfModule, const Logger& logger)
         logger.Log(oss.str());
     }
 
-    const int result = symbols.registerPluginDll(kPluginName, pluginDir.c_str());
+    int result = 0;
+    SehFailure seh;
+    if (!SafeRegisterPluginDll(symbols.registerPluginDll, kPluginName,
+        pluginDir.c_str(), &result, &seh))
+    {
+        std::ostringstream crash;
+        crash << "RegisterPluginDLL exception code=" << HookUtils::HexU64(seh.code)
+            << " address=" << seh.address;
+        logger.Log(crash.str());
+        return false;
+    }
 
     std::ostringstream oss;
     oss << "RegisterPluginDLL result=" << result;
