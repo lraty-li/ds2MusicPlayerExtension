@@ -29,6 +29,8 @@ struct PluginListInfo
     void* params = nullptr;
 };
 
+using RegisterPluginListFn = int(__fastcall*)(void*);
+
 int CaptureSeh(EXCEPTION_POINTERS* info, SehFailure* failure)
 {
     if (info && info->ExceptionRecord && failure)
@@ -58,12 +60,59 @@ bool TryReadPluginList(void* pluginListExport, PluginListInfo* info)
     }
 }
 
+RegisterPluginListFn ResolveRegisterPluginList(
+    HMODULE gameModule, GameSymbols::RegisterPluginDllFn wrapper, const Logger& logger)
+{
+    auto* bytes = reinterpret_cast<const uint8_t*>(wrapper);
+    for (size_t i = 0; i + 8 < 0x120; ++i)
+    {
+        if (bytes[i] != 0x48 || bytes[i + 1] != 0x8B ||
+            bytes[i + 2] != 0x08 || bytes[i + 3] != 0xE8)
+        {
+            continue;
+        }
+
+        int32_t rel = 0;
+        memcpy(&rel, bytes + i + 4, sizeof(rel));
+        const uintptr_t callEnd = reinterpret_cast<uintptr_t>(bytes + i + 8);
+        const uintptr_t target = callEnd + rel;
+        if (!HookUtils::IsAddressRangeInModule(gameModule, target, 1))
+        {
+            continue;
+        }
+
+        std::ostringstream oss;
+        oss << "RegisterPluginList resolved from wrapper rva="
+            << HookUtils::HexU64(target - reinterpret_cast<uintptr_t>(gameModule))
+            << " address=" << HookUtils::HexU64(target);
+        logger.Log(oss.str());
+        return reinterpret_cast<RegisterPluginListFn>(target);
+    }
+
+    logger.Log("RegisterPluginList fallback unresolved");
+    return nullptr;
+}
+
 bool SafeRegisterPluginDll(GameSymbols::RegisterPluginDllFn registerPluginDll,
     const wchar_t* name, const wchar_t* dir, int* result, SehFailure* failure)
 {
     __try
     {
         *result = registerPluginDll(name, dir);
+        return true;
+    }
+    __except (CaptureSeh(GetExceptionInformation(), failure))
+    {
+        return false;
+    }
+}
+
+bool SafeRegisterPluginList(RegisterPluginListFn registerPluginList,
+    void* entry, int* result, SehFailure* failure)
+{
+    __try
+    {
+        *result = registerPluginList(entry);
         return true;
     }
     __except (CaptureSeh(GetExceptionInformation(), failure))
@@ -190,7 +239,32 @@ bool TryRegister(HMODULE gameModule, HMODULE selfModule, const Logger& logger)
         crash << "RegisterPluginDLL exception code=" << HookUtils::HexU64(seh.code)
             << " address=" << seh.address;
         logger.Log(crash.str());
-        return false;
+
+        PluginListInfo info;
+        auto registerPluginList =
+            ResolveRegisterPluginList(gameModule, symbols.registerPluginDll, logger);
+        if (!registerPluginList || !TryReadPluginList(pluginList, &info) || !info.entry)
+        {
+            return false;
+        }
+
+        SehFailure listSeh;
+        int listResult = 0;
+        if (!SafeRegisterPluginList(registerPluginList, info.entry,
+            &listResult, &listSeh))
+        {
+            std::ostringstream listCrash;
+            listCrash << "RegisterPluginList exception code="
+                << HookUtils::HexU64(listSeh.code)
+                << " address=" << listSeh.address;
+            logger.Log(listCrash.str());
+            return false;
+        }
+
+        std::ostringstream listLog;
+        listLog << "RegisterPluginList fallback result=" << listResult;
+        logger.Log(listLog.str());
+        return listResult == 1;
     }
 
     std::ostringstream oss;

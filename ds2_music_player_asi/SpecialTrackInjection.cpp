@@ -213,16 +213,16 @@ void Reset()
     DynamicTrackTitleSync::Reset();
 }
 
-void Inject(void* systemResource, const Logger& logger)
+bool Inject(void* systemResource, const Logger& logger)
 {
     g_logger = const_cast<Logger*>(&logger);
     if (g_injected || !systemResource)
     {
-        return;
+        return g_injected;
     }
 
     auto* trackArray = reinterpret_cast<RawArray*>(static_cast<uint8_t*>(systemResource) + 0x30);
-    if (!trackArray->entries || trackArray->count == 0) return;
+    if (!trackArray->entries || trackArray->count == 0) return false;
 
     uint32_t sourceIndex = 0;
     uint32_t sourceEvent = 0;
@@ -230,7 +230,7 @@ void Inject(void* systemResource, const Logger& logger)
     if (!sourceTrack)
     {
         Log("music injection failed: no music-capable source track found");
-        return;
+        return false;
     }
 
     void* sourceText = *reinterpret_cast<void**>(static_cast<uint8_t*>(sourceTrack) + 0x38);
@@ -241,14 +241,14 @@ void Inject(void* systemResource, const Logger& logger)
     if (!BuildClonedChain(sourceTrial, chain))
     {
         Log("music injection failed: could not clone sound resource chain");
-        return;
+        return false;
     }
 
     void* newTrack = CloneTrack(sourceTrack, sourceText, chain);
     if (!newTrack)
     {
         Log("music injection failed: could not clone track");
-        return;
+        return false;
     }
     void* newAlbum = CloneAlbum(sourceAlbum, sourceText);
     if (newAlbum)
@@ -272,7 +272,7 @@ void Inject(void* systemResource, const Logger& logger)
         if (!entries)
         {
             Log("music injection failed: AllTracks allocation failed");
-            return;
+            return false;
         }
         memcpy(entries, trackArray->entries, static_cast<size_t>(oldCount) * sizeof(void*));
         entries[oldCount] = newTrack;
@@ -293,5 +293,6 @@ void Inject(void* systemResource, const Logger& logger)
     Log("custom bank/source-plugin event is still required before audio can play");
     DynamicTrackTitleSync::Start(newTrack, newAlbum, logger);
     g_injected = true;
+    return true;
 }
 }

@@ -2,12 +2,12 @@
 
 #include "Hooks.h"
 
+#include "FailFast.h"
 #include "HookUtils.h"
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
-#include "SourcePluginBank.h"
-#include "WwisePluginRegistration.h"
+#include "SourceAudioBootstrap.h"
 
 #include <exception>
 #include <sstream>
@@ -16,8 +16,6 @@
 namespace
 {
 constexpr wchar_t kExpectedModuleName[] = L"DS2.exe";
-constexpr DWORD kRegisterDelayMs = 10000;
-
 Logger g_dllLogger("DllMain");
 Logger g_initLogger("Init");
 
@@ -68,19 +66,20 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     {
         HMODULE selfModule = reinterpret_cast<HMODULE>(moduleParam);
         HMODULE gameModule = GetModuleHandleW(nullptr);
+        SourceAudioBootstrap::Configure(gameModule, selfModule);
         LogModuleInfo(selfModule, gameModule);
 
         if (!gameModule)
         {
             g_initLogger.Log("GetModuleHandleW(\"DS2.exe\") failed");
-            return 0;
+            FailFast::Now(g_initLogger, "missing DS2.exe module");
         }
 
         DWORD gameImageSize = 0;
         if (!HookUtils::TryGetModuleSize(gameModule, gameImageSize))
         {
             g_initLogger.Log("failed to read DS2.exe SizeOfImage");
-            return 0;
+            FailFast::Now(g_initLogger, "failed to read DS2.exe SizeOfImage");
         }
 
         std::ostringstream sizeLog;
@@ -91,34 +90,31 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
             MusicPlayerInjection::TryInstall(gameModule, g_initLogger);
         g_initLogger.Log(listenerInstalled ? "music player listener installed" :
                                              "music player listener install failed");
+        if (!listenerInstalled)
+        {
+            FailFast::Now(g_initLogger, "music player listener install failed");
+        }
 
         const bool playStateMonitorInstalled =
             PlayStateMonitor::TryInstall(gameModule, g_initLogger);
         g_initLogger.Log(playStateMonitorInstalled ? "play state monitor installed" :
                                                      "play state monitor install failed");
-
-        g_initLogger.Log("waiting before RegisterPluginDLL");
-        Sleep(kRegisterDelayMs);
-
-        const bool registered =
-            WwisePluginRegistration::TryRegister(gameModule, selfModule, g_initLogger);
-        g_initLogger.Log(registered ? "stream source plugin registered" :
-                                      "stream source plugin registration failed");
-
-        if (registered)
+        if (!playStateMonitorInstalled)
         {
-            const int32_t bankResult = SourcePluginBank::TryLoad(gameModule, g_initLogger);
-            g_initLogger.Log(bankResult == 1 ? "source plugin bank loaded" :
-                                               "source plugin bank load failed");
+            FailFast::Now(g_initLogger, "play state monitor install failed");
         }
+
+        g_initLogger.Log("source audio registration deferred until music resource load");
     }
     catch (const std::exception& ex)
     {
         g_initLogger.Log(std::string("exception: ") + ex.what());
+        FailFast::Now(g_initLogger, "init thread std::exception");
     }
     catch (...)
     {
         g_initLogger.Log("exception: unknown");
+        FailFast::Now(g_initLogger, "init thread unknown exception");
     }
 
     g_initLogger.Log("done");

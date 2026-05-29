@@ -3,7 +3,10 @@
 #include "MusicPlayerInjection.h"
 
 #include "DecimaTypes.h"
+#include "FailFast.h"
 #include "PatternScan.h"
+#include "RuntimeFeatureState.h"
+#include "SourceAudioBootstrap.h"
 #include "SpecialTrackInjection.h"
 
 #include <sstream>
@@ -65,7 +68,18 @@ public:
             if (typeName && strcmp(typeName, "DSMusicPlayerSystemResource") == 0)
             {
                 Log("OnFinishLoadGroup: DSMusicPlayerSystemResource found");
-                SpecialTrackInjection::Inject(object, *g_logger);
+                if (!RuntimeFeatureState::SourceAudioReady().load())
+                {
+                    Log("music resource loaded before source audio bank; bootstrapping now");
+                    if (!SourceAudioBootstrap::EnsureReady(*g_logger, 15000))
+                    {
+                        FailFast::Now(*g_logger, "source audio bootstrap failed");
+                    }
+                }
+                if (!SpecialTrackInjection::Inject(object, *g_logger))
+                {
+                    FailFast::Now(*g_logger, "special track injection failed");
+                }
             }
         }
     }

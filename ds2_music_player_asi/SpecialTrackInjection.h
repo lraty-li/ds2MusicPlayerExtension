@@ -6,5 +6,5 @@
 namespace SpecialTrackInjection
 {
 void Reset();
-void Inject(void* systemResource, const Logger& logger);
+bool Inject(void* systemResource, const Logger& logger);
 }
