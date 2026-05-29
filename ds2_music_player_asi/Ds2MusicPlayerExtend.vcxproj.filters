@@ -38,6 +38,9 @@
     <ClInclude Include="MusicPlayerInjection.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="PlayEntryMonitor.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="PatternScan.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -86,6 +89,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="MusicPlayerInjection.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="PlayEntryMonitor.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="PatternScan.cpp">

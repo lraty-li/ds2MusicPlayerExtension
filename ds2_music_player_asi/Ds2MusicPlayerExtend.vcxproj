@@ -121,6 +121,7 @@
     <ClInclude Include="HookUtils.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="MusicPlayerInjection.h" />
+    <ClInclude Include="PlayEntryMonitor.h" />
     <ClInclude Include="PatternScan.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PlayStateMonitor.h" />
@@ -140,10 +141,11 @@
     <ClCompile Include="HookUtils.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MusicPlayerInjection.cpp" />
+    <ClCompile Include="PlayEntryMonitor.cpp" />
     <ClCompile Include="PatternScan.cpp" />
     <ClCompile Include="PlayStateMonitor.cpp" />
-    <ClCompile Include="SourcePluginBank.cpp" />
     <ClCompile Include="SourceAudioBootstrap.cpp" />
+    <ClCompile Include="SourcePluginBank.cpp" />
     <ClCompile Include="SpecialTrackHelpers.cpp" />
     <ClCompile Include="SpecialTrackInjection.cpp" />
     <ClCompile Include="WwisePluginRegistration.cpp" />
