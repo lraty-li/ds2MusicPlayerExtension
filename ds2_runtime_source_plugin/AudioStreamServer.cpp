@@ -153,7 +153,7 @@ void HandleClient(SOCKET socket)
         frames += packet.frames;
         PushPacket(packet);
 
-        if (now - lastLogTick >= 5000)
+        if (PluginLog::Enabled() && now - lastLogTick >= 5000)
         {
             LogStats(packets, frames, drops, maxPacketGapMs);
             maxPacketGapMs = 0;

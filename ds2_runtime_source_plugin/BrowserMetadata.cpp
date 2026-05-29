@@ -80,6 +80,10 @@ void UpdateFromJson(const char* json)
     CopyJsonValue(json, "\"artist\"", artist, sizeof(artist));
     {
         std::lock_guard<std::mutex> lock(g_mutex);
+        if (strcmp(g_title, title) == 0 && strcmp(g_artist, artist) == 0)
+        {
+            return;
+        }
         strcpy_s(g_title, title);
         strcpy_s(g_artist, artist);
     }

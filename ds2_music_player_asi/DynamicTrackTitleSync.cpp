@@ -47,27 +47,56 @@ ReadMetadataFn ResolveReadMetadata()
     return g_readMetadata;
 }
 
-bool PrepareMutableText(void* owner, uint32_t offset, void*& textObject, char*& buffer)
+bool ResolveTextObject(void* owner, uint32_t offset, void*& textObject)
 {
     __try
     {
+        textObject = *reinterpret_cast<void**>(static_cast<uint8_t*>(owner) + offset);
+        return textObject != nullptr;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+const char* ReadTextValue(void* textObject)
+{
+    __try
+    {
+        if (!textObject) return "";
+        const auto* textBytes = static_cast<uint8_t*>(textObject);
+        const char* value = *reinterpret_cast<const char* const*>(textBytes + 0x20);
+        return value ? value : "";
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return "";
+    }
+}
+
+bool TextMatches(void* textObject, const char* value)
+{
+    return strcmp(ReadTextValue(textObject), value ? value : "") == 0;
+}
+
+bool EnsureMutableText(void* textObject, char*& buffer)
+{
+    __try
+    {
+        if (!textObject) return false;
         if (!buffer)
         {
             buffer = static_cast<char*>(SpecialTrackHelpers::HeapAllocZero(kTitleBytes));
-        }
-        if (!buffer)
-        {
-            return false;
-        }
-
-        textObject = *reinterpret_cast<void**>(static_cast<uint8_t*>(owner) + offset);
-        if (!textObject)
-        {
-            return false;
+            if (!buffer) return false;
         }
 
         auto* textBytes = static_cast<uint8_t*>(textObject);
         char* oldText = *reinterpret_cast<char**>(textBytes + 0x20);
+        if (oldText == buffer)
+        {
+            return true;
+        }
         if (oldText && oldText[0])
         {
             strcpy_s(buffer, kTitleBytes, oldText);
@@ -76,7 +105,7 @@ bool PrepareMutableText(void* owner, uint32_t offset, void*& textObject, char*& 
         const size_t length = strlen(buffer);
         *reinterpret_cast<uint16_t*>(textBytes + 0x28) = static_cast<uint16_t>(length);
         *reinterpret_cast<int16_t*>(textBytes + 0x2A) = 0;
-        if (oldText && oldText != buffer)
+        if (oldText)
         {
             HeapFree(GetProcessHeap(), 0, oldText);
         }
@@ -121,16 +150,15 @@ DWORD WINAPI SyncThread(LPVOID)
         if (track && readMetadata)
         {
             if (!g_titleObject &&
-                !PrepareMutableText(track, kTrackTitleOffset, g_titleObject, g_titleBuffer))
+                !ResolveTextObject(track, kTrackTitleOffset, g_titleObject))
             {
                 Sleep(kUpdateIntervalMs);
                 continue;
             }
             if (album && !g_artistObject)
             {
-                PrepareMutableText(album, kAlbumArtistOffset, g_artistObject, g_artistBuffer);
-                PrepareMutableText(album, kAlbumTelopArtistOffset, g_telopArtistObject,
-                    g_artistBuffer);
+                ResolveTextObject(album, kAlbumArtistOffset, g_artistObject);
+                ResolveTextObject(album, kAlbumTelopArtistOffset, g_telopArtistObject);
             }
 
             char title[kTitleBytes] = {};
@@ -138,18 +166,38 @@ DWORD WINAPI SyncThread(LPVOID)
             if (readMetadata(title, static_cast<unsigned int>(sizeof(title)),
                 artist, static_cast<unsigned int>(sizeof(artist))) && title[0])
             {
-                if (strcmp(title, lastTitle.c_str()) != 0 &&
-                    UpdateMutableText(g_titleObject, g_titleBuffer, title))
+                if (strcmp(title, lastTitle.c_str()) != 0)
                 {
-                    lastTitle = title;
-                    Log(std::string("dynamic title sync set title=\"") + title + "\"");
+                    if (TextMatches(g_titleObject, title))
+                    {
+                        lastTitle = title;
+                    }
+                    else if (EnsureMutableText(g_titleObject, g_titleBuffer) &&
+                        UpdateMutableText(g_titleObject, g_titleBuffer, title))
+                    {
+                        lastTitle = title;
+                        Log(std::string("dynamic title sync set title=\"") + title + "\"");
+                    }
                 }
-                if (strcmp(artist, lastArtist.c_str()) != 0 &&
-                    UpdateMutableText(g_artistObject, g_artistBuffer, artist))
+                if (strcmp(artist, lastArtist.c_str()) != 0)
                 {
-                    UpdateMutableText(g_telopArtistObject, g_artistBuffer, artist);
-                    lastArtist = artist;
-                    Log(std::string("dynamic title sync set artist=\"") + artist + "\"");
+                    const bool artistCurrent = TextMatches(g_artistObject, artist);
+                    const bool telopCurrent = !g_telopArtistObject ||
+                        TextMatches(g_telopArtistObject, artist);
+                    if (artistCurrent && telopCurrent)
+                    {
+                        lastArtist = artist;
+                    }
+                    else if (EnsureMutableText(g_artistObject, g_artistBuffer) &&
+                        UpdateMutableText(g_artistObject, g_artistBuffer, artist))
+                    {
+                        if (EnsureMutableText(g_telopArtistObject, g_artistBuffer))
+                        {
+                            UpdateMutableText(g_telopArtistObject, g_artistBuffer, artist);
+                        }
+                        lastArtist = artist;
+                        Log(std::string("dynamic title sync set artist=\"") + artist + "\"");
+                    }
                 }
             }
         }

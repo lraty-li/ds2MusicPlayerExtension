@@ -7,6 +7,8 @@
 
 namespace
 {
+constexpr bool kEnableRuntimeLog = false;
+
 std::mutex g_logMutex;
 
 std::wstring GetLogPath()
@@ -28,8 +30,15 @@ std::wstring GetLogPath()
 
 namespace PluginLog
 {
+bool Enabled()
+{
+    return kEnableRuntimeLog;
+}
+
 void Write(const char* text)
 {
+    if (!kEnableRuntimeLog) return;
+
     std::lock_guard<std::mutex> lock(g_logMutex);
     HANDLE file = CreateFileW(
         GetLogPath().c_str(),
@@ -59,6 +68,8 @@ void Write(const char* text)
 
 void Reset()
 {
+    if (!kEnableRuntimeLog) return;
+
     std::lock_guard<std::mutex> lock(g_logMutex);
     HANDLE file = CreateFileW(
         GetLogPath().c_str(),
