@@ -11,6 +11,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CustomJacketInternal.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CustomJacketPixelTest.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="DynamicTrackTitleSync.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -67,6 +73,36 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomJacketBcn.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketClone.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelTest.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketDXBCPageProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPointerProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketResourceProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketResourceTrackProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketSeh.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketUiClone.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="DynamicTrackTitleSync.cpp">
       <Filter>源文件</Filter>
     </ClCompile>

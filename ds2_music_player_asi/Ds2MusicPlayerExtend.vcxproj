@@ -112,6 +112,8 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CustomJacketInternal.h" />
+    <ClInclude Include="CustomJacketPixelTest.h" />
     <ClInclude Include="DynamicTrackTitleSync.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="GameSymbols.h" />
@@ -133,6 +135,16 @@
     <ClInclude Include="WwisePluginRegistration.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomJacketBcn.cpp" />
+    <ClCompile Include="CustomJacketClone.cpp" />
+    <ClCompile Include="CustomJacketDXBCPageProbe.cpp" />
+    <ClCompile Include="CustomJacketPointerProbe.cpp" />
+    <ClCompile Include="CustomJacketProbe.cpp" />
+    <ClCompile Include="CustomJacketResourceProbe.cpp" />
+    <ClCompile Include="CustomJacketResourceTrackProbe.cpp" />
+    <ClCompile Include="CustomJacketSeh.cpp" />
+    <ClCompile Include="CustomJacketUiClone.cpp" />
+    <ClCompile Include="CustomJacketPixelTest.cpp" />
     <ClCompile Include="DynamicTrackTitleSync.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="GameSymbols.cpp" />

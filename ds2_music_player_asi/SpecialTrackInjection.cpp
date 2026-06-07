@@ -2,6 +2,7 @@
 
 #include "SpecialTrackInjection.h"
 
+#include "CustomJacketPixelTest.h"
 #include "DynamicTrackTitleSync.h"
 #include "SpecialTrackIds.h"
 #include "SpecialTrackHelpers.h"
@@ -211,6 +212,7 @@ void Reset()
 {
     g_injected = false;
     DynamicTrackTitleSync::Reset();
+    CustomJacketPixelTest::Reset();
 }
 
 bool Inject(void* systemResource, const Logger& logger)
@@ -290,8 +292,8 @@ bool Inject(void* systemResource, const Logger& logger)
         << " clonedEvent=0x" << chain.oldEventId
         << " AllTracks " << std::dec << oldCount << "->" << newCount;
     Log(oss.str());
-    Log("custom bank/source-plugin event is still required before audio can play");
     DynamicTrackTitleSync::Start(newTrack, newAlbum, logger);
+    CustomJacketPixelTest::TrackCreated(newTrack);
     g_injected = true;
     return true;
 }
