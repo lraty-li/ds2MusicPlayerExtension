@@ -173,6 +173,7 @@ void ResetPixelBufferDiagnostics()
 {
     InterlockedExchange(&g_dumpMask, 0);
     ResetDXBCPageHeaderDiagnostics();
+    ResetPixelBufferGpuResourceDiagnostics();
 }
 
 LONG DumpBitForSize(uint64_t readable)

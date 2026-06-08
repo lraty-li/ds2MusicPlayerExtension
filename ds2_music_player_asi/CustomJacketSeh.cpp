@@ -97,6 +97,33 @@ bool SehTriggerLoad(uint8_t* track, const CustomJacketSlot& slot)
     }
 }
 
+bool SehTriggerDetachedLoad(const CustomJacketSlot& slot)
+{
+    __try
+    {
+        auto* temp = static_cast<uint64_t*>(SpecialTrackHelpers::HeapAllocZero(0x10));
+        if (!temp) return false;
+        temp[0] = slot.target;
+        temp[1] = slot.packed;
+        auto** slotField = static_cast<uint64_t**>(SpecialTrackHelpers::HeapAllocZero(sizeof(uint64_t*)));
+        if (!slotField) return false;
+        *slotField = temp;
+        reinterpret_cast<uint64_t*>(slot.target)[5] += 1;
+
+        uint64_t ctx = slot.packed & 0x000FFFFFFFFFFFFFULL;
+        if (!ctx) return false;
+        uint64_t* vt = *reinterpret_cast<uint64_t**>(ctx);
+        using Fn = void(__fastcall*)(void*, uint64_t**, uint64_t);
+        reinterpret_cast<Fn>(vt[8])(reinterpret_cast<void*>(ctx),
+            slotField, 1);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
 bool SehAssignLoaded(void* ctx, uint64_t** slotPtr, void* loadedObj, void* target)
 {
     __try

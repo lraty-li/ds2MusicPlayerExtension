@@ -71,12 +71,30 @@
     <ClInclude Include="WwisePluginRegistration.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="TextureBindProbe.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureUploadProbe.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomJacketAltTextureProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="CustomJacketBcn.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketClone.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketD3D12Create.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketD3D12Resource.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketD3D12Upload.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketPixelTest.cpp">
@@ -86,6 +104,18 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketPointerProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelBufferCompare.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelBufferExternalCompare.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelBufferGpuResource.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelBufferHandleSlots.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketProbe.cpp">
@@ -100,7 +130,16 @@
     <ClCompile Include="CustomJacketSeh.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CustomJacketTextureOverrideProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketTextureDx12Bind.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="CustomJacketUiClone.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketPixelBufferClone.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="DynamicTrackTitleSync.cpp">
@@ -146,6 +185,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="WwisePluginRegistration.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureBindProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureUploadProbe.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">

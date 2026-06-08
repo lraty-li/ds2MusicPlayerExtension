@@ -175,7 +175,7 @@ DWORD WINAPI ProbeThread(LPVOID param)
 {
     auto* logger = static_cast<Logger*>(param);
 
-    for (uint32_t i = 0; i < 10; ++i)
+    for (uint32_t i = 0; i < 30; ++i)
     {
         Sleep(1000);
         if (!g_target) return 0;
@@ -204,6 +204,24 @@ DWORD WINAPI ProbeThread(LPVOID param)
         if (!g_uiCloneApplied)
         {
             uint64_t newTarget = 0;
+            uint64_t noDataPixelBuffer = 0;
+            if (!CustomJacketInternal::TryGetAlternateJacketPixelBuffer(noDataPixelBuffer, *logger))
+            {
+                continue;
+            }
+
+            uint64_t sourcePixelBuffer = 0;
+            CustomJacketPixelBufferInfo pbInfo = {};
+            if (!texture
+                || !CustomJacketInternal::SehReadU64(texture + 0x20, sourcePixelBuffer)
+                || !sourcePixelBuffer
+                || !CustomJacketInternal::ProbePixelBuffer(sourcePixelBuffer, pbInfo)
+                || pbInfo.dxbcPages == 0)
+            {
+                logger->Log("uiclone: waiting for source PB DXBC pages");
+                continue;
+            }
+
             if (CustomJacketInternal::CloneLoadedUiTextureToTrack(g_track, newTarget, *logger))
             {
                 g_target = newTarget;
@@ -226,6 +244,7 @@ void Reset()
     g_uiCloneApplied = false;
     CustomJacketInternal::ResetResourceProbeDiagnostics();
     CustomJacketInternal::ResetPixelBufferDiagnostics();
+    CustomJacketInternal::ResetAlternateJacketTextureProbe();
 }
 
 void TrackCreated(void* track)
@@ -239,6 +258,7 @@ void TryApply(void* catalogueResource, const Logger& logger)
     if (!g_track || g_applied || !catalogueResource) return;
     CustomJacketInternal::DumpCatalogueResourceProbeOnce(catalogueResource, logger);
     CustomJacketInternal::DumpTrackAlbumProbeOnce(g_track, logger);
+    CustomJacketInternal::PrepareAlternateJacketTextureProbe(catalogueResource, logger);
 
     SlotChoice choice = {};
     if (!PickJacketSlot(catalogueResource, choice))

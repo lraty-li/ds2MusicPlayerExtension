@@ -10,7 +10,10 @@
 
 ## 当前状态
 
-**构建通过。** 当前部署版处于 **probe-only 安全探针模式**：只探测 `Texture+0x20` 的 pixel buffer、输出 DXBC 命中与结构日志，不执行 clone、覆写或 assign。clone pixel buffer + 覆盖 DXBC 页 + 构造新 Texture 的代码路径保留，但在确认 DXBC 页解析稳定前不启用。
+当前主线已进入 **self-owned clone 链验证**：自定义曲目使用
+`HotSpringImageTextures[0]` 作为源图，随后构造自有 target、cloned
+`UITexture`、cloned `Texture` 和 `VirtualAlloc` pixelBuffer 副本。
+目前不会修改游戏原始 `Texture` 或原始 pixelBuffer。
 
 ## 2026-06-07 更新：NO DATA 占位图验证
 
@@ -75,6 +78,178 @@ music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
 - `Track+0x50` 可以稳定承载我们自己分配的 target。
 - loaded object 也可以是我们自己分配并修正 header 的 cloned `UITexture`。
 - 当前仍复用源 `Texture`，所以视觉应保持苹果图；下一步应替换 `newUI+0x30` 指向的 `Texture`，而不是再验证 slot/target 路线。
+
+## 2026-06-07 更新：cloned Texture 验证
+
+下一版把 `newUI+0x30` 改为指向我们新分配的 cloned `Texture`：
+
+- 只复制源 `Texture` 前 `0x70` 字节头部。
+- `Texture+0x20` 仍复用源 pixelBuffer。
+- 修正内部链为新对象内部地址：
+  `+0x70 -> +0xE0 -> +0x150 -> +0x1C0 -> 0`。
+
+日志确认：
+
+```
+uiclone OK: srcTexture=0x36236010000 newTexture=0x1F93093BEB0
+music play state idle(0) -> state5(5) trackId=0xAD900001 external=1
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
+```
+
+确认结论：
+
+- 自建 target + cloned `UITexture` + cloned `Texture` 对象链稳定。
+- 目前视觉仍应是苹果图，因为 pixelBuffer 仍来自源素材。
+- 下一步应验证能否替换 cloned `Texture+0x20` 指针为我们分配的 pixelBuffer 结构；如果这一步失败，应回到资源层 `TextureInfo` / `UITextureInfo` 构造，而不是修改原对象。
+
+## 2026-06-07 更新：自分配 pixelBuffer 副本验证
+
+下一版让 cloned `Texture+0x20` 指向我们自己的 `VirtualAlloc` buffer：
+
+1. 读取源 `Texture+0x20`。
+2. `VirtualQuery` 获取当前可读范围，本轮为 655360 字节。
+3. `VirtualAlloc` 新 buffer 并复制源 pixelBuffer。
+4. 扫描 qword，把落在源 pixelBuffer 范围内的内部指针重定位到新 buffer。
+5. cloned `Texture+0x20` 指向新 buffer。
+
+日志确认：
+
+```
+uiclone PB copy: srcPB=0x3D876C20000 newPB=0x28EF03C0000 size=655360 relocated=321
+uiclone OK: newTexture=0x28EF206C950
+music play state idle(0) -> state5(5) trackId=0xAD900001 external=1
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
+music play state paused(2) -> playing(1) trackId=0xAD900001 external=1
+music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
+```
+
+确认结论：
+
+- 自分配 pixelBuffer 副本可被 cloned `Texture` 稳定使用。
+- 需要重定位源 pixelBuffer 内指向自身区域的 qword 指针；本轮重定位 321 个。
+- 现在对象链已完全由我们控制，下一步可以在副本上做最小可见像素实验，仍应避免修改原对象。
+
+## 2026-06-07 更新：小范围 DXBC payload 补丁未改变视觉
+
+下一版在自有 pixelBuffer 副本中，对每个解析到的 DXBC 页只补丁第一个
+mip payload 的前 256 字节。日志确认补丁已执行：
+
+```
+custom jacket applied: source=HotSpringImageTextures offset=0x50 index=0
+jres candidate tex+0x20=0x4910F820000 q0=0x7FF710C75C98 q1=0x2
+uiclone PB patch: pages=5 bytes=1280
+uiclone PB copy: srcPB=0x4910F820000 newPB=0x180C6360000 size=655360 relocated=321 patchedPages=5
+uiclone OK: srcTexture=0x4910F810000 newTexture=0x18071FB0220
+music play state idle(0) -> state5(5) trackId=0xAD900001 external=1
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
+```
+
+用户视觉观察仍是 HotSpring 源图（“苹果图”），不是彩色测试图。
+
+确认结论：
+
+- 自有 target / `UITexture` / `Texture` / pixelBuffer 副本链仍稳定。
+- 小范围补丁命中了 5 个 DXBC 页并写入 1280 字节，但不足以改变可见图像。
+- 下一轮应扩大到每个已解析 DXBC 页的完整 first-mip payload 区间，
+  并记录每页 `off/marker/payload/dataSize/writeBytes`；若完整 payload
+  仍不变，重点转向 GPU resource/cache 或资源层 `TextureInfo` 构造。
+
+## 2026-06-07 更新：完整 first-mip payload 补丁仍未改变视觉
+
+下一版把补丁扩大到每个解析到的 DXBC 页完整 first-mip payload 区间。
+日志确认命中并写入：
+
+```
+uiclone PB patch page off=0x40000 marker=0x51 payload=0x8d dataSize=2528 writeBytes=2528 mips=7
+uiclone PB patch page off=0x60000 marker=0x51 payload=0x8d dataSize=2528 writeBytes=2528 mips=7
+uiclone PB patch page off=0x63000 marker=0x51 payload=0x8d dataSize=2528 writeBytes=2528 mips=7
+uiclone PB patch page off=0x70000 marker=0x51 payload=0x8d dataSize=3144 writeBytes=3144 mips=7
+uiclone PB patch page off=0x80000 marker=0x51 payload=0x8d dataSize=2528 writeBytes=2528 mips=7
+uiclone PB patch: pages=5 bytes=13256
+uiclone PB copy: srcPB=0x50487020000 newPB=0x26367650000 size=655360 relocated=321 patchedPages=5
+uiclone OK: srcTexture=0x50487010000 newTexture=0x263307647E0
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+```
+
+用户视觉观察仍是 HotSpring 源图（苹果图）。
+
+确认结论：
+
+- 不是“只写 256 字节太少”的问题；完整 first-mip payload 写入也不改变可见图。
+- `Texture+0x20` 指向的自有 pixelBuffer 副本足以保持对象链稳定，
+  但当前 UI 显示可能已经走 GPU/cache 资源，或读取 `UITexture` 的其它
+  runtime 指针，而不是重新解析 `Texture+0x20` 的 CPU 页数据。
+- 下一轮控制实验应加载一张已知不同的 `UITexture`（例如
+  `DefaultConstructionHoloImageTexture` / NO DATA），只把 cloned
+  `UITexture+0x30` 指向它的 `Texture`。若画面变成 NO DATA，说明
+  `+0x30` 的 Texture 指针控制显示；若仍是苹果图，说明显示路径依赖
+  `UITexture` 附加缓存字段。
+
+## 2026-06-07 更新：`UITexture+0x30` Texture 指针控制实验成功
+
+下一版预加载 `DefaultConstructionHoloImageTexture`，然后克隆当前
+HotSpring 源图的 `UITexture`，但把 cloned `UITexture+0x30` 指向
+`DefaultConstructionHoloImageTexture` 已加载出来的 `Texture`。
+日志确认：
+
+```
+uiclone alt prepared: source=DefaultConstructionHoloImageTexture target=0x546D39128B0
+custom jacket applied: source=HotSpringImageTextures offset=0x50 index=0
+uiclone alt loaded: loadedUI=0x2AC4289BC98 texture=0x546D3B7C7F0
+uiclone alt OK: label=DefaultConstructionHoloImageTexture srcTexture=0x546D5010000 overrideTexture=0x546D3B7C7F0
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+```
+
+用户视觉观察变成 `NO DATA`。
+
+确认结论：
+
+- `UITexture+0x30` 是音乐菜单可见图的直接控制入口。
+- 显示路径不是固定读取 HotSpring 源 `UITexture` 的其它附加字段；
+  cloned `UITexture` 保留源对象其它 runtime/cache 指针时，只改 `+0x30`
+  就足以改变可见图。
+- 之前 cloned `Texture + 自有 pixelBuffer 副本` 仍显示苹果图，问题应集中在
+  `Texture` / `Texture+0x20` / GPU resource 绑定层，而不是
+  `StreamingRef target` 或 `UITexture` 层。
+- 下一轮应做 `Texture+0x20` 指针控制实验：克隆 HotSpring `Texture`
+  头部，但把 cloned `Texture+0x20` 指向 NO DATA 原始 `Texture+0x20`
+  的 engine-owned pixelBuffer。若画面变 NO DATA，说明显示跟
+  `Texture+0x20` 根对象走，副本失败是因为 copied pixelBuffer 保留/缺失
+  engine-owned 外部 GPU 状态；若仍是苹果图，说明 `Texture` 头部或其它
+  GPU 绑定字段决定显示。
+
+## 2026-06-07 更新：`Texture+0x20` engine-owned pixelBuffer 控制实验成功
+
+下一版克隆 HotSpring 源 `Texture` 头部，但不使用 VirtualAlloc 副本，
+而是把 cloned `Texture+0x20` 直接指向
+`DefaultConstructionHoloImageTexture` 原始 `Texture+0x20`
+engine-owned pixelBuffer。日志确认：
+
+```
+uiclone altpb loaded: loadedUI=0x26FC289BC98 texture=0x3A30277C7F0 pixelBuffer=0x3A30274EE00
+uiclone altpb Texture: label=DefaultConstructionHoloImageTexture srcTexture=0x3A304410000 newTexture=0x273F29597C0 overridePB=0x3A30274EE00
+uiclone altpb OK: label=DefaultConstructionHoloImageTexture srcTexture=0x3A304410000 newTexture=0x273F29597C0 overridePB=0x3A30274EE00
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+```
+
+用户视觉观察变成 `NO DATA`。
+
+确认结论：
+
+- `Texture+0x20` 指向的 engine-owned pixelBuffer 根对象可以直接决定可见图。
+- `Texture` 头部/GPU 绑定字段不是唯一控制因素；克隆 HotSpring
+  `Texture` 头部后只换 `+0x20`，画面仍能跟随 NO DATA pixelBuffer。
+- 之前自有 VirtualAlloc pixelBuffer 副本显示不变，说明“memcpy 根对象 +
+  qword 内部指针重定位”并没有复制出等价的 engine-owned pixelBuffer。
+  可能原因包括：根对象中存在外部 GPU/resource 句柄、页表指针没有全部
+  重定位、内部指针并非只按 qword 对齐保存，或引擎只认可其 allocator /
+  object registry 管理下的 pixelBuffer。
+- 下一轮应定位 VirtualAlloc 副本与 engine-owned pixelBuffer 的差异：
+  优先记录/比较 HotSpring 与 NO DATA 的 `Texture+0x20` 根对象头部、
+  关键指针字段和 memory allocation 属性；不要继续扩大 raw payload patch。
 
 ## 2026-06-07 更新：探针重试与文件拆分
 
@@ -449,18 +624,89 @@ music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
 
 构建通过，新的 `scripts/Ds2MusicPlayerExtend.asi` 时间戳为 2026/6/7 15:14:00。注意 `CustomJacketBcn.cpp` 已 291 行，后续新增代码前应优先拆分文件。
 
+## 2026-06-07 更新：19:09 自有 PB 拷贝仍显示苹果的根因
+
+19:09 最新日志确认当前已经不是 `altpb` 的 NO DATA 控制实验，而是重新
+运行了 HotSpring pixelBuffer 的 VirtualAlloc 拷贝路径：
+
+```
+uiclone PB copy: srcPB=0x41990420000 newPB=0x1D068EC0000 size=655360 relocated=321 patchedPages=5
+pbcmp begin hot=0x41990420000 hotSize=655360 noData=0x4198EF9EE00 noDataSize=4985344 clone=0x1D068EC0000 cloneSize=655360
+uiclone OK: srcTexture=0x41990410000 newTexture=0x1D030713680
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+```
+
+用户观察仍是苹果图。日志中的关键差异如下：
+
+```
+hot   +0x90 = 0x1D00171A430
+hot   +0xE0 = 0x1D00171A450
+noData+0x90 = 0x1D0016E9610
+noData+0xE0 = 0x1D0016E9630
+clone +0x88 = 0x1D068ED0000
+clone +0xD8 = 0x1D068ED0000
+clone +0x90 = 0x1D00171A430
+clone +0xE0 = 0x1D00171A450
+pbcmp clone refs-to-hot aligned=0 any=0
+```
+
+确认结论：
+
+- clone 的 `+0x88/+0xD8` 已经重定位到自有 clone 内存。
+- clone 内没有残留指向 HotSpring pixelBuffer 范围的引用。
+- clone 的 `+0x90/+0xE0` 仍然是 HotSpring 原生 descriptor/resource
+  blocks，而不是 clone 自有对象，也不是 NO DATA blocks。
+- `pbres` dump 显示 clone 的 `f90/fE0` 内容与 HotSpring 完全一致。
+- 因此当前画面仍为苹果图，是因为可见图像继续跟随 HotSpring GPU
+  descriptor/resource 状态。
+
+结合此前 NO DATA 控制实验，`TextureDX12` 根对象的 `+0x90/+0xE0`
+已经被确认是当前显示结果的主导字段。CPU 侧 DXBC payload patch、
+`+0x38` 外部块克隆和 `+0x88/+0xD8` 重定位都不足以创建新的可见 GPU 资源。
+
+## 2026-06-07 更新：IDA 确认 descriptor/view 创建路径
+
+IDA 精确 vtable 引用确认 `TextureDX12` vtable 为 `0x1433E5C98`：
+
+- `sub_142112E30` 是 `TextureDX12` 构造函数，初始化时会清零
+  `+0x90/+0xE0`。
+- `sub_142113000` 是释放路径，会按两套 80 字节 stride 释放
+  `+0x78/+0x80/+0x88/+0x90` 和 `+0xC8/+0xD0/+0xD8/+0xE0`。
+- `sub_1420F2CF0(dstSlot, srcSlot)` 是 24 字节 descriptor handle 的安全复制函数。
+- `sub_1420F34E0(pool)` 是 descriptor block allocator。
+- `sub_142117000(dstTextureDX12, srcTextureDX12)` 是已确认的
+  descriptor/view clone-or-alias 初始化路径。
+
+`sub_142117000` 的关键行为：
+
+1. 从源 `TextureDX12` 的 `+0x78` 或 `+0xC8` 槽复制 24 字节 descriptor handle。
+2. 通过 `sub_1420F34E0(qword_14623FB38 + 8818080)` 给目标的
+   `+0x90` 或 `+0xE0` 分配新 descriptor block。
+3. 构造 view descriptor 参数。
+4. 调用全局 GPU/D3D 接口 `xmmword_1463E0CB0` 的 vtable `+0x90`
+   写入 descriptor block。
+5. 设置目标 `TextureDX12+0x88 = 2`。
+
+这说明当前 ASI 的 memcpy clone 缺少“分配 descriptor block + 调 GPU
+接口创建 view”的步骤；仅重定位 CPU 指针不会产生新的可见 GPU 资源。
+
 ## 核心数据链
 
 ```
 Track+0x50  →  slot {target, packed}
   target+0x20  →  loaded UITexture (0x100 bytes)
     UITexture+0x30  →  Texture (0x600 bytes)
-      Texture+0x20  →  pixelBuffer (VirtualAlloc, 640KB~9MB)
+      Texture+0x20  →  TextureDX12 / pixelBuffer runtime object
 ```
 
-每个环节都操作的是**我们 clone 的独立对象**，不碰游戏原始对象。
+当前确认：链路本身正确，但 `Texture+0x20` 根对象内部的
+`+0x90/+0xE0` descriptor/resource blocks 仍决定最终可见图像。
 
-## 新实现 (CustomJacketPixelTest.cpp)
+## 历史 DXBC 覆写实现 (CustomJacketPixelTest.cpp)
+
+以下记录的是 15:14 前后的 DXBC payload 覆写实验路径。19:09 日志已经证明，
+该路径即使 patch 了 CPU 副本 payload，仍会因为 `+0x90/+0xE0`
+继承 HotSpring descriptor/resource blocks 而显示苹果图。
 
 ### 执行步骤
 
@@ -481,9 +727,11 @@ CloneAndReplacePixelBuffer():
 - chain 指针全部修正指向新对象内部（避免 UAF）
 - 日志记录每一步成功/失败
 
-### 预期视觉效果
-- 成功：自定义曲目显示**彩色条纹专辑图**（mip 0=红, mip 1=绿, ...）
-- 失败：日志中会看到 `bcn:` 开头的错误信息
+### 实际视觉效果
+- 自有 pixelBuffer 副本稳定，播放稳定。
+- CPU DXBC payload patch 已执行，但画面仍显示苹果图。
+- 根因是 clone 的 `+0x90/+0xE0` 仍指向 HotSpring GPU descriptor/resource
+  blocks。
 
 ## 测试步骤
 
@@ -548,25 +796,519 @@ Page 布局 (每页 64KB 对齐):
 +0x70+mips*4: pixel data start (16-byte aligned)
 ```
 
-## 下一步方向
+## 2026-06-07 19:57 更新：GPU resource object 已确认仍继承 HotSpring
 
-**若彩色测试图案成功显示**，下一步替换为真正的 PNG 自定义图片：
+19:09 日志中 `pbres wrapper` 已经证明 clone 与 HotSpring 共用真实
+GPU resource/ref object：
 
-1. 添加 `stb_image.h` 加载 PNG → RGB/RGBA 解码
-2. 添加 BC3 编码器 (`bc7enc` 库或手写 BC3 encoder)
-3. 构建完整 mip chain (`DirectXTex` 的 `GenerateMipMaps`)
-4. 替换 `FillBC3Block` 为真实像素数据
-5. 读取 PNG 路径（可硬编码为 `scripts\ds2_music_player_jacket.png`）
+```text
+hot.f88+0x8    = 0x1D04DDE40F0
+noData.f88+0x8 = 0x1D03ADC02D0
+clone.f88+0x8  = 0x1D04DDE40F0
 
-**若测试图案失败 (崩溃或无效显示)**，退回安全版本：
-- Git `checkout` 旧版 `CustomJacketPixelTest.cpp`（仅 clone UITexture + 复用 Texture）
-- 重新分析 pixel buffer 格式差异
+hot.f88+0x30    = 0x41990420018
+noData.f88+0x30 = 0x4198EF9EE18
+clone.f88+0x30  = 0x1D068EC0018
+```
+
+clone 的 wrapper `+0x30` CPU data 指针已经指向自有 patched buffer，
+但 `wrapper+0x8` 仍是 HotSpring 的 resource object。结合 IDA 中
+`TextureDX12_bind_resource_handle_create_views` (`0x142116B40`) 的行为，
+可见图像仍为苹果图的根因不是单纯 descriptor block 没分配，而是
+descriptor/view 继续基于 HotSpring 的 GPU resource object 创建。
+
+IDA 数据库已重命名并注释这些已确认函数：
+
+| 地址 | 名称 | 职责 |
+|------|------|------|
+| `0x142116B40` | `TextureDX12_bind_resource_handle_create_views` | 绑定 engine resource handle 并创建 descriptor |
+| `0x142117000` | `TextureDX12_clone_resource_handle_create_view` | 复制源 handle 并新建 view，但仍引用源 GPU resource |
+| `0x142118A40` | `TextureDX12_create_srv_uav_descriptors` | 调 GPU/D3D 接口创建 view descriptor |
+| `0x140D18D20` | `D3DResourceManager_create_resource_wrapper` | 高层 D3D resource wrapper 创建入口 |
+| `0x140D19170` | `D3DResourceManager_create_placed_resource` | 创建 D3D12 heap/placed resource |
+| `0x142113810` | `TextureDX12_upload_texture_payload` | 通过 Map/WriteToSubresource 或 upload queue 写入 GPU resource |
+
+本轮代码只新增诊断：`CustomJacketPixelBufferGpuResource.cpp` 会打印
+`pbres link f88 ... cloneResEqHot=...` 和 resource object vtable 槽位。
+`ds2_music_player_asi\build.ps1` 已在 2026-06-07 19:57 成功执行，输出
+`BUILD_OK`。可以启动游戏获取这组新日志。
+
+## 2026-06-07 21:35-21:41 更新：txupload 历史匹配已验证
+
+21:35 后的运行使用禁用 `txbind` 的稳定 ASI，外部曲目继续正常
+`state5 -> playing -> paused`，没有崩溃。
+
+新增 `TextureUploadHistory` 后，日志已把 upload 调用与原生 jacket
+`TextureDX12` 地址对齐：
+
+```text
+txupload match noData call=905 tex=0x5B94B39EE00 ... callerRva=0x24E6BE7
+txupload match hot    call=4027 tex=0x5B94C820000 ... callerRva=0x24E6BE7
+txupload matches hot=1 noData=1 clone=0 seen=4798 capacity=4096
+```
+
+确认结论：
+
+- NO DATA 和 HotSpring 原生 jacket 都走过
+  `TextureDX12_upload_texture_payload`。
+- 当前 clone 没有 upload 记录，仍只是 CPU 对象副本。
+- clone 继续显示 HotSpring 的原因与此前一致：
+  `clone.resource == hot.resource`，且 `clone` 的 descriptor blocks 也继承
+  HotSpring。
+
+21:39 日志补齐 HotSpring reader qword：
+
+```text
+txupload match hot call=4027 ... rq8=0x0 rq10=0x2 rq18=0x4F04C8001E0
+rq20=0x7FF710C81230 rq28=0x28989FFAD0 rq30=0x4F000000000
+rq38=0x67AA4322000016
+```
+
+因为 4096 环形缓冲不足以保留 6066 次 upload 中较早的 NO DATA 记录，
+当前已把 `TextureUploadHistory` 容量扩大到 `16384` 并构建通过。
+最新部署 ASI 时间戳为 `2026/6/7 21:41:35`。
+
+## 2026-06-07 21:42 更新：NO DATA 与 HotSpring reader qword 已同时保留
+
+21:42 日志确认扩容后的 `TextureUploadHistory` 可同时保留两张原生
+jacket 的 upload 记录：
+
+```text
+txupload match noData call=905 tex=0x4E98CF4EE00 ... callerRva=0x24E6BE7
+txupload match hot    call=4027 tex=0x4E98E420000 ... callerRva=0x24E6BE7
+txupload matches hot=1 noData=1 clone=0 seen=4840 capacity=16384
+```
+
+reader qword 对比：
+
+```text
+noData: rq8=0x0 rq10=0x4E900000002 rq18=0x4E9948001E0
+        rq20=0x7FF710C81230 rq28=0x900E3FFB70 rq30=0x0
+        rq38=0x59E12184000013
+
+hot:    rq8=0x0 rq10=0x2 rq18=0x4E9948001E0
+        rq20=0x7FF710C81230 rq28=0x900EFFF780 rq30=0x4E900000000
+        rq38=0x67AA4322000016
+```
+
+确认结论：二者 `readerVt` 和 `callerRva` 相同，`rq18/rq20` 相同，
+`rq28` 指回 reader 自身；差异集中在 `rq10/rq30/rq38`。clone 仍然没有
+upload 记录。
+
+## 2026-06-07 21:48 更新：reader 内存区域已记录
+
+21:48 日志确认 NO DATA 和 HotSpring 的 reader 都位于 4KB
+`MEM_PRIVATE` / `PAGE_READWRITE` committed 区域：
+
+```text
+noData reader=0x1846DFF880 readerBase=0x1846DFF000
+readerRegion=4096 readerProtect=0x4 readerType=0x20000 readerState=0x1000
+
+hot reader=0x1847DFF690 readerBase=0x1847DFF000
+readerRegion=4096 readerProtect=0x4 readerType=0x20000 readerState=0x1000
+```
+
+本轮只确认 reader 所在 VAD 属性，尚不能仅凭该信息判断是否为线程栈页。
+当前代码已增加 `GetCurrentThreadStackLimits` 记录，下一轮日志将直接输出
+reader 是否落在线程栈范围内。
+
+## 2026-06-07 22:00 更新：txupload caller 与 reader 契约静态确认
+
+围绕已知 `callerRva=0x24E6BE7` 的反汇编确认，原生 jacket upload 来自
+`0x1424E6BE3` 的 `TextureDX12` vtable slot 2 调用，`0x24E6BE7` 是该调用后
+的返回地址：
+
+```text
+1424E6BCF mov rcx, [rdi]      ; TextureDX12
+1424E6BD2 mov rdx, rsi        ; reader
+1424E6BE0 mov r10, [rcx]
+1424E6BE3 call qword ptr [r10+10h]
+```
+
+同一函数入口 `0x1424E6100` 确认 reader 指针来自第二参数 `rdx`，并先通过
+reader vtable `+0x18` 读取 0x20 字节 header。caller 在 upload 前后调用
+reader vtable `+0x30` 取当前位置，用差值记录本次读取量。
+
+`TextureDX12_upload_texture_payload` (`0x142113810`) 内部确认：
+
+- reader 会被 `0x1400B0A30` 连续读取 32-bit 字段；该 helper 调 reader
+  vtable `+0x18` 并按 `reader+0x0C` 处理字节序。
+- 上传阶段依赖 `TextureDX12+0x80/+0x88` 已存在 resource handle/wrapper。
+- 函数会调用 resource object vtable `+0x50` 取 desc、reader vtable `+0x18`
+  读取 payload、reader vtable `+0x20` 跳过/seek、resource object vtable
+  `+0x60` 写入 subresource。
+- 另一条路径调用全局 GPU 接口 `xmmword_1463E0CB0` vtable `+0x130` 调度上传。
+
+确认结论：`TextureDX12_upload_texture_payload` 不是 resource 创建入口，它只把
+上层 reader 数据写进已绑定 GPU resource。clone 当前没有自有 `wrapper+0x8`
+resource object，因此直接硬调 upload 或伪造 reader 不能替代
+resource wrapper 创建、bind 与 view 创建阶段。
+
+## 2026-06-07 22:08 更新：native wrapper -> bind 顺序已确认
+
+围绕已知 native 范例 `0x1420C2BC0` 的反汇编确认，它展示了完整的
+resource wrapper 创建与 `TextureDX12` 绑定顺序：
+
+```text
+1420C2C5A call 140D18D20    ; D3DResourceManager_create_resource_wrapper
+1420C2C6F call 140D19F10    ; register/track created wrapper
+1420C2CAE call 1420F5FA0    ; 给 wrapper+0x8 resource 设置 debug name
+1420C2CCE call 142112E30    ; TextureDX12_ctor_init_root
+1420C2CE2 call 142116B40    ; TextureDX12_bind_resource_handle_create_views
+```
+
+`TextureDX12_bind_resource_handle_create_views` 的入参不是裸 resource 指针，
+而是合法的 24-byte engine resource handle slot。`sub_1420F2CF0` 已确认会
+复制该 slot，并对 `slot+0x08` 的 resource/ref object 做 addref/release。
+
+22:20 进一步静态确认本 native 范例的 handle slot 为
+`[0x0304, 0, wrapper]`。`TextureDX12_bind_resource_handle_create_views`
+入口在 `slot+0x10` 非零时读取 `wrapper+0x08` 作为真实
+resource/ref object；因此 wrapper-backed slot 的真实 resource 不直接放在
+`slot+0x08`。同一函数里的 `a2/a3` 是 resource width/height，resource
+描述结构包含 `dimension=3`、`format=0x1C`、`flags=0x10001`、`usage=0x21`。
+`0x1420F5FA0` 已重命名为
+`D3DResource_set_debug_name_from_decima_string`；它只是调用 resource vtable
+`+0x30` 设置 debug name，不构造 handle slot。
+
+当前可靠边界：自有专辑图必须先创建合法 engine resource wrapper/handle slot，
+再交给 bind/create-view 路径；`TextureDX12_upload_texture_payload` 只能在
+已有 resource 上写数据，不能替代 resource 创建。
+
+## 2026-06-07 22:04-22:05 更新：readerOnStack 已验证
+
+22:04/22:05 运行使用 `2026/6/7 21:50:57` 部署的 ASI。外部曲目稳定完成
+播放、暂停、恢复、再次暂停，没有运行中崩溃：
+
+```text
+idle -> state5 -> playing -> paused -> playing -> paused
+```
+
+本轮补齐 `GetCurrentThreadStackLimits` 字段，确认 NO DATA 和 HotSpring 的
+upload reader 都落在线程栈范围内：
+
+```text
+noData reader=0xE3241FF520 stackLow=0xE323E00000
+stackHigh=0xE324200000 readerOnStack=1
+
+hot reader=0xE324DFF450 stackLow=0xE324A00000
+stackHigh=0xE324E00000 readerOnStack=1
+```
+
+同一轮继续确认：
+
+```text
+txupload matches hot=1 noData=1 clone=0 seen=4858 capacity=16384
+clone.resource == hot.resource
+clone.cpu != hot.cpu
+```
+
+确认结论：原生 upload reader 是调用栈上的临时 reader，不是可长期保存或
+直接复用的 heap 对象。clone 仍未走 upload，且真实 GPU resource 仍继承
+HotSpring。
+
+## 2026-06-07 22:20 更新：handle slot 诊断已加入
+
+本轮只新增运行时诊断，不改变专辑图替换逻辑，不重新启用已确认不稳定的
+`txbind` 入口 hook。
+
+`CustomJacketPixelBufferGpuResource.cpp` 现在会在三方 pixelBuffer 对比时额外
+输出：
+
+```text
+pbres handle slot78 ...
+pbres handle slotC8 ...
+```
+
+这两行记录 HotSpring、NO DATA、clone 的 `TextureDX12+0x78` 与
+`TextureDX12+0xC8` 两个 24-byte handle slot 三个 qword，并打印 clone
+与 HotSpring / NO DATA 的等同性字段。该诊断用于下一次运行时确认 clone
+当前继承的 handle slot 具体落在哪些 qword 上。
+
+`ds2_music_player_asi\build.ps1` 已在 2026-06-07 22:20 执行成功，输出
+`BUILD_OK`。下一次启动游戏后重点查看 `pbres handle slot78/slotC8` 日志。
+
+## 2026-06-07 22:54 更新：GPU resource 诊断文件拆分与构建确认
+
+本轮只做工程整理和未接入的 helper 准备，不改变当前专辑图替换运行路径。
+
+- `CustomJacketPixelBufferGpuResource.cpp` 已拆分出
+  `CustomJacketPixelBufferHandleSlots.cpp`，用于保持单个代码文件低于 300 行。
+- `pbres handle slot78/slotC8` 诊断行为保持不变。
+- 新增 `CustomJacketTextureDx12Bind.cpp`，封装了基于
+  `[0x0304, 0, wrapper]` handle slot 调用
+  `TextureDX12_bind_resource_handle_create_views` 的 helper；当前默认未调用，
+  尚无运行时验证结论。
+- 该 helper 已加入 bind 地址模块范围校验；调用失败时会恢复调用前的
+  TextureDX12 resource/view 字段。
+- `ds2_music_player_asi\build.ps1` 已在 2026-06-07 22:56 执行成功，输出
+  `BUILD_OK`；部署 ASI 时间戳为 2026-06-07 22:56:06。
+
+## 2026-06-07 22:58 更新：handle slot 运行诊断已确认
+
+22:58 运行使用 22:56 部署的 ASI。`pbres handle slot78/slotC8` 诊断已出现：
+
+```text
+pbres handle slot78 hot=[0x304,0x0,0x4FA93830000]
+  noData=[0x304,0x0,0x4FA92389600]
+  clone=[0x304,0x0,0x26BC7630000]
+
+pbres handle slotC8 hot=[0x304,0x0,0x4FA93830000]
+  noData=[0x304,0x0,0x4FA92389600]
+  clone=[0x304,0x0,0x26BC7630000]
+```
+
+确认结论：
+
+- HotSpring、NO DATA、clone 的 `TextureDX12+0x78` 与 `+0xC8` 都是
+  wrapper-backed slot，形态均为 `[0x304, 0, wrapper]`。
+- clone 的 handle slot `q10` 已经指向 clone 自有 wrapper，不再是
+  HotSpring wrapper。
+- 但 clone wrapper 的 `+0x8` 真实 resource 仍等于 HotSpring：
+
+```text
+hot.resource=0x26B8F8148B0
+noData.resource=0x26B7C7B96B0
+clone.resource=0x26B8F8148B0
+cloneResEqHot=1
+cloneCpuEqHot=0
+```
+
+- clone 的 descriptor blocks 仍等于 HotSpring：
+  `clone.f90=hot.f90=0x266E3AAA430`、
+  `clone.fE0=hot.fE0=0x266E3AAA450`。
+- upload 历史仍为 `hot=1 noData=1 clone=0`，clone 没有走 upload。
+- 外部曲目仍正常 `idle -> state5 -> playing -> paused`，没有运行中崩溃。
+
+因此当前失败点已进一步缩小：不是 24-byte handle slot 没重定位，而是
+clone wrapper 内部仍 memcpy 继承 HotSpring 的 engine resource object。
+下一步仍应围绕创建自有 engine resource wrapper/resource object，而不是
+继续处理 CPU payload 或 slot 指针。
+
+## 2026-06-07 23:04 更新：手动 native bind 到 NO DATA wrapper 已成功返回
+
+23:03/23:04 运行使用 23:02 部署的 ASI。本轮接入的
+`TryBindTextureDx12ToSourceWrapper(clonePB, noDataPB)` 已执行，并且
+`TextureDX12_bind_resource_handle_create_views` 调用成功返回，没有触发
+SEH 失败路径：
+
+```text
+txdx12bind begin label=DefaultConstructionHoloImageTexture
+  tex=0x1F4D7FA0000 source=0x34A9AF5EE00
+  wrapper=0x34A9AF896C0 resource=0x1F4BAB180D0
+  slot=[0x304,0x0,0x34A9AF896C0]
+
+txdx12bind pre     s88=0x1F4D7FB0000 d90=0x1F48075B430
+                   sD8=0x1F4D7FB0000 dE0=0x1F48075B450
+txdx12bind cleared s88=0x0 d90=0x0 sD8=0x0 dE0=0x0
+txdx12bind post    s88=0x34A9AF896C0 d90=0x1F48077C3D0
+                   sD8=0x0 dE0=0x0
+```
+
+确认结论：
+
+- 在 clone PB 构造完成后的探针线程里，直接调用
+  `TextureDX12_bind_resource_handle_create_views` 是可返回的；这不同于
+  对 `0x142116B40` 做入口 hook，后者仍是已确认不稳定路径。
+- bind 后 clone 的主资源槽 `+0x88` 已从 clone wrapper 改为 NO DATA wrapper，
+  `+0x90` 分配了新的 descriptor block。
+- bind 没有填充第二套 `+0xD8/+0xE0`，post 状态为 0。
+- 本轮没有 clone upload 记录变化：bind 实验只创建/绑定 view，不执行 upload。
+- 外部曲目仍正常 `idle -> state5 -> playing -> paused`，没有运行中崩溃。
+
+该实验验证了：手动调用 native bind/create-view 的最小调用边界可用，但它只能
+把 clone 绑定到一个已存在 wrapper/resource。最终自定义 PNG 仍需要先创建自有
+engine resource object；否则绑定到 NO DATA/HotSpring wrapper 只会显示已有图。
+
+## 2026-06-07 23:14 更新：clone wrapper + NO DATA resource bind 已确认
+
+23:10/23:14 运行使用 23:07 部署的 ASI。本轮实验不再直接绑定到 NO DATA
+wrapper，而是保留 clone 自有 wrapper，将 clone wrapper `+0x08` 临时改成
+NO DATA 的 resource object，再以 clone wrapper 作为 `[0x304,0,wrapper]`
+调用 `TextureDX12_bind_resource_handle_create_views`。
+
+关键日志：
+
+```text
+txdx12bind clonewrap begin
+  tex=0x234D95F0000
+  cloneWrapper=0x234D9600000
+  oldResource=0x234CC3198B0
+  sourceWrapper=0x33950787F80
+  sourceResource=0x234BB0B52A0
+  slot=[0x304,0x0,0x234D9600000]
+
+txdx12bind clonewrap pre
+  s88=0x234D9600000 d90=0x23480749430
+  sD8=0x234D9600000 dE0=0x23480749450
+
+txdx12bind clonewrap post
+  s88=0x234D9600000 d90=0x2348076BF10
+  sD8=0x0 dE0=0x0
+
+txdx12bind clonewrap result
+  wrapper=0x234D9600000
+  resource=0x234BB0B52A0
+  resourceEqSource=1
+  wrapperEqClone=1
+```
+
+确认结论：
+
+- bind 后 `TextureDX12+0x88` 保持 clone 自有 wrapper。
+- clone wrapper `+0x08` 已指向 NO DATA resource object。
+- `TextureDX12+0x90` 分配了新的 descriptor block。
+- 第二套 `+0xD8/+0xE0` 仍未填充。
+- 本轮仍没有 clone upload 记录，实验只验证 resource/view 绑定。
+- 外部曲目稳定完成 `idle -> state5 -> playing -> paused -> playing -> paused`。
+
+该实验确认：只要 clone wrapper 内的真实 resource object 正确，native
+bind/create-view 可以基于 clone 自有 wrapper 工作。当前最终缺口仍是创建
+自有 engine resource object，而不是 wrapper-backed slot 或 bind 调用边界。
+
+## 2026-06-07 23:22 更新：原始 committed resource 创建参数失败
+
+23:22 运行使用 23:19 部署的 ASI。本轮在 clone 构造后尝试基于 NO DATA
+resource 的 `GetDesc()` / `GetHeapProperties()` 创建自有 D3D12 committed
+resource。创建阶段失败，未进入后续 bind：
+
+```text
+txdx12own create desc dim=3 width=512 height=320 mips=1
+  format=99 flags=0x0 heapType=1 heapFlags=0x44 hr=0x80070057
+```
+
+同一轮仍确认 clone 创建链稳定，且外部曲目正常播放到暂停：
+
+```text
+uiclone OK: ... newTexture=0x1F8FC303AF0
+music play state idle(0) -> state5(5) trackId=0xAD900001 external=1
+music play state state5(5) -> playing(1) trackId=0xAD900001 external=1
+music play state playing(1) -> paused(2) trackId=0xAD900001 external=1
+```
+
+确认结论：
+
+- 23:22 实验的失败点发生在 `CreateCommittedResource` 参数校验阶段，
+  返回 `0x80070057`。
+- 本轮没有进入 `txdx12own begin/pre/post`，因此未验证自有 resource
+  绑定到 clone wrapper 后的行为。
+- 该失败没有破坏自建 target / cloned `UITexture` / cloned `Texture`
+  链路，也没有造成运行中崩溃。
+
+23:31 已构建并部署下一版 ASI，保留同一实验边界，同时增加完整
+`D3D12_RESOURCE_DESC` 与多组创建参数日志。构建输出为 `BUILD_OK`，
+部署文件时间戳为 `2026/6/7 23:31:31`。
+
+## 2026-06-08 20:10 更新：自有 D3D12 resource 创建与 bind 已成功
+
+20:10 运行使用 23:31 部署的 ASI。原始 heap flags 仍失败，但去掉
+`heapFlags=0x44` 后 committed resource 创建成功：
+
+```text
+txdx12own create raw dim=3 align=65536 width=512 height=320
+  depthArray=1 mips=1 format=99 samples=1/0 layout=0
+  flags=0x0 heapType=1 heapFlags=0x44 state=0x0 hr=0x80070057
+txdx12own create raw-default-flags dim=3 align=65536 width=512 height=320
+  depthArray=1 mips=1 format=99 samples=1/0 layout=0
+  flags=0x0 heapType=1 heapFlags=0x0 state=0x0 hr=0x0
+```
+
+随后 clone wrapper 被绑定到该自有 resource，并成功创建新的 descriptor：
+
+```text
+txdx12own begin ... cloneWrapper=0x16BCA830000
+  oldResource=0x1708E11CB90 ownResource=0x170F465CB40
+  sourceResource=0x16BB0DF9060
+txdx12own post tex=0x16BCA820000
+  s88=0x16BCA830000 d90=0x16B80776910 sD8=0x0 dE0=0x0
+txdx12own result wrapper=0x16BCA830000 resource=0x170F465CB40
+  resourceEqOwn=1 wrapperEqClone=1
+```
+
+同一轮外部曲目稳定完成：
+
+```text
+idle -> state5 -> playing -> paused
+```
+
+确认结论：
+
+- `heapFlags=0x44` 不能直接用于本次 committed resource 创建；
+  `heapFlags=0` 可创建与 NO DATA 描述一致的自有 D3D12 texture resource。
+- clone wrapper `+0x08` 已可指向自有 resource，且 native bind/create-view
+  成功使用该 wrapper。
+- bind 后 `TextureDX12+0x90` 变为新 descriptor block，
+  `+0xD8/+0xE0` 仍为 0。
+- 本轮尚未上传自定义像素到自有 resource，因此还不能确认可见图是否改变。
+
+## 2026-06-08 20:29 更新：D3D12 upload/copy 成功但视觉仍无图
+
+20:29 运行日志确认，自有 D3D12 resource 创建成功后，当前 helper 继续完成
+upload buffer 准备、D3D12 copy、等待提交完成，以及 clone wrapper bind：
+
+```text
+txdx12upload prepared-bc7 width=512 height=320 format=99 uploadBytes=163840 hr=0x0
+txdx12upload copy width=512 height=320 format=99 uploadBytes=163840 hr=0x0
+txdx12own result wrapper=0x25DDB090000 resource=0x25E08656E70
+  resourceEqOwn=1 wrapperEqClone=1
+```
+
+同一轮外部曲目仍稳定：
+
+```text
+idle -> state5 -> playing -> paused
+```
+
+用户随后反馈看不到专辑图。
+
+确认结论：
+
+- 当前 resource 创建、upload buffer、`CopyTextureRegion`、fence wait、
+  clone wrapper bind/create-view 都已成功返回。
+- 20:29 版虽然让 clone wrapper 指向了自有 resource，但游戏内仍未显示
+  自定义专辑图。
+
+## 2026-06-08 20:42 更新：合法 BC7 测试图已经显示
+
+20:42 运行使用 20:38 部署的 ASI。该版本把测试图数据从任意 16-byte block
+改为合法 BC7 mode 6 solid-color block。日志确认 resource 创建、上传、copy、
+bind 均成功：
+
+```text
+txdx12own create raw-default-flags dim=3 align=65536 width=512 height=320
+  depthArray=1 mips=1 format=99 samples=1/0 layout=0
+  flags=0x0 heapType=1 heapFlags=0x0 state=0x0 hr=0x0
+txdx12own begin label=DefaultConstructionHoloImageTexture
+  tex=0x2A8B2470000 cloneWrapper=0x2A8B2480000
+  oldResource=0x2AD8FEDB0F0 ownResource=0x2ADFD172770
+  sourceResource=0x2A8B0F62B50
+txdx12upload prepared-bc7 width=512 height=320 format=99 uploadBytes=163840 hr=0x0
+txdx12upload copy width=512 height=320 format=99 uploadBytes=163840 hr=0x0
+txdx12own result wrapper=0x2A8B2480000 resource=0x2ADFD172770
+  resourceEqOwn=1 wrapperEqClone=1
+```
+
+同一轮播放稳定：
+
+```text
+idle -> state5 -> playing -> paused
+```
+
+用户视觉确认看到了测试图像。
+
+确认结论：
+
+- 外部曲目专辑图现在已经可以显示我们上传到自有 D3D12 resource 的测试图。
+- 当前最小可行链路为：
+  自建 target / cloned `UITexture` / cloned `Texture` /
+  clone wrapper `+0x08` 指向自有 D3D12 resource /
+  D3D12 upload buffer + `CopyTextureRegion` /
+  `TextureDX12_bind_resource_handle_create_views` 创建 view。
+- `format=99` 的源图需要合法 BC7 block。20:29 版任意 block 不显示；
+  20:42 版合法 BC7 mode 6 block 已显示。
 
 ## Git 状态
 
 当前分支：`master`
 最后提交：`816bb98 update`
-待提交文件：
-- `CustomJacketPixelTest.cpp` (重写)
-- `CustomJacketPixelTest.h` (未改动)
-- `RE/CustomJacketImplementationPlan.md` 需更新
+待提交文件以 `git status --short` 为准；当前文档只记录已确认逆向结论。

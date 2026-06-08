@@ -259,7 +259,7 @@ void DumpResourceJacketProbeOnce(uint64_t slotAddr, const CustomJacketSlot& slot
     logger.Log(intro.str());
 
     LogQwords("target", slot.target, 0x30, logger);
-    LogQwords("ui", loaded, 0x80, logger);
+    LogQwords("ui", loaded, 0x100, logger);
     LogQwords("tex", texture, 0x100, logger);
     LogDwords("ui", loaded, 0x20, logger);
     LogDwords("tex", texture, 0x20, logger);

@@ -14,6 +14,10 @@ build.ps1 ： 构建脚本，发生代码更改时执行该脚本，只有失败
 
 不准往知识文档写待定方案
 
+让用户启动游戏是非常昂贵的事情，尽可能通过 ida mcp 调查
+
+不准使用 dumpbin.exe 去读取 DS2.exe 本身， 不准以任何形式去读取 DS2.exe 本身
+
 游戏日志：
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/ds2_dll_music_resource.log>)
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/log.txt>)
