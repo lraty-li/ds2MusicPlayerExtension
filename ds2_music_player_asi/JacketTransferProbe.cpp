@@ -20,10 +20,10 @@ using ReadStatusFn = int(__cdecl*)(unsigned int*, char*, unsigned int,
     char*, unsigned int, char*, unsigned int);
 
 constexpr DWORD kPollMs = 1000;
-constexpr unsigned int kMaxJacketBytes = 1024 * 1024;
 constexpr unsigned int kRgbaWidth = 512;
-constexpr unsigned int kRgbaHeight = 320;
+constexpr unsigned int kRgbaHeight = 512;
 constexpr unsigned int kRgbaBytes = kRgbaWidth * kRgbaHeight * 4;
+constexpr unsigned int kMaxJacketBytes = kRgbaBytes;
 
 std::atomic<bool> g_started{false};
 Logger* g_logger = nullptr;

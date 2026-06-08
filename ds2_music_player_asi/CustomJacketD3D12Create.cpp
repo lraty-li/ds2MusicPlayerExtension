@@ -63,6 +63,10 @@ D3D12_HEAP_PROPERTIES DefaultHeapProps()
 D3D12_RESOURCE_DESC NormalizeTextureDesc(D3D12_RESOURCE_DESC desc)
 {
     desc.Alignment = 0;
+    desc.Width = 512;
+    desc.Height = 512;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
     desc.SampleDesc.Count = desc.SampleDesc.Count ? desc.SampleDesc.Count : 1;
     desc.SampleDesc.Quality = 0;
     desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -102,22 +106,22 @@ bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     const D3D12_RESOURCE_STATES common = D3D12_RESOURCE_STATE_COMMON;
     const D3D12_RESOURCE_STATES copyDest = D3D12_RESOURCE_STATE_COPY_DEST;
 
-    bool ok = TryCreate(device, "raw", rawDesc, rawHeapProps, rawHeapFlags,
-        common, &created, logger);
+    bool ok = TryCreate(device, "jacket-512-common", texDesc, defaultHeap,
+        D3D12_HEAP_FLAG_NONE, common, &created, logger);
+    if (!ok)
+    {
+        ok = TryCreate(device, "jacket-512-copydest", texDesc, defaultHeap,
+            D3D12_HEAP_FLAG_NONE, copyDest, &created, logger);
+    }
+    if (!ok)
+    {
+        ok = TryCreate(device, "raw", rawDesc, rawHeapProps, rawHeapFlags,
+            common, &created, logger);
+    }
     if (!ok)
     {
         ok = TryCreate(device, "raw-default-flags", rawDesc, rawHeapProps,
             D3D12_HEAP_FLAG_NONE, common, &created, logger);
-    }
-    if (!ok)
-    {
-        ok = TryCreate(device, "default-common", texDesc, defaultHeap,
-            D3D12_HEAP_FLAG_NONE, common, &created, logger);
-    }
-    if (!ok)
-    {
-        ok = TryCreate(device, "default-copydest", texDesc, defaultHeap,
-            D3D12_HEAP_FLAG_NONE, copyDest, &created, logger);
     }
 
     device->Release();
