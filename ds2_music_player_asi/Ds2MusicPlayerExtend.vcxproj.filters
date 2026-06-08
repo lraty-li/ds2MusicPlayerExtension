@@ -38,6 +38,9 @@
     <ClInclude Include="HookUtils.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="JacketTransferProbe.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="Logger.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -79,6 +82,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomJacketActiveResource.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="CustomJacketAltTextureProbe.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -95,6 +101,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketD3D12Upload.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketD3D12UploadRgba.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketPixelTest.cpp">
@@ -158,6 +167,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="HookUtils.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="JacketTransferProbe.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Logger.cpp">

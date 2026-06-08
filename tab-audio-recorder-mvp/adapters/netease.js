@@ -19,7 +19,12 @@
       const session = tools.readMediaSessionMetadata(170);
       if (session) return session;
       const title = tools.cleanTitle(document.title).replace(/\s*-\s*网易云音乐\s*$/, "");
-      return title ? { score: 80, title, artist: "" } : null;
+      return title ? {
+        score: 80,
+        title,
+        artist: "",
+        jacket: tools.readDocumentArtwork()
+      } : null;
     },
     async control(command) {
       const audio = document.querySelector("audio");

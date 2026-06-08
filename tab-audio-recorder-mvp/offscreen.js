@@ -47,6 +47,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "jacket-update") {
+    sendJacket(message.jacket).then(sendResponse);
+    return true;
+  }
+
   return false;
 });
 
@@ -139,6 +144,7 @@ async function connectSocket(token) {
     socket.onmessage = (event) => handleSocketMessage(event.data);
     socket.onclose = () => handleSocketClosed(ws);
     socket.onerror = () => handleSocketClosed(ws);
+    startMetadataPolling();
     chrome.runtime.sendMessage({ type: "stream-connected" });
   } catch (_) {
     if (token === streamToken && capturedStream) {
@@ -160,6 +166,7 @@ function handleSocketClosed(ws) {
   } catch (_) {
   }
   socket = null;
+  stopMetadataPolling();
   reportWaiting();
   scheduleConnect(1000);
 }
@@ -207,6 +214,10 @@ function sendMetadata(metadata) {
   }
 }
 
+function isStreamSocketOpen() {
+  return !!socket && socket.readyState === WebSocket.OPEN;
+}
+
 function sendAudioChunk(message) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return;
@@ -236,6 +247,7 @@ function sendAudioChunk(message) {
 
 function stopStream(notify = true) {
   streamToken++;
+  stopMetadataPolling();
   if (connectTimer) {
     clearTimeout(connectTimer);
     connectTimer = null;

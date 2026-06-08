@@ -79,6 +79,7 @@ function selectMetadataResult(results) {
       best = {
         title: item.result.title,
         artist: item.result.artist || "",
+        jacket: item.result.jacket || null,
         score,
         frameId: item.frameId,
         adapter: item.result.adapter || "",

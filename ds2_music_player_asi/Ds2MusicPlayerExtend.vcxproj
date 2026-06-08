@@ -121,6 +121,7 @@
     <ClInclude Include="GeneratedSourcePluginTemplates.h" />
     <ClInclude Include="Hooks.h" />
     <ClInclude Include="HookUtils.h" />
+    <ClInclude Include="JacketTransferProbe.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="MusicPlayerInjection.h" />
     <ClInclude Include="PlayEntryMonitor.h" />
@@ -138,12 +139,14 @@
     <ClInclude Include="WwisePluginRegistration.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomJacketActiveResource.cpp" />
     <ClCompile Include="CustomJacketAltTextureProbe.cpp" />
     <ClCompile Include="CustomJacketBcn.cpp" />
     <ClCompile Include="CustomJacketClone.cpp" />
     <ClCompile Include="CustomJacketD3D12Create.cpp" />
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
     <ClCompile Include="CustomJacketD3D12Upload.cpp" />
+    <ClCompile Include="CustomJacketD3D12UploadRgba.cpp" />
     <ClCompile Include="CustomJacketDXBCPageProbe.cpp" />
     <ClCompile Include="CustomJacketPointerProbe.cpp" />
     <ClCompile Include="CustomJacketPixelBufferCompare.cpp" />
@@ -165,6 +168,7 @@
     <ClCompile Include="GeneratedSourcePluginTemplates.cpp" />
     <ClCompile Include="Hooks.cpp" />
     <ClCompile Include="HookUtils.cpp" />
+    <ClCompile Include="JacketTransferProbe.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MusicPlayerInjection.cpp" />
     <ClCompile Include="PlayEntryMonitor.cpp" />

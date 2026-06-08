@@ -62,6 +62,10 @@ bool TryBindTextureDx12CloneWrapperToSourceResource(uint64_t textureDx12,
 bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     uint64_t& outResource, const Logger& logger);
 bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logger);
+bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
+    uint32_t width, uint32_t height, const Logger& logger);
+void SetActiveCustomJacketD3D12Resource(uint64_t resource);
+uint64_t GetActiveCustomJacketD3D12Resource();
 bool TryBindTextureDx12CloneWrapperToNewResource(uint64_t textureDx12,
     uint64_t sourceTextureDx12, const char* label, const Logger& logger);
 int OverwriteDXBCPages(uint8_t* pixelBuffer, size_t sizeBytes, const Logger& logger);

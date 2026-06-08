@@ -211,6 +211,10 @@ bool TryBindTextureDx12CloneWrapperToNewResource(uint64_t textureDx12,
         << " resourceEqOwn=" << (postResource == ownResource ? 1 : 0)
         << " wrapperEqClone=" << (postWrapper == cloneWrapper ? 1 : 0);
     logger.Log(end.str());
+    if (postResource == ownResource)
+    {
+        SetActiveCustomJacketD3D12Resource(ownResource);
+    }
     return true;
 }
 } // namespace CustomJacketInternal

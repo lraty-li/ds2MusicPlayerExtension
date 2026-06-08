@@ -24,6 +24,9 @@
     <ClInclude Include="AudioStreamServer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="BrowserJacket.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="BrowserMetadata.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -54,6 +57,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="AudioStreamServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="BrowserJacket.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="BrowserMetadata.cpp">

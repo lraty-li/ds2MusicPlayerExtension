@@ -4,6 +4,7 @@
 
 #include "FailFast.h"
 #include "HookUtils.h"
+#include "JacketTransferProbe.h"
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
@@ -93,6 +94,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
             TextureUploadProbe::TryInstall(gameModule, g_initLogger);
         g_initLogger.Log(textureUploadProbeInstalled ? "texture upload probe installed" :
                                                      "texture upload probe install failed");
+        JacketTransferProbe::Start(g_initLogger);
 
         const bool listenerInstalled =
             MusicPlayerInjection::TryInstall(gameModule, g_initLogger);

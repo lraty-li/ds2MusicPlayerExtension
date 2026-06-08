@@ -34,7 +34,12 @@
       const session = tools.readMediaSessionMetadata(100);
       if (session) return session;
       const title = tools.cleanTitle(document.title);
-      return title ? { score: 50, title, artist: "" } : null;
+      return title ? {
+        score: 50,
+        title,
+        artist: "",
+        jacket: tools.readDocumentArtwork()
+      } : null;
     },
     control(command) {
       const action = toAction(command);

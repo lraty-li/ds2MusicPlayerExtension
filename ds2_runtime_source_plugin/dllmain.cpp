@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "AudioStreamServer.h"
+#include "BrowserJacket.h"
 #include "PluginLog.h"
 #include "PluginParams.h"
 #include "WwisePluginAbi.h"
@@ -225,6 +226,31 @@ extern "C" __declspec(dllexport) int DS2AudioStreamReadMetadata(
     char* title, unsigned int titleBytes, char* artist, unsigned int artistBytes)
 {
     return AudioStreamServer::ReadMetadata(title, titleBytes, artist, artistBytes);
+}
+
+extern "C" __declspec(dllexport) int DS2AudioStreamReadJacketInfo(
+    unsigned int* version, unsigned int* bytes, char* mime, unsigned int mimeBytes)
+{
+    return BrowserJacket::ReadInfo(version, bytes, mime, mimeBytes);
+}
+
+extern "C" __declspec(dllexport) int DS2AudioStreamReadJacketBytes(
+    unsigned int knownVersion, void* output, unsigned int outputBytes,
+    unsigned int* bytesWritten, char* mime, unsigned int mimeBytes)
+{
+    return BrowserJacket::ReadBytes(knownVersion, output, outputBytes,
+        bytesWritten, mime, mimeBytes);
+}
+
+extern "C" __declspec(dllexport) int DS2AudioStreamReadJacketStatus(
+    unsigned int* version, char* stage, unsigned int stageBytes,
+    unsigned int* bytes, char* mime, unsigned int mimeBytes,
+    char* error, unsigned int errorBytes, char* source, unsigned int sourceBytes,
+    char* jacketSource, unsigned int jacketSourceBytes)
+{
+    return BrowserJacket::ReadStatus(version, stage, stageBytes,
+        bytes, mime, mimeBytes, error, errorBytes,
+        source, sourceBytes, jacketSource, jacketSourceBytes);
 }
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)

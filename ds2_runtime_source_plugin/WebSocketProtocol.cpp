@@ -80,6 +80,41 @@ uint64_t ReadBigEndian(const uint8_t* data, int bytes)
     for (int i = 0; i < bytes; ++i) value = (value << 8) | data[i];
     return value;
 }
+
+bool ReadRawFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
+    uint32_t& payloadBytes, uint8_t& opcode, bool& fin)
+{
+    payloadBytes = 0;
+    opcode = 0;
+    fin = false;
+    uint8_t header[2] = {};
+    if (!RecvAll(socket, header, sizeof(header))) return false;
+    fin = (header[0] & 0x80) != 0;
+    opcode = header[0] & 0x0F;
+    const bool masked = (header[1] & 0x80) != 0;
+    uint64_t length = header[1] & 0x7F;
+    if (opcode == 0x8) return false;
+    if (length == 126)
+    {
+        uint8_t ext[2] = {};
+        if (!RecvAll(socket, ext, sizeof(ext))) return false;
+        length = ReadBigEndian(ext, 2);
+    }
+    else if (length == 127)
+    {
+        uint8_t ext[8] = {};
+        if (!RecvAll(socket, ext, sizeof(ext))) return false;
+        length = ReadBigEndian(ext, 8);
+    }
+    if (!masked || length > maxBytes) return false;
+
+    uint8_t mask[4] = {};
+    if (!RecvAll(socket, mask, sizeof(mask))) return false;
+    if (!RecvAll(socket, payload, static_cast<int>(length))) return false;
+    for (uint64_t i = 0; i < length; ++i) payload[i] ^= mask[i & 3];
+    payloadBytes = static_cast<uint32_t>(length);
+    return true;
+}
 }
 
 namespace WebSocketProtocol
@@ -128,32 +163,36 @@ bool ReadFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,
 {
     payloadBytes = 0;
     opcode = 0;
-    uint8_t header[2] = {};
-    if (!RecvAll(socket, header, sizeof(header))) return false;
-    opcode = header[0] & 0x0F;
-    const bool masked = (header[1] & 0x80) != 0;
-    uint64_t length = header[1] & 0x7F;
-    if (opcode == 0x8) return false;
-    if (length == 126)
+    uint32_t used = 0;
+    uint8_t messageOpcode = 0;
+    while (true)
     {
-        uint8_t ext[2] = {};
-        if (!RecvAll(socket, ext, sizeof(ext))) return false;
-        length = ReadBigEndian(ext, 2);
+        uint32_t chunkBytes = 0;
+        uint8_t chunkOpcode = 0;
+        bool fin = false;
+        if (!ReadRawFrame(socket, payload + used, maxBytes - used,
+            chunkBytes, chunkOpcode, fin))
+        {
+            return false;
+        }
+        if (chunkOpcode >= 0x8) continue;
+        if (chunkOpcode == 0)
+        {
+            if (!messageOpcode) return false;
+        }
+        else
+        {
+            if (messageOpcode || (chunkOpcode != 0x1 && chunkOpcode != 0x2)) return false;
+            messageOpcode = chunkOpcode;
+        }
+        used += chunkBytes;
+        if (fin)
+        {
+            payloadBytes = used;
+            opcode = messageOpcode;
+            return messageOpcode != 0;
+        }
     }
-    else if (length == 127)
-    {
-        uint8_t ext[8] = {};
-        if (!RecvAll(socket, ext, sizeof(ext))) return false;
-        length = ReadBigEndian(ext, 8);
-    }
-    if (!masked || length > maxBytes) return false;
-
-    uint8_t mask[4] = {};
-    if (!RecvAll(socket, mask, sizeof(mask))) return false;
-    if (!RecvAll(socket, payload, static_cast<int>(length))) return false;
-    for (uint64_t i = 0; i < length; ++i) payload[i] ^= mask[i & 3];
-    payloadBytes = static_cast<uint32_t>(length);
-    return true;
 }
 
 bool ReadBinaryFrame(SOCKET socket, uint8_t* payload, uint32_t maxBytes,

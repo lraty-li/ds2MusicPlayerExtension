@@ -15,6 +15,7 @@
     hasOutcome,
     pickBestMetadata,
     readDomMetadata,
+    readDocumentArtwork,
     readMediaSessionMetadata,
     waitFor
   };
@@ -96,14 +97,75 @@
     return {
       score,
       title,
-      artist: cleanTitle(metadata.artist || "")
+      artist: cleanTitle(metadata.artist || ""),
+      jacket: tagJacket(readArtwork(metadata.artwork), "mediaSession") ||
+        tagJacket(readDocumentArtwork(), "document")
     };
+  }
+
+  function readArtwork(artwork) {
+    if (!Array.isArray(artwork) || artwork.length === 0) return null;
+    let best = null;
+    for (const item of artwork) {
+      if (!item || typeof item.src !== "string" || !item.src) continue;
+      const url = new URL(item.src, location.href).href;
+      const size = parseArtworkSize(item.sizes || "");
+      if (!best || size > best.size) {
+        best = { url, mime: item.type || "", size };
+      }
+    }
+    return best && best.url ? best : null;
+  }
+
+  function parseArtworkSize(sizes) {
+    const match = String(sizes || "").match(/(\d+)\s*x\s*(\d+)/i);
+    return match ? Number(match[1]) * Number(match[2]) : 0;
   }
 
   function readDomMetadata(titleSelectors, artistSelectors, score) {
     const title = readFirstText(titleSelectors);
     if (!title) return null;
-    return { score, title, artist: readFirstText(artistSelectors) };
+    return {
+      score,
+      title,
+      artist: readFirstText(artistSelectors),
+      jacket: tagJacket(readDocumentArtwork(), "document")
+    };
+  }
+
+  function readDocumentArtwork() {
+    const selectors = [
+      'meta[property="og:image"]',
+      'meta[property="og:image:secure_url"]',
+      'meta[name="twitter:image"]',
+      'meta[itemprop="image"]',
+      'link[rel="image_src"]'
+    ];
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      const value = element && (element.content || element.href);
+      if (value) return { url: new URL(value, location.href).href, mime: "", size: 0 };
+    }
+
+    const video = document.querySelector("video[poster]");
+    if (video && video.poster) {
+      return { url: new URL(video.poster, location.href).href, mime: "", size: 0 };
+    }
+    return readLargestImage();
+  }
+
+  function readLargestImage() {
+    let best = null;
+    for (const image of document.querySelectorAll("img")) {
+      const src = image.currentSrc || image.src;
+      if (!src) continue;
+      const size = (image.naturalWidth || image.width || 0) *
+        (image.naturalHeight || image.height || 0);
+      if (size >= 4096 && (!best || size > best.size)) {
+        best = { url: new URL(src, location.href).href, mime: "", size };
+      }
+    }
+    return best;
   }
 
   function readFirstText(selectors) {
@@ -117,13 +179,26 @@
 
   function pickBestMetadata(items) {
     let best = null;
+    let bestJacket = null;
     for (const item of items) {
       if (!item || !item.title) continue;
+      if (item.jacket && item.jacket.url) {
+        const sourceBoost = item.jacket.source === "mediaSession" ? 1000000 : 0;
+        const jacketRank = sourceBoost + item.score * 1000 + (item.jacket.size || 0);
+        if (!bestJacket || jacketRank > bestJacket.rank) {
+          bestJacket = { rank: jacketRank, jacket: item.jacket };
+        }
+      }
       const penalty = item.title.includes("…") || item.title.includes("...") ? 100 : 0;
       const rank = item.score + Math.min(item.title.length, 80) - penalty;
       if (!best || rank > best.rank) best = Object.assign({ rank }, item);
     }
+    if (best && bestJacket) best.jacket = bestJacket.jacket;
     return best;
+  }
+
+  function tagJacket(jacket, source) {
+    return jacket && jacket.url ? Object.assign({ source }, jacket) : null;
   }
 
   function cleanTitle(value) {

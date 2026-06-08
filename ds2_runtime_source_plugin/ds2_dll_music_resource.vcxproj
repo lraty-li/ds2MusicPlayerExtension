@@ -153,6 +153,7 @@
     <ClInclude Include="AudioPacketProtocol.h" />
     <ClInclude Include="AudioRingBuffer.h" />
     <ClInclude Include="AudioStreamServer.h" />
+    <ClInclude Include="BrowserJacket.h" />
     <ClInclude Include="BrowserMetadata.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
@@ -165,6 +166,7 @@
     <ClCompile Include="AudioPacketProtocol.cpp" />
     <ClCompile Include="AudioRingBuffer.cpp" />
     <ClCompile Include="AudioStreamServer.cpp" />
+    <ClCompile Include="BrowserJacket.cpp" />
     <ClCompile Include="BrowserMetadata.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="PluginLog.cpp" />

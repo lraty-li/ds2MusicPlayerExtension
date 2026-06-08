@@ -4,6 +4,7 @@
 
 #include "AudioPacketProtocol.h"
 #include "AudioRingBuffer.h"
+#include "BrowserJacket.h"
 #include "BrowserMetadata.h"
 #include "PluginLog.h"
 #include "WebSocketProtocol.h"
@@ -13,11 +14,12 @@
 #include <cstdio>
 #include <cstdint>
 #include <mutex>
+#include <vector>
 
 namespace
 {
 constexpr uint16_t kPort = 47832;
-constexpr uint32_t kMaxPacketBytes = 65536;
+constexpr uint32_t kMaxFrameBytes = 2 * 1024 * 1024;
 
 std::mutex g_socketMutex;
 HANDLE g_thread = nullptr;
@@ -106,7 +108,7 @@ void HandleClient(SOCKET socket)
 {
     if (!WebSocketProtocol::Accept(socket)) return;
     Log("audio websocket connected");
-    uint8_t payload[kMaxPacketBytes] = {};
+    std::vector<uint8_t> payload(kMaxFrameBytes + 1);
     uint64_t packets = 0;
     uint64_t frames = 0;
     uint64_t drops = 0;
@@ -119,19 +121,22 @@ void HandleClient(SOCKET socket)
     {
         uint32_t payloadBytes = 0;
         uint8_t opcode = 0;
-        if (!WebSocketProtocol::ReadFrame(socket, payload,
-            sizeof(payload), payloadBytes, opcode)) break;
+        if (!WebSocketProtocol::ReadFrame(socket, payload.data(),
+            kMaxFrameBytes, payloadBytes, opcode)) break;
         if (payloadBytes == 0) continue;
         if (opcode == 0x1)
         {
-            payload[min(payloadBytes, kMaxPacketBytes - 1)] = 0;
-            BrowserMetadata::UpdateFromJson(reinterpret_cast<const char*>(payload));
+            payload[payloadBytes] = 0;
+            const char* text = reinterpret_cast<const char*>(payload.data());
+            BrowserJacket::UpdateStatusFromJson(text);
+            BrowserJacket::UpdateFromJson(text);
+            BrowserMetadata::UpdateFromJson(text);
             continue;
         }
         if (opcode != 0x2) continue;
 
         AudioPacketProtocol::Packet packet = {};
-        if (!AudioPacketProtocol::TryParse(payload, payloadBytes, packet)) continue;
+        if (!AudioPacketProtocol::TryParse(payload.data(), payloadBytes, packet)) continue;
 
         const uint64_t now = GetTickCount64();
         if (lastPacketTick != 0)
