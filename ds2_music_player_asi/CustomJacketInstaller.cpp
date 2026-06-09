@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "CustomJacketPixelTest.h"
+#include "CustomJacketInstaller.h"
 
 #include "CustomJacketInternal.h"
 #include "HookUtils.h"
@@ -171,7 +171,7 @@ bool PickJacketSlot(void* catalogue, SlotChoice& out)
     return false;
 }
 
-DWORD WINAPI ProbeThread(LPVOID param)
+DWORD WINAPI CloneThread(LPVOID param)
 {
     auto* logger = static_cast<Logger*>(param);
 
@@ -186,20 +186,8 @@ DWORD WINAPI ProbeThread(LPVOID param)
             continue;
         }
 
-        logger->Log(std::string("tick=") + std::to_string(i + 1)
-            + " loaded=" + HookUtils::HexU64(loaded));
-
-        uint64_t slotAddr = 0;
-        CustomJacketSlot slot = {};
         uint64_t texture = 0;
-        if (CustomJacketInternal::SehReadU64(
-            reinterpret_cast<uint64_t>(static_cast<uint8_t*>(g_track) + 0x50), slotAddr)
-            && CustomJacketInternal::SehReadSlot(slotAddr, slot)
-            && CustomJacketInternal::SehReadU64(loaded + 0x30, texture)
-            && texture)
-        {
-            CustomJacketInternal::DumpResourceJacketProbeOnce(slotAddr, slot, loaded, texture, *logger);
-        }
+        CustomJacketInternal::SehReadU64(loaded + 0x30, texture);
 
         if (!g_uiCloneApplied)
         {
@@ -218,7 +206,6 @@ DWORD WINAPI ProbeThread(LPVOID param)
                 || !CustomJacketInternal::ProbePixelBuffer(sourcePixelBuffer, pbInfo)
                 || pbInfo.dxbcPages == 0)
             {
-                logger->Log("uiclone: waiting for source PB DXBC pages");
                 continue;
             }
 
@@ -234,7 +221,7 @@ DWORD WINAPI ProbeThread(LPVOID param)
 }
 } // namespace
 
-namespace CustomJacketPixelTest
+namespace CustomJacketInstaller
 {
 void Reset()
 {
@@ -256,8 +243,6 @@ void TrackCreated(void* track)
 void TryApply(void* catalogueResource, const Logger& logger)
 {
     if (!g_track || g_applied || !catalogueResource) return;
-    CustomJacketInternal::DumpCatalogueResourceProbeOnce(catalogueResource, logger);
-    CustomJacketInternal::DumpTrackAlbumProbeOnce(g_track, logger);
     CustomJacketInternal::PrepareAlternateJacketTextureProbe(catalogueResource, logger);
 
     SlotChoice choice = {};
@@ -286,8 +271,8 @@ void TryApply(void* catalogueResource, const Logger& logger)
         << " target=" << HookUtils::HexU64(choice.slot.target);
     logger.Log(oss.str());
 
-    HANDLE thread = CreateThread(nullptr, 0, ProbeThread,
+    HANDLE thread = CreateThread(nullptr, 0, CloneThread,
         const_cast<Logger*>(&logger), 0, nullptr);
     if (thread) CloseHandle(thread);
 }
-} // namespace CustomJacketPixelTest
+} // namespace CustomJacketInstaller

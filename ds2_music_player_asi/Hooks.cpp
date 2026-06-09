@@ -4,12 +4,11 @@
 
 #include "FailFast.h"
 #include "HookUtils.h"
-#include "JacketTransferProbe.h"
+#include "CustomJacketImageTransfer.h"
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
 #include "SourceAudioBootstrap.h"
-#include "TextureUploadProbe.h"
 
 #include <exception>
 #include <sstream>
@@ -88,13 +87,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         sizeLog << "DS2.exe SizeOfImage=" << gameImageSize;
         g_initLogger.Log(sizeLog.str());
 
-        g_initLogger.Log("texture bind probe disabled: repeated entry hook crash");
-
-        const bool textureUploadProbeInstalled =
-            TextureUploadProbe::TryInstall(gameModule, g_initLogger);
-        g_initLogger.Log(textureUploadProbeInstalled ? "texture upload probe installed" :
-                                                     "texture upload probe install failed");
-        JacketTransferProbe::Start(g_initLogger);
+        CustomJacketImageTransfer::Start(g_initLogger);
 
         const bool listenerInstalled =
             MusicPlayerInjection::TryInstall(gameModule, g_initLogger);

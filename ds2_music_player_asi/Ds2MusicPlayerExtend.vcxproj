@@ -113,7 +113,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CustomJacketInternal.h" />
-    <ClInclude Include="CustomJacketPixelTest.h" />
+    <ClInclude Include="CustomJacketInstaller.h" />
     <ClInclude Include="DynamicTrackTitleSync.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="GameSymbols.h" />
@@ -121,7 +121,7 @@
     <ClInclude Include="GeneratedSourcePluginTemplates.h" />
     <ClInclude Include="Hooks.h" />
     <ClInclude Include="HookUtils.h" />
-    <ClInclude Include="JacketTransferProbe.h" />
+    <ClInclude Include="CustomJacketImageTransfer.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="MusicPlayerInjection.h" />
     <ClInclude Include="PlayEntryMonitor.h" />
@@ -134,8 +134,6 @@
     <ClInclude Include="SpecialTrackIds.h" />
     <ClInclude Include="SpecialTrackInjection.h" />
     <ClInclude Include="TextureBindProbe.h" />
-    <ClInclude Include="TextureUploadHistory.h" />
-    <ClInclude Include="TextureUploadProbe.h" />
     <ClInclude Include="WwisePluginRegistration.h" />
   </ItemGroup>
   <ItemGroup>
@@ -147,15 +145,11 @@
     <ClCompile Include="CustomJacketClone.cpp" />
     <ClCompile Include="CustomJacketD3D12Create.cpp" />
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
-    <ClCompile Include="CustomJacketD3D12Upload.cpp" />
+    <ClCompile Include="CustomJacketD3D12Init.cpp" />
     <ClCompile Include="CustomJacketD3D12UploadRgba.cpp" />
     <ClCompile Include="CustomJacketImageDecodeWic.cpp" />
     <ClCompile Include="CustomJacketDXBCPageProbe.cpp" />
     <ClCompile Include="CustomJacketPointerProbe.cpp" />
-    <ClCompile Include="CustomJacketPixelBufferCompare.cpp" />
-    <ClCompile Include="CustomJacketPixelBufferExternalCompare.cpp" />
-    <ClCompile Include="CustomJacketPixelBufferGpuResource.cpp" />
-    <ClCompile Include="CustomJacketPixelBufferHandleSlots.cpp" />
     <ClCompile Include="CustomJacketProbe.cpp" />
     <ClCompile Include="CustomJacketResourceProbe.cpp" />
     <ClCompile Include="CustomJacketResourceTrackProbe.cpp" />
@@ -163,7 +157,7 @@
     <ClCompile Include="CustomJacketTextureOverrideProbe.cpp" />
     <ClCompile Include="CustomJacketTextureDx12Bind.cpp" />
     <ClCompile Include="CustomJacketUiClone.cpp" />
-    <ClCompile Include="CustomJacketPixelTest.cpp" />
+    <ClCompile Include="CustomJacketInstaller.cpp" />
     <ClCompile Include="CustomJacketPixelBufferClone.cpp" />
     <ClCompile Include="DynamicTrackTitleSync.cpp" />
     <ClCompile Include="dllmain.cpp" />
@@ -171,7 +165,7 @@
     <ClCompile Include="GeneratedSourcePluginTemplates.cpp" />
     <ClCompile Include="Hooks.cpp" />
     <ClCompile Include="HookUtils.cpp" />
-    <ClCompile Include="JacketTransferProbe.cpp" />
+    <ClCompile Include="CustomJacketImageTransfer.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MusicPlayerInjection.cpp" />
     <ClCompile Include="PlayEntryMonitor.cpp" />
@@ -182,8 +176,6 @@
     <ClCompile Include="SpecialTrackHelpers.cpp" />
     <ClCompile Include="SpecialTrackInjection.cpp" />
     <ClCompile Include="TextureBindProbe.cpp" />
-    <ClCompile Include="TextureUploadHistory.cpp" />
-    <ClCompile Include="TextureUploadProbe.cpp" />
     <ClCompile Include="WwisePluginRegistration.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

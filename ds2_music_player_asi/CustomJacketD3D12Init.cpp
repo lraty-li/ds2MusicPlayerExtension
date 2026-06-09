@@ -74,7 +74,7 @@ void EncodeBc7Mode6Solid(uint8_t* block, uint8_t r, uint8_t g, uint8_t b)
     }
 }
 
-void FillBc7Blocks(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp)
+void FillNeutralBc7Blocks(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp)
 {
     const uint32_t blocksWide = (fp.Footprint.Width + 3) / 4;
     const uint32_t blocksHigh = (fp.Footprint.Height + 3) / 4;
@@ -83,22 +83,17 @@ void FillBc7Blocks(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp)
         auto* row = dst + fp.Offset + static_cast<uint64_t>(y) * fp.Footprint.RowPitch;
         for (uint32_t x = 0; x < blocksWide; ++x)
         {
-            auto* block = row + x * 16;
-            const bool alt = ((x / 8 + y / 6) & 1) != 0;
-            const bool left = x < blocksWide / 2;
-            EncodeBc7Mode6Solid(block,
-                left ? 0xFF : 0x21,
-                alt ? 0xFF : 0x21,
-                (!left && !alt) ? 0xFF : 0x21);
+            EncodeBc7Mode6Solid(row + x * 16, 0, 0, 0);
         }
     }
 }
 
-void LogUpload(const char* phase, const D3D12_RESOURCE_DESC& desc,
+void LogFailure(const char* phase, const D3D12_RESOURCE_DESC& desc,
     uint64_t uploadBytes, HRESULT hr, const Logger& logger)
 {
+    if (SUCCEEDED(hr)) return;
     std::ostringstream oss;
-    oss << "txdx12upload " << phase
+    oss << "txdx12init " << phase
         << " width=" << desc.Width
         << " height=" << desc.Height
         << " format=" << desc.Format
@@ -200,20 +195,20 @@ HRESULT SubmitCopy(ID3D12Device* device, ID3D12Resource* target,
 
 namespace CustomJacketInternal
 {
-bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logger)
+bool TryInitializeCustomJacketD3D12Placeholder(uint64_t resource, const Logger& logger)
 {
     auto* target = reinterpret_cast<ID3D12Resource*>(resource);
     D3D12_RESOURCE_DESC desc = target->GetDesc();
     if (desc.Format != DXGI_FORMAT_BC7_UNORM
         && desc.Format != DXGI_FORMAT_BC7_UNORM_SRGB)
     {
-        LogUpload("skipped-format", desc, 0, E_INVALIDARG, logger);
+        LogFailure("skipped-format", desc, 0, E_INVALIDARG, logger);
         return false;
     }
 
     ID3D12Device* device = nullptr;
     HRESULT hr = target->GetDevice(__uuidof(ID3D12Device), reinterpret_cast<void**>(&device));
-    if (FAILED(hr) || !device) { LogUpload("get-device", desc, 0, hr, logger); return false; }
+    if (FAILED(hr) || !device) { LogFailure("get-device", desc, 0, hr, logger); return false; }
 
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = {};
     UINT rows = 0;
@@ -229,7 +224,7 @@ bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logg
         __uuidof(ID3D12Resource), reinterpret_cast<void**>(&upload));
     if (FAILED(hr) || !upload)
     {
-        LogUpload("create-upload", desc, uploadBytes, hr, logger);
+        LogFailure("create-upload", desc, uploadBytes, hr, logger);
         device->Release();
         return false;
     }
@@ -239,12 +234,12 @@ bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logg
     if (SUCCEEDED(hr) && mapped)
     {
         memset(mapped, 0, static_cast<size_t>(uploadBytes));
-        FillBc7Blocks(mapped, fp);
+        FillNeutralBc7Blocks(mapped, fp);
     }
     upload->Unmap(0, nullptr);
-    LogUpload("prepared-bc7", desc, uploadBytes, hr, logger);
+    LogFailure("prepared-bc7", desc, uploadBytes, hr, logger);
     if (SUCCEEDED(hr)) hr = SubmitCopy(device, target, upload, fp);
-    LogUpload("copy", desc, uploadBytes, hr, logger);
+    LogFailure("copy", desc, uploadBytes, hr, logger);
 
     upload->Release();
     device->Release();

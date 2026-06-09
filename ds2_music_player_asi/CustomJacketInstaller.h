@@ -2,7 +2,7 @@
 
 #include "Logger.h"
 
-namespace CustomJacketPixelTest
+namespace CustomJacketInstaller
 {
 void Reset();
 void TrackCreated(void* track);

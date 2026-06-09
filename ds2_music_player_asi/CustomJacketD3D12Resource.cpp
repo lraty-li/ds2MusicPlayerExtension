@@ -183,7 +183,7 @@ bool TryBindTextureDx12CloneWrapperToNewResource(uint64_t textureDx12,
         << " sourceResource=" << H(sourceResource);
     logger.Log(begin.str());
 
-    TryUploadCustomJacketD3D12TestPattern(ownResource, logger);
+    TryInitializeCustomJacketD3D12Placeholder(ownResource, logger);
     Write64(cloneWrapper + 0x08, ownResource);
     LogState("pre", textureDx12, logger);
     ClearCopiedResourceState(textureDx12);

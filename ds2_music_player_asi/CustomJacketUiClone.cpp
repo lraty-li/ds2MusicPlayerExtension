@@ -87,12 +87,6 @@ uint8_t* CloneTexture(uint64_t sourceTexture, const Logger& logger)
     uint64_t noDataPixelBuffer = 0;
     if (CustomJacketInternal::TryGetAlternateJacketPixelBuffer(noDataPixelBuffer, logger))
     {
-        CustomJacketInternal::DumpPixelBufferComparisonOnce(pixelBuffer,
-            noDataPixelBuffer, reinterpret_cast<uint64_t>(pixelBufferCopy), cloneSize, logger);
-        CustomJacketInternal::DumpPixelBufferExternalBlocksOnce(pixelBuffer,
-            noDataPixelBuffer, reinterpret_cast<uint64_t>(pixelBufferCopy), cloneSize, logger);
-        CustomJacketInternal::DumpPixelBufferGpuResourceOnce(pixelBuffer,
-            noDataPixelBuffer, reinterpret_cast<uint64_t>(pixelBufferCopy), logger);
         CustomJacketInternal::TryBindTextureDx12CloneWrapperToNewResource(
             reinterpret_cast<uint64_t>(pixelBufferCopy), noDataPixelBuffer,
             "DefaultConstructionHoloImageTexture", logger);

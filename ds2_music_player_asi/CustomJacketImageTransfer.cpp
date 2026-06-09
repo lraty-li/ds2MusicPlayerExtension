@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "JacketTransferProbe.h"
+#include "CustomJacketImageTransfer.h"
 
 #include "CustomJacketInternal.h"
 #include "HookUtils.h"
@@ -226,7 +226,7 @@ DWORD WINAPI ProbeThread(LPVOID)
 }
 }
 
-namespace JacketTransferProbe
+namespace CustomJacketImageTransfer
 {
 void Start(const Logger& logger)
 {
@@ -236,7 +236,7 @@ void Start(const Logger& logger)
     if (thread)
     {
         CloseHandle(thread);
-        Log("jacket transfer probe started");
+        Log("jacket image transfer started");
     }
 }
 }

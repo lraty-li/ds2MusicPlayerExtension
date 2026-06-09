@@ -2,7 +2,7 @@
 
 #include "SpecialTrackInjection.h"
 
-#include "CustomJacketPixelTest.h"
+#include "CustomJacketInstaller.h"
 #include "DynamicTrackTitleSync.h"
 #include "SpecialTrackIds.h"
 #include "SpecialTrackHelpers.h"
@@ -212,7 +212,7 @@ void Reset()
 {
     g_injected = false;
     DynamicTrackTitleSync::Reset();
-    CustomJacketPixelTest::Reset();
+    CustomJacketInstaller::Reset();
 }
 
 bool Inject(void* systemResource, const Logger& logger)
@@ -293,7 +293,7 @@ bool Inject(void* systemResource, const Logger& logger)
         << " AllTracks " << std::dec << oldCount << "->" << newCount;
     Log(oss.str());
     DynamicTrackTitleSync::Start(newTrack, newAlbum, logger);
-    CustomJacketPixelTest::TrackCreated(newTrack);
+    CustomJacketInstaller::TrackCreated(newTrack);
     g_injected = true;
     return true;
 }

@@ -2,7 +2,7 @@
 
 #include "Logger.h"
 
-namespace JacketTransferProbe
+namespace CustomJacketImageTransfer
 {
 void Start(const Logger& logger);
 }

@@ -2,7 +2,7 @@
 
 #include "MusicPlayerInjection.h"
 
-#include "CustomJacketPixelTest.h"
+#include "CustomJacketInstaller.h"
 #include "DecimaTypes.h"
 #include "FailFast.h"
 #include "PatternScan.h"
@@ -85,7 +85,7 @@ public:
             else if (typeName && strcmp(typeName, "DSUICatalogueImageResource") == 0)
             {
                 Log("OnFinishLoadGroup: DSUICatalogueImageResource found");
-                CustomJacketPixelTest::TryApply(object, *g_logger);
+                CustomJacketInstaller::TryApply(object, *g_logger);
             }
         }
     }
@@ -103,7 +103,7 @@ public:
             if (typeName && strcmp(typeName, "DSMusicPlayerSystemResource") == 0)
             {
                 SpecialTrackInjection::Reset();
-                CustomJacketPixelTest::Reset();
+                CustomJacketInstaller::Reset();
                 Log("DSMusicPlayerSystemResource unloading; injection reset");
             }
         }
