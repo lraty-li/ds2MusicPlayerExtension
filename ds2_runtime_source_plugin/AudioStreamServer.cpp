@@ -19,7 +19,7 @@
 namespace
 {
 constexpr uint16_t kPort = 47832;
-constexpr uint32_t kMaxFrameBytes = 2 * 1024 * 1024;
+constexpr uint32_t kMaxFrameBytes = 4 * 1024 * 1024;
 
 std::mutex g_socketMutex;
 HANDLE g_thread = nullptr;

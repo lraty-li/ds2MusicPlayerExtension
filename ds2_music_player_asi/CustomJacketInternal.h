@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 struct CustomJacketSlot
 {
@@ -62,7 +63,11 @@ bool TryBindTextureDx12CloneWrapperToSourceResource(uint64_t textureDx12,
 bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     uint64_t& outResource, const Logger& logger);
 bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logger);
-bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
+bool TryDecodeCustomJacketImageToRgba(const uint8_t* encoded, uint32_t encodedBytes,
+    uint32_t targetW, uint32_t targetH, std::vector<uint8_t>& rgba,
+    uint32_t& sourceW, uint32_t& sourceH, uint32_t& drawW, uint32_t& drawH,
+    const Logger& logger);
+bool TryUploadCustomJacketD3D12Pixels(uint64_t resource, const uint8_t* rgba,
     uint32_t width, uint32_t height, const Logger& logger);
 bool TryEncodeExternalBc7ToRows(uint8_t* dst, uint32_t dstW, uint32_t dstH,
     uint32_t rowPitch, const uint8_t* rgba, uint32_t srcW, uint32_t srcH,

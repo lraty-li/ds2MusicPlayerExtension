@@ -63,8 +63,8 @@ D3D12_HEAP_PROPERTIES DefaultHeapProps()
 D3D12_RESOURCE_DESC NormalizeTextureDesc(D3D12_RESOURCE_DESC desc)
 {
     desc.Alignment = 0;
-    desc.Width = 512;
-    desc.Height = 512;
+    desc.Width = 640;
+    desc.Height = 640;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.SampleDesc.Count = desc.SampleDesc.Count ? desc.SampleDesc.Count : 1;
@@ -106,11 +106,11 @@ bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     const D3D12_RESOURCE_STATES common = D3D12_RESOURCE_STATE_COMMON;
     const D3D12_RESOURCE_STATES copyDest = D3D12_RESOURCE_STATE_COPY_DEST;
 
-    bool ok = TryCreate(device, "jacket-512-common", texDesc, defaultHeap,
+    bool ok = TryCreate(device, "jacket-640-common", texDesc, defaultHeap,
         D3D12_HEAP_FLAG_NONE, common, &created, logger);
     if (!ok)
     {
-        ok = TryCreate(device, "jacket-512-copydest", texDesc, defaultHeap,
+        ok = TryCreate(device, "jacket-640-copydest", texDesc, defaultHeap,
             D3D12_HEAP_FLAG_NONE, copyDest, &created, logger);
     }
     if (!ok)

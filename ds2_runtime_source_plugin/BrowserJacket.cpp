@@ -14,7 +14,7 @@
 
 namespace
 {
-constexpr uint32_t kMaxJacketBytes = 1024 * 1024;
+constexpr uint32_t kMaxJacketBytes = 2 * 1024 * 1024;
 std::mutex g_mutex;
 std::vector<uint8_t> g_bytes;
 std::string g_mime;
@@ -97,7 +97,7 @@ void SetStatus(const char* stage, uint32_t bytes,
 void LogUpdate(uint32_t bytes, const std::string& mime, const std::string& source)
 {
     char line[256] = {};
-    sprintf_s(line, "browser jacket bytes=%u mime=\"%s\" source=\"%s\"",
+    sprintf_s(line, "browser jacket image bytes=%u mime=\"%s\" source=\"%s\"",
         bytes, mime.c_str(), source.c_str());
     PluginLog::Write(line);
 }

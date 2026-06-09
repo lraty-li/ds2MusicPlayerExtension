@@ -112,6 +112,9 @@
     <ClCompile Include="CustomJacketD3D12UploadRgba.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CustomJacketImageDecodeWic.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="CustomJacketPixelTest.cpp">
       <Filter>源文件</Filter>
     </ClCompile>

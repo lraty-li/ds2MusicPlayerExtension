@@ -43,11 +43,11 @@ const char* FillBc7FromRgba(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRI
     if (CustomJacketInternal::TryEncodeExternalBc7ToRows(target, dstW, dstH,
         rowPitch, rgba, srcW, srcH, logger))
     {
-        return "prepared-bc7e-rgba";
+        return "prepared-bc7e-pixels";
     }
     CustomJacketInternal::FillFallbackBc7FromRgba(dst, fp.Offset, dstW, dstH,
         rowPitch, rgba, srcW, srcH);
-    return "prepared-bc7-fallback-rgba";
+    return "prepared-bc7-fallback-pixels";
 }
 
 D3D12_RESOURCE_BARRIER Barrier(ID3D12Resource* res,
@@ -129,7 +129,7 @@ void LogUpload(const char* phase, const D3D12_RESOURCE_DESC& desc,
     uint64_t uploadBytes, HRESULT hr, const Logger& logger)
 {
     std::ostringstream oss;
-    oss << "txdx12rgba " << phase << " width=" << desc.Width
+    oss << "txdx12image " << phase << " width=" << desc.Width
         << " height=" << desc.Height << " format=" << desc.Format
         << " uploadBytes=" << uploadBytes << " hr=" << H(uint32_t(hr));
     logger.Log(oss.str());
@@ -138,7 +138,7 @@ void LogUpload(const char* phase, const D3D12_RESOURCE_DESC& desc,
 
 namespace CustomJacketInternal
 {
-bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
+bool TryUploadCustomJacketD3D12Pixels(uint64_t resource, const uint8_t* rgba,
     uint32_t width, uint32_t height, const Logger& logger)
 {
     if (!resource || !rgba || width == 0 || height == 0) return false;
@@ -163,7 +163,7 @@ bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
         reinterpret_cast<void**>(&upload));
     if (FAILED(hr) || !upload) { device->Release(); LogUpload("create-upload", desc, uploadBytes, hr, logger); return false; }
     uint8_t* mapped = nullptr;
-    const char* preparedPhase = "prepared-bc7-rgba";
+    const char* preparedPhase = "prepared-bc7-pixels";
     hr = upload->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
     if (SUCCEEDED(hr) && mapped)
     {
@@ -173,7 +173,7 @@ bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
     upload->Unmap(0, nullptr);
     LogUpload(preparedPhase, desc, uploadBytes, hr, logger);
     if (SUCCEEDED(hr)) hr = CopyUpload(device, target, upload, fp);
-    LogUpload("copy-rgba", desc, uploadBytes, hr, logger);
+    LogUpload("copy-pixels", desc, uploadBytes, hr, logger);
     upload->Release();
     device->Release();
     return SUCCEEDED(hr);

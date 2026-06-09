@@ -149,6 +149,7 @@
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
     <ClCompile Include="CustomJacketD3D12Upload.cpp" />
     <ClCompile Include="CustomJacketD3D12UploadRgba.cpp" />
+    <ClCompile Include="CustomJacketImageDecodeWic.cpp" />
     <ClCompile Include="CustomJacketDXBCPageProbe.cpp" />
     <ClCompile Include="CustomJacketPointerProbe.cpp" />
     <ClCompile Include="CustomJacketPixelBufferCompare.cpp" />

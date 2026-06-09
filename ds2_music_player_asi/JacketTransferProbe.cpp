@@ -20,10 +20,9 @@ using ReadStatusFn = int(__cdecl*)(unsigned int*, char*, unsigned int,
     char*, unsigned int, char*, unsigned int);
 
 constexpr DWORD kPollMs = 1000;
-constexpr unsigned int kRgbaWidth = 512;
-constexpr unsigned int kRgbaHeight = 512;
-constexpr unsigned int kRgbaBytes = kRgbaWidth * kRgbaHeight * 4;
-constexpr unsigned int kMaxJacketBytes = kRgbaBytes;
+constexpr unsigned int kTargetWidth = 640;
+constexpr unsigned int kTargetHeight = 640;
+constexpr unsigned int kMaxJacketBytes = 2 * 1024 * 1024;
 
 std::atomic<bool> g_started{false};
 Logger* g_logger = nullptr;
@@ -31,10 +30,12 @@ ReadInfoFn g_readInfo = nullptr;
 ReadBytesFn g_readBytes = nullptr;
 ReadStatusFn g_readStatus = nullptr;
 std::mutex g_pendingMutex;
-std::vector<uint8_t> g_pendingRgba;
+std::vector<uint8_t> g_pendingImage;
+std::string g_pendingMime;
 unsigned int g_pendingVersion = 0;
 uint64_t g_uploadedResource = 0;
 unsigned int g_uploadedVersion = 0;
+unsigned int g_failedVersion = 0;
 
 void Log(const std::string& text)
 {
@@ -66,20 +67,19 @@ std::string HexPreview(const std::vector<uint8_t>& data)
     return oss.str();
 }
 
-void StorePendingRgba(const std::vector<uint8_t>& buffer, unsigned int version)
+void StorePendingImage(const std::vector<uint8_t>& buffer, unsigned int version,
+    const char* mime)
 {
     std::lock_guard<std::mutex> lock(g_pendingMutex);
-    g_pendingRgba = buffer;
+    g_pendingImage = buffer;
+    g_pendingMime = mime ? mime : "";
     g_pendingVersion = version;
 }
 
-bool UploadRgbaToActiveResource(const std::vector<uint8_t>& buffer,
-    unsigned int version, unsigned int written, const char* reason)
+bool DecodeAndUploadToActiveResource(const std::vector<uint8_t>& buffer,
+    unsigned int version, unsigned int written, const char* mime, const char* reason)
 {
-    if (written != kRgbaBytes || buffer.size() != kRgbaBytes)
-    {
-        return false;
-    }
+    if (buffer.empty() || written != buffer.size() || written > kMaxJacketBytes) return false;
     const uint64_t resource = CustomJacketInternal::GetActiveCustomJacketD3D12Resource();
     if (!resource)
     {
@@ -89,12 +89,29 @@ bool UploadRgbaToActiveResource(const std::vector<uint8_t>& buffer,
     {
         return true;
     }
-    const bool ok = CustomJacketInternal::TryUploadCustomJacketD3D12Rgba(
-        resource, buffer.data(), kRgbaWidth, kRgbaHeight, *g_logger);
+    if (version == g_failedVersion)
+    {
+        return false;
+    }
+
+    std::vector<uint8_t> rgba;
+    unsigned int sourceW = 0;
+    unsigned int sourceH = 0;
+    unsigned int drawW = 0;
+    unsigned int drawH = 0;
+    const bool decoded = CustomJacketInternal::TryDecodeCustomJacketImageToRgba(
+        buffer.data(), written, kTargetWidth, kTargetHeight, rgba,
+        sourceW, sourceH, drawW, drawH, *g_logger);
+    const bool ok = decoded && CustomJacketInternal::TryUploadCustomJacketD3D12Pixels(
+        resource, rgba.data(), kTargetWidth, kTargetHeight, *g_logger);
     std::ostringstream oss;
-    oss << "jacket rgba upload " << (ok ? "ok" : "failed")
+    oss << "jacket image upload " << (ok ? "ok" : "failed")
         << " resource=" << HookUtils::HexU64(resource)
-        << " bytes=" << written
+        << " encodedBytes=" << written
+        << " target=" << kTargetWidth << "x" << kTargetHeight
+        << " source=" << sourceW << "x" << sourceH
+        << " draw=" << drawW << "x" << drawH
+        << " mime=\"" << (mime ? mime : "") << "\""
         << " reason=" << (reason ? reason : "");
     Log(oss.str());
     if (ok)
@@ -102,35 +119,41 @@ bool UploadRgbaToActiveResource(const std::vector<uint8_t>& buffer,
         g_uploadedResource = resource;
         g_uploadedVersion = version;
     }
+    else
+    {
+        g_failedVersion = version;
+    }
     return ok;
 }
 
-void TryUploadRgbaJacket(const std::vector<uint8_t>& buffer,
+void TryUploadImageJacket(const std::vector<uint8_t>& buffer,
     unsigned int version, unsigned int written, const char* mime)
 {
-    if (strcmp(mime, "application/x-ds2-rgba") != 0 || written != kRgbaBytes)
+    if (written == 0 || written > kMaxJacketBytes)
     {
         return;
     }
-    StorePendingRgba(buffer, version);
-    if (!UploadRgbaToActiveResource(buffer, version, written, "new"))
+    StorePendingImage(buffer, version, mime);
+    if (!DecodeAndUploadToActiveResource(buffer, version, written, mime, "new"))
     {
-        Log("jacket rgba upload deferred: active resource missing");
+        Log("jacket image upload deferred: active resource missing or decode failed");
     }
 }
 
-void TryUploadPendingRgba()
+void TryUploadPendingImage()
 {
     std::vector<uint8_t> buffer;
+    std::string mime;
     unsigned int version = 0;
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        if (g_pendingRgba.empty()) return;
-        buffer = g_pendingRgba;
+        if (g_pendingImage.empty()) return;
+        buffer = g_pendingImage;
+        mime = g_pendingMime;
         version = g_pendingVersion;
     }
-    UploadRgbaToActiveResource(buffer, version, static_cast<unsigned int>(buffer.size()),
-        "pending");
+    DecodeAndUploadToActiveResource(buffer, version,
+        static_cast<unsigned int>(buffer.size()), mime.c_str(), "pending");
 }
 
 DWORD WINAPI ProbeThread(LPVOID)
@@ -166,11 +189,11 @@ DWORD WINAPI ProbeThread(LPVOID)
             Log(oss.str());
             if (readVersion > 0)
             {
-                TryUploadRgbaJacket(buffer, version, written, mime);
+                TryUploadImageJacket(buffer, version, written, mime);
             }
             lastVersion = version;
         }
-        TryUploadPendingRgba();
+        TryUploadPendingImage();
         if (g_readStatus)
         {
             unsigned int statusVersion = 0;
