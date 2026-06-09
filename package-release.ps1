@@ -4,7 +4,8 @@ param(
     [string]$OutputDir = "",
     [string]$PackageVersion = "",
     [switch]$SkipBuild,
-    [switch]$SkipAsiLoaderDownload
+    [switch]$SkipAsiLoaderDownload,
+    [switch]$AllowMissingBc7e
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,7 @@ $scriptsDir = Join-Path $gameRoot "scripts"
 $extensionDir = Join-Path $stageRoot "browser-extension"
 $cacheDir = Join-Path $buildRoot "cache"
 $binDir = Join-Path $buildRoot "bin"
+$bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
 $asiLoaderUrl =
     "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/version-x64.zip"
 
@@ -81,6 +83,21 @@ function Copy-RequiredFile([string]$Source, [string]$Destination) {
     }
     New-Item -ItemType Directory -Path (Split-Path $Destination -Parent) -Force | Out-Null
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
+}
+
+function Assert-Bc7eDll([string]$Path) {
+    if (-not (Test-Path $Path)) {
+        if ($AllowMissingBc7e) {
+            Write-Host "BC7E_DLL_NOT_FOUND fallback encoder will be used"
+            return $false
+        }
+        throw "Missing BC7E DLL. Run tools\build-bc7e.ps1 first."
+    }
+    & (Join-Path $repoRoot "tools\verify-bc7e.ps1") -DllPath $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "BC7E DLL verification failed: $Path"
+    }
+    return $true
 }
 
 function Copy-BrowserExtension {
@@ -151,6 +168,9 @@ Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
     (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
 Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
     (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
+if (Assert-Bc7eDll $bc7eDll) {
+    Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
+}
 
 if (-not $SkipAsiLoaderDownload) {
     Copy-AsiLoader (Get-AsiLoaderZip)

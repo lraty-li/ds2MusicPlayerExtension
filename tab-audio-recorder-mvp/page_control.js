@@ -1,5 +1,5 @@
 (function installDs2PageMediaControl() {
-  const version = 6;
+  const version = 7;
   window.__ds2PageMediaControlVersion = version;
   window.__ds2MediaAdapters = [];
 
@@ -134,6 +134,7 @@
   }
 
   function readDocumentArtwork() {
+    const candidates = [];
     const selectors = [
       'meta[property="og:image"]',
       'meta[property="og:image:secure_url"]',
@@ -144,26 +145,69 @@
     for (const selector of selectors) {
       const element = document.querySelector(selector);
       const value = element && (element.content || element.href);
-      if (value) return { url: new URL(value, location.href).href, mime: "", size: 0 };
+      if (value) candidates.push({ url: new URL(value, location.href).href, mime: "", size: 0 });
     }
 
     const video = document.querySelector("video[poster]");
     if (video && video.poster) {
-      return { url: new URL(video.poster, location.href).href, mime: "", size: 0 };
+      candidates.push({ url: new URL(video.poster, location.href).href, mime: "", size: 0 });
     }
-    return readLargestImage();
+    const image = readLargestImage();
+    if (image) candidates.push(image);
+    return pickBestJacket(candidates);
   }
 
   function readLargestImage() {
     let best = null;
     for (const image of document.querySelectorAll("img")) {
-      const src = image.currentSrc || image.src;
-      if (!src) continue;
-      const size = (image.naturalWidth || image.width || 0) *
-        (image.naturalHeight || image.height || 0);
-      if (size >= 4096 && (!best || size > best.size)) {
-        best = { url: new URL(src, location.href).href, mime: "", size };
+      const candidate = readImageCandidate(image);
+      if (!candidate) continue;
+      const size = candidate.size || 0;
+      if (size >= 4096 && (!best || size > best.size)) best = candidate;
+    }
+    return best;
+  }
+
+  function readImageCandidate(image) {
+    const naturalSize = (image.naturalWidth || image.width || 0) *
+      (image.naturalHeight || image.height || 0);
+    let best = image.currentSrc || image.src ?
+      { url: image.currentSrc || image.src, size: naturalSize } : null;
+    for (const candidate of parseSrcset(image.srcset, naturalSize)) {
+      if (!best || candidate.size > best.size) best = candidate;
+    }
+    return best && best.url ? {
+      url: new URL(best.url, location.href).href,
+      mime: "",
+      size: best.size || naturalSize
+    } : null;
+  }
+
+  function parseSrcset(srcset, naturalSize) {
+    const result = [];
+    for (const item of String(srcset || "").split(",")) {
+      const parts = item.trim().split(/\s+/);
+      if (!parts[0]) continue;
+      const descriptor = parts[1] || "";
+      let size = naturalSize;
+      if (descriptor.endsWith("w")) {
+        const width = Number(descriptor.slice(0, -1)) || 0;
+        size = width * width;
+      } else if (descriptor.endsWith("x")) {
+        const scale = Number(descriptor.slice(0, -1)) || 1;
+        size = Math.round(naturalSize * scale * scale);
       }
+      result.push({ url: parts[0], size });
+    }
+    return result;
+  }
+
+  function pickBestJacket(candidates) {
+    let best = null;
+    for (const candidate of candidates) {
+      if (!candidate || !candidate.url) continue;
+      const rank = candidate.size || 1;
+      if (!best || rank > best.rank) best = Object.assign({ rank }, candidate);
     }
     return best;
   }
@@ -183,8 +227,8 @@
     for (const item of items) {
       if (!item || !item.title) continue;
       if (item.jacket && item.jacket.url) {
-        const sourceBoost = item.jacket.source === "mediaSession" ? 1000000 : 0;
-        const jacketRank = sourceBoost + item.score * 1000 + (item.jacket.size || 0);
+        const sourceBoost = item.jacket.source === "mediaSession" ? 30000 : 0;
+        const jacketRank = sourceBoost + item.score * 100 + (item.jacket.size || 0);
         if (!bestJacket || jacketRank > bestJacket.rank) {
           bestJacket = { rank: jacketRank, jacket: item.jacket };
         }

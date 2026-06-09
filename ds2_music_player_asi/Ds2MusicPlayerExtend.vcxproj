@@ -141,6 +141,8 @@
   <ItemGroup>
     <ClCompile Include="CustomJacketActiveResource.cpp" />
     <ClCompile Include="CustomJacketAltTextureProbe.cpp" />
+    <ClCompile Include="CustomJacketBc7External.cpp" />
+    <ClCompile Include="CustomJacketBc7Fallback.cpp" />
     <ClCompile Include="CustomJacketBcn.cpp" />
     <ClCompile Include="CustomJacketClone.cpp" />
     <ClCompile Include="CustomJacketD3D12Create.cpp" />

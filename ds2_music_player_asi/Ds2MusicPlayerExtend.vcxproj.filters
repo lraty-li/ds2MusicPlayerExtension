@@ -88,6 +88,12 @@
     <ClCompile Include="CustomJacketAltTextureProbe.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CustomJacketBc7External.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketBc7Fallback.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="CustomJacketBcn.cpp">
       <Filter>源文件</Filter>
     </ClCompile>

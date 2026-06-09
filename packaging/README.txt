@@ -9,6 +9,7 @@ English
   <GameRoot>\version.dll
   <GameRoot>\scripts\Ds2MusicPlayerExtend.asi
   <GameRoot>\scripts\ds2_dll_music_resource.dll
+  <GameRoot>\scripts\ds2_jacket_bc7e.dll
 4. Browser extension:
    Open Chrome/Edge extensions page, enable Developer mode, choose Load
    unpacked, and select the browser-extension folder.
@@ -30,6 +31,7 @@ English
   <游戏根目录>\version.dll
   <游戏根目录>\scripts\Ds2MusicPlayerExtend.asi
   <游戏根目录>\scripts\ds2_dll_music_resource.dll
+  <游戏根目录>\scripts\ds2_jacket_bc7e.dll
 4. 浏览器扩展：
    打开 Chrome/Edge 扩展管理页，启用开发者模式，选择“加载已解压的扩展”，
    然后选择 browser-extension 文件夹。

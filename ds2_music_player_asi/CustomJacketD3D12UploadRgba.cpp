@@ -33,60 +33,21 @@ D3D12_RESOURCE_DESC BufferDesc(uint64_t size)
     return desc;
 }
 
-void PutBits(uint8_t* block, uint32_t& bitPos, uint64_t value, uint32_t bits)
+const char* FillBc7FromRgba(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp,
+    const uint8_t* rgba, uint32_t srcW, uint32_t srcH, const Logger& logger)
 {
-    for (uint32_t i = 0; i < bits; ++i, ++bitPos)
+    auto* target = dst + fp.Offset;
+    const uint32_t dstW = fp.Footprint.Width;
+    const uint32_t dstH = fp.Footprint.Height;
+    const uint32_t rowPitch = fp.Footprint.RowPitch;
+    if (CustomJacketInternal::TryEncodeExternalBc7ToRows(target, dstW, dstH,
+        rowPitch, rgba, srcW, srcH, logger))
     {
-        if ((value >> i) & 1) block[bitPos / 8] |= uint8_t(1u << (bitPos % 8));
+        return "prepared-bc7e-rgba";
     }
-}
-
-void EncodeBc7Solid(uint8_t* block, uint8_t r, uint8_t g, uint8_t b)
-{
-    memset(block, 0, 16);
-    r |= 1; g |= 1; b |= 1;
-    uint32_t bitPos = 0;
-    PutBits(block, bitPos, 0x40, 7);
-    PutBits(block, bitPos, r >> 1, 7); PutBits(block, bitPos, r >> 1, 7);
-    PutBits(block, bitPos, g >> 1, 7); PutBits(block, bitPos, g >> 1, 7);
-    PutBits(block, bitPos, b >> 1, 7); PutBits(block, bitPos, b >> 1, 7);
-    PutBits(block, bitPos, 0x7F, 7); PutBits(block, bitPos, 0x7F, 7);
-    PutBits(block, bitPos, 1, 1); PutBits(block, bitPos, 1, 1);
-    PutBits(block, bitPos, 0, 3);
-    for (uint32_t i = 1; i < 16; ++i) PutBits(block, bitPos, 0, 4);
-}
-
-void FillBc7FromRgba(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp,
-    const uint8_t* rgba, uint32_t srcW, uint32_t srcH)
-{
-    const uint32_t bw = (fp.Footprint.Width + 3) / 4;
-    const uint32_t bh = (fp.Footprint.Height + 3) / 4;
-    for (uint32_t by = 0; by < bh; ++by)
-    {
-        auto* row = dst + fp.Offset + uint64_t(by) * fp.Footprint.RowPitch;
-        for (uint32_t bx = 0; bx < bw; ++bx)
-        {
-            uint32_t r = 0, g = 0, b = 0, n = 0;
-            for (uint32_t yy = 0; yy < 4; ++yy)
-            {
-                const uint32_t dstY = by * 4 + yy;
-                if (dstY >= fp.Footprint.Height) continue;
-                const uint32_t y = uint32_t((uint64_t(dstY) * srcH) /
-                    fp.Footprint.Height);
-                for (uint32_t xx = 0; xx < 4; ++xx)
-                {
-                    const uint32_t dstX = bx * 4 + xx;
-                    if (dstX >= fp.Footprint.Width) continue;
-                    const uint32_t x = uint32_t((uint64_t(dstX) * srcW) /
-                        fp.Footprint.Width);
-                    const uint8_t* p = rgba + (uint64_t(y) * srcW + x) * 4;
-                    r += p[0]; g += p[1]; b += p[2]; ++n;
-                }
-            }
-            if (!n) n = 1;
-            EncodeBc7Solid(row + bx * 16, uint8_t(r / n), uint8_t(g / n), uint8_t(b / n));
-        }
-    }
+    CustomJacketInternal::FillFallbackBc7FromRgba(dst, fp.Offset, dstW, dstH,
+        rowPitch, rgba, srcW, srcH);
+    return "prepared-bc7-fallback-rgba";
 }
 
 D3D12_RESOURCE_BARRIER Barrier(ID3D12Resource* res,
@@ -202,14 +163,15 @@ bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
         reinterpret_cast<void**>(&upload));
     if (FAILED(hr) || !upload) { device->Release(); LogUpload("create-upload", desc, uploadBytes, hr, logger); return false; }
     uint8_t* mapped = nullptr;
+    const char* preparedPhase = "prepared-bc7-rgba";
     hr = upload->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
     if (SUCCEEDED(hr) && mapped)
     {
         memset(mapped, 0, size_t(uploadBytes));
-        FillBc7FromRgba(mapped, fp, rgba, width, height);
+        preparedPhase = FillBc7FromRgba(mapped, fp, rgba, width, height, logger);
     }
     upload->Unmap(0, nullptr);
-    LogUpload("prepared-bc7-rgba", desc, uploadBytes, hr, logger);
+    LogUpload(preparedPhase, desc, uploadBytes, hr, logger);
     if (SUCCEEDED(hr)) hr = CopyUpload(device, target, upload, fp);
     LogUpload("copy-rgba", desc, uploadBytes, hr, logger);
     upload->Release();

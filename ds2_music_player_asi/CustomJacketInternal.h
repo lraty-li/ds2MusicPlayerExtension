@@ -64,6 +64,12 @@ bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
 bool TryUploadCustomJacketD3D12TestPattern(uint64_t resource, const Logger& logger);
 bool TryUploadCustomJacketD3D12Rgba(uint64_t resource, const uint8_t* rgba,
     uint32_t width, uint32_t height, const Logger& logger);
+bool TryEncodeExternalBc7ToRows(uint8_t* dst, uint32_t dstW, uint32_t dstH,
+    uint32_t rowPitch, const uint8_t* rgba, uint32_t srcW, uint32_t srcH,
+    const Logger& logger);
+void FillFallbackBc7FromRgba(uint8_t* dst, uint64_t dstOffset,
+    uint32_t dstW, uint32_t dstH, uint32_t rowPitch,
+    const uint8_t* rgba, uint32_t srcW, uint32_t srcH);
 void SetActiveCustomJacketD3D12Resource(uint64_t resource);
 uint64_t GetActiveCustomJacketD3D12Resource();
 bool TryBindTextureDx12CloneWrapperToNewResource(uint64_t textureDx12,

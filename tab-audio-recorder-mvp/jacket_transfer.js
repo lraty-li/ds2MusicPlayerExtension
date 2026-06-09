@@ -37,7 +37,8 @@ async function sendJacket(jacket) {
       sendJacketStatus("bad_size", { url, source, bytes: blob && blob.size || 0 });
       return { ok: false, sent: false, error: "bad size" };
     }
-    const bytes = await convertArtworkToRgba(blob);
+    const conversion = await convertArtworkToRgba(blob);
+    const bytes = conversion && conversion.bytes;
     if (!bytes || bytes.length !== RGBA_JACKET_BYTES) {
       sendJacketStatus("rgba_bad_size", { url, source, bytes: bytes && bytes.length || 0 });
       return { ok: false, sent: false, error: "bad rgba size" };
@@ -51,10 +52,20 @@ async function sendJacket(jacket) {
       width: JACKET_WIDTH,
       height: JACKET_HEIGHT,
       bytes: bytes.length,
+      sourceWidth: conversion.sourceWidth,
+      sourceHeight: conversion.sourceHeight,
       data: bytesToBase64(bytes)
     };
-    sendJacketStatus("send_start", { url, source, mime, bytes: bytes.length });
+    const imageInfo = formatJacketImageInfo(conversion, jacket);
+    sendJacketStatus("send_start", {
+      url,
+      source,
+      mime,
+      bytes: bytes.length,
+      error: imageInfo
+    });
     socket.send(JSON.stringify(payload));
+    sendJacketStatus("sent", { url, source, mime, bytes: bytes.length, error: imageInfo });
     return { ok: true, sent: true, bytes: bytes.length, mime: payload.mime };
   } catch (error) {
     sendJacketStatus("error", {
@@ -68,6 +79,8 @@ async function sendJacket(jacket) {
 
 async function convertArtworkToRgba(blob) {
   const image = await createImageBitmap(blob);
+  const sourceWidth = image.width;
+  const sourceHeight = image.height;
   const canvas = document.createElement("canvas");
   canvas.width = JACKET_WIDTH;
   canvas.height = JACKET_HEIGHT;
@@ -81,7 +94,21 @@ async function convertArtworkToRgba(blob) {
   const y = Math.floor((JACKET_HEIGHT - height) / 2);
   ctx.drawImage(image, x, y, width, height);
   if (typeof image.close === "function") image.close();
-  return new Uint8Array(ctx.getImageData(0, 0, JACKET_WIDTH, JACKET_HEIGHT).data.buffer);
+  return {
+    bytes: new Uint8Array(ctx.getImageData(0, 0, JACKET_WIDTH, JACKET_HEIGHT).data.buffer),
+    sourceWidth,
+    sourceHeight,
+    drawWidth: width,
+    drawHeight: height
+  };
+}
+
+function formatJacketImageInfo(conversion, jacket) {
+  const declared = Number(jacket && jacket.size || 0);
+  const declaredText = declared > 0 ? ` declaredPixels=${declared}` : "";
+  return `source=${conversion.sourceWidth}x${conversion.sourceHeight} ` +
+    `draw=${conversion.drawWidth}x${conversion.drawHeight} ` +
+    `canvas=${JACKET_WIDTH}x${JACKET_HEIGHT}${declaredText}`;
 }
 
 function sendJacketStatus(stage, details) {
