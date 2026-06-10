@@ -53,7 +53,6 @@ bool TryBindTextureDx12CloneWrapperToSourceResource(uint64_t textureDx12,
     uint64_t sourceTextureDx12, const char* label, const Logger& logger);
 bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     uint64_t& outResource, const Logger& logger);
-bool TryInitializeCustomJacketD3D12Placeholder(uint64_t resource, const Logger& logger);
 bool TryDecodeCustomJacketImageToRgba(const uint8_t* encoded, uint32_t encodedBytes,
     uint32_t targetW, uint32_t targetH, std::vector<uint8_t>& rgba,
     uint32_t& sourceW, uint32_t& sourceH, uint32_t& drawW, uint32_t& drawH,

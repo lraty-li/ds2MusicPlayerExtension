@@ -83,17 +83,8 @@ bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     outResource = 0;
     auto* source = reinterpret_cast<ID3D12Resource*>(sourceResource);
     D3D12_RESOURCE_DESC rawDesc = source->GetDesc();
-    D3D12_HEAP_PROPERTIES rawHeapProps = {};
-    D3D12_HEAP_FLAGS rawHeapFlags = D3D12_HEAP_FLAG_NONE;
-    HRESULT hr = source->GetHeapProperties(&rawHeapProps, &rawHeapFlags);
-    if (FAILED(hr))
-    {
-        logger.Log("txdx12own create skipped: GetHeapProperties failed");
-        return false;
-    }
-
     ID3D12Device* device = nullptr;
-    hr = source->GetDevice(__uuidof(ID3D12Device), reinterpret_cast<void**>(&device));
+    HRESULT hr = source->GetDevice(__uuidof(ID3D12Device), reinterpret_cast<void**>(&device));
     if (FAILED(hr) || !device)
     {
         logger.Log("txdx12own create skipped: GetDevice failed");
@@ -103,26 +94,10 @@ bool TryCreateCustomJacketD3D12ResourceLike(uint64_t sourceResource,
     ID3D12Resource* created = nullptr;
     D3D12_RESOURCE_DESC texDesc = NormalizeTextureDesc(rawDesc);
     D3D12_HEAP_PROPERTIES defaultHeap = DefaultHeapProps();
-    const D3D12_RESOURCE_STATES common = D3D12_RESOURCE_STATE_COMMON;
-    const D3D12_RESOURCE_STATES copyDest = D3D12_RESOURCE_STATE_COPY_DEST;
+    const D3D12_RESOURCE_STATES shader = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
-    bool ok = TryCreate(device, "jacket-640-common", texDesc, defaultHeap,
-        D3D12_HEAP_FLAG_NONE, common, &created, logger);
-    if (!ok)
-    {
-        ok = TryCreate(device, "jacket-640-copydest", texDesc, defaultHeap,
-            D3D12_HEAP_FLAG_NONE, copyDest, &created, logger);
-    }
-    if (!ok)
-    {
-        ok = TryCreate(device, "raw", rawDesc, rawHeapProps, rawHeapFlags,
-            common, &created, logger);
-    }
-    if (!ok)
-    {
-        ok = TryCreate(device, "raw-default-flags", rawDesc, rawHeapProps,
-            D3D12_HEAP_FLAG_NONE, common, &created, logger);
-    }
+    const bool ok = TryCreate(device, "jacket-640-shader", texDesc, defaultHeap,
+        D3D12_HEAP_FLAG_NONE, shader, &created, logger);
 
     device->Release();
     if (!ok || !created) return false;

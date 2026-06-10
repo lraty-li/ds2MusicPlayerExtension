@@ -103,9 +103,6 @@
     <ClCompile Include="CustomJacketD3D12Resource.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketD3D12Init.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="CustomJacketD3D12UploadRgba.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
