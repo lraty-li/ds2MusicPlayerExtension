@@ -70,7 +70,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         HMODULE gameModule = GetModuleHandleW(nullptr);
         SourceAudioBootstrap::Configure(gameModule, selfModule);
         LogModuleInfo(selfModule, gameModule);
-        RuntimeEntryTitleRefresh::Configure(gameModule, g_initLogger);
+        RuntimeEntryTitleRefresh::Configure(gameModule);
 
         if (!gameModule)
         {

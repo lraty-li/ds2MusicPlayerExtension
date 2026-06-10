@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Logger.h"
+#include <windows.h>
 
 namespace RuntimeEntryTitleRefresh
 {
-void Configure(HMODULE gameModule, const Logger& logger);
+void Configure(HMODULE gameModule);
 void Reset();
 void Request(void* titleText, void* artistText);
 void TryApplyPending();

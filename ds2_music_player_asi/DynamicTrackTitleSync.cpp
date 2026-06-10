@@ -180,7 +180,6 @@ DWORD WINAPI SyncThread(LPVOID)
                     {
                         lastTitle = title;
                         metadataChanged = true;
-                        Log(std::string("dynamic title sync set title=\"") + title + "\"");
                     }
                 }
                 if (strcmp(artist, lastArtist.c_str()) != 0)
@@ -202,7 +201,6 @@ DWORD WINAPI SyncThread(LPVOID)
                         }
                         lastArtist = artist;
                         metadataChanged = true;
-                        Log(std::string("dynamic title sync set artist=\"") + artist + "\"");
                     }
                 }
                 if (metadataChanged)

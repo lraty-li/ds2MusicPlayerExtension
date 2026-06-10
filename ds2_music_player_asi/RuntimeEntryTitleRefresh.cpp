@@ -5,8 +5,6 @@
 #include "SpecialTrackIds.h"
 
 #include <atomic>
-#include <sstream>
-#include <string>
 
 namespace
 {
@@ -26,21 +24,10 @@ using LocalizedTextToUiSharedStringFn = void* (__fastcall*)(void*, void**);
 using UiSharedStringMoveAssignFn = void* (__fastcall*)(void**, void**);
 
 HMODULE g_gameModule = nullptr;
-Logger* g_logger = nullptr;
 std::atomic<uint32_t> g_generation{0};
 std::atomic<uint32_t> g_appliedGeneration{0};
 std::atomic<void*> g_titleText{nullptr};
 std::atomic<void*> g_artistText{nullptr};
-bool g_loggedMissingRuntime = false;
-bool g_loggedMissingEntry = false;
-
-void Log(const std::string& text)
-{
-    if (g_logger)
-    {
-        g_logger->Log(text);
-    }
-}
 
 uintptr_t GameBase()
 {
@@ -153,11 +140,9 @@ bool ReplaceEntryString(void* entry, uint32_t offset, void* localizedText)
 
 namespace RuntimeEntryTitleRefresh
 {
-void Configure(HMODULE gameModule, const Logger& logger)
+void Configure(HMODULE gameModule)
 {
     g_gameModule = gameModule;
-    g_logger = const_cast<Logger*>(&logger);
-    Log("runtime entry title refresh configured");
 }
 
 void Reset()
@@ -166,8 +151,6 @@ void Reset()
     g_appliedGeneration.store(0);
     g_titleText.store(nullptr);
     g_artistText.store(nullptr);
-    g_loggedMissingRuntime = false;
-    g_loggedMissingEntry = false;
 }
 
 void Request(void* titleText, void* artistText)
@@ -196,26 +179,14 @@ void TryApplyPending()
     void* runtime = ReadMusicRuntime();
     if (!runtime)
     {
-        if (!g_loggedMissingRuntime)
-        {
-            Log("runtime entry title refresh waiting for music runtime");
-            g_loggedMissingRuntime = true;
-        }
         return;
     }
-    g_loggedMissingRuntime = false;
 
     void* entry = FindCustomTrackEntry(runtime);
     if (!entry)
     {
-        if (!g_loggedMissingEntry)
-        {
-            Log("runtime entry title refresh waiting for custom entry");
-            g_loggedMissingEntry = true;
-        }
         return;
     }
-    g_loggedMissingEntry = false;
 
     void* titleText = g_titleText.load();
     void* artistText = g_artistText.load();
@@ -229,9 +200,5 @@ void TryApplyPending()
     }
 
     g_appliedGeneration.store(generation);
-    std::ostringstream oss;
-    oss << "runtime entry title refresh applied generation=" << generation
-        << " entry=" << entry;
-    Log(oss.str());
 }
 }
