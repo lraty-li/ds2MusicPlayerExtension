@@ -77,6 +77,9 @@
     <ClInclude Include="TextureBindProbe.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="RuntimeEntryTitleRefresh.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CustomJacketActiveResource.cpp">
@@ -164,6 +167,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="TextureBindProbe.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RuntimeEntryTitleRefresh.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">

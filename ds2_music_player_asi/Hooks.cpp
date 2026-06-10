@@ -8,6 +8,7 @@
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
+#include "RuntimeEntryTitleRefresh.h"
 #include "SourceAudioBootstrap.h"
 
 #include <exception>
@@ -69,6 +70,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         HMODULE gameModule = GetModuleHandleW(nullptr);
         SourceAudioBootstrap::Configure(gameModule, selfModule);
         LogModuleInfo(selfModule, gameModule);
+        RuntimeEntryTitleRefresh::Configure(gameModule, g_initLogger);
 
         if (!gameModule)
         {

@@ -128,6 +128,7 @@
     <ClInclude Include="PatternScan.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PlayStateMonitor.h" />
+    <ClInclude Include="RuntimeEntryTitleRefresh.h" />
     <ClInclude Include="SourceAudioBootstrap.h" />
     <ClInclude Include="SourcePluginBank.h" />
     <ClInclude Include="SpecialTrackHelpers.h" />
@@ -161,6 +162,7 @@
     <ClCompile Include="PlayEntryMonitor.cpp" />
     <ClCompile Include="PatternScan.cpp" />
     <ClCompile Include="PlayStateMonitor.cpp" />
+    <ClCompile Include="RuntimeEntryTitleRefresh.cpp" />
     <ClCompile Include="SourceAudioBootstrap.cpp" />
     <ClCompile Include="SourcePluginBank.cpp" />
     <ClCompile Include="SpecialTrackHelpers.cpp" />

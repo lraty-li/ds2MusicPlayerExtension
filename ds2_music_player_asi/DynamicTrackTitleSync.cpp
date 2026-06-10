@@ -2,6 +2,7 @@
 
 #include "DynamicTrackTitleSync.h"
 
+#include "RuntimeEntryTitleRefresh.h"
 #include "SpecialTrackHelpers.h"
 
 #include <atomic>
@@ -166,16 +167,19 @@ DWORD WINAPI SyncThread(LPVOID)
             if (readMetadata(title, static_cast<unsigned int>(sizeof(title)),
                 artist, static_cast<unsigned int>(sizeof(artist))) && title[0])
             {
+                bool metadataChanged = false;
                 if (strcmp(title, lastTitle.c_str()) != 0)
                 {
                     if (TextMatches(g_titleObject, title))
                     {
                         lastTitle = title;
+                        metadataChanged = true;
                     }
                     else if (EnsureMutableText(g_titleObject, g_titleBuffer) &&
                         UpdateMutableText(g_titleObject, g_titleBuffer, title))
                     {
                         lastTitle = title;
+                        metadataChanged = true;
                         Log(std::string("dynamic title sync set title=\"") + title + "\"");
                     }
                 }
@@ -187,6 +191,7 @@ DWORD WINAPI SyncThread(LPVOID)
                     if (artistCurrent && telopCurrent)
                     {
                         lastArtist = artist;
+                        metadataChanged = true;
                     }
                     else if (EnsureMutableText(g_artistObject, g_artistBuffer) &&
                         UpdateMutableText(g_artistObject, g_artistBuffer, artist))
@@ -196,11 +201,17 @@ DWORD WINAPI SyncThread(LPVOID)
                             UpdateMutableText(g_telopArtistObject, g_artistBuffer, artist);
                         }
                         lastArtist = artist;
+                        metadataChanged = true;
                         Log(std::string("dynamic title sync set artist=\"") + artist + "\"");
                     }
                 }
+                if (metadataChanged)
+                {
+                    RuntimeEntryTitleRefresh::Request(g_titleObject, g_artistObject);
+                }
             }
         }
+        RuntimeEntryTitleRefresh::TryApplyPending();
         Sleep(kUpdateIntervalMs);
     }
 
@@ -219,6 +230,7 @@ void Reset()
     g_titleObject = nullptr;
     g_artistObject = nullptr;
     g_telopArtistObject = nullptr;
+    RuntimeEntryTitleRefresh::Reset();
 }
 
 void Start(void* track, void* album, const Logger& logger)
