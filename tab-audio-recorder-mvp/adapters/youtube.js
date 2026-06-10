@@ -87,7 +87,9 @@
   }
 
   function readCurrentJacket(player, data) {
-    return readCurrentYtMusicJacket() ||
+    const ytmusicJacket = readCurrentYtMusicJacket();
+    return normalizeYoutubeImageJacket(ytmusicJacket, data) ||
+      ytmusicJacket ||
       readCurrentVideoJacket(player, data) ||
       null;
   }
@@ -103,18 +105,7 @@
   function readCurrentVideoJacket(player, data) {
     const videoId = data && typeof data.video_id === "string" ? data.video_id : "";
     if (videoId) {
-      const encoded = encodeURIComponent(videoId);
-      return {
-        url: `https://i.ytimg.com/vi/${encoded}/maxresdefault.jpg`,
-        fallbackUrls: [
-          `https://i.ytimg.com/vi/${encoded}/hq720.jpg`,
-          `https://i.ytimg.com/vi/${encoded}/sddefault.jpg`,
-          `https://i.ytimg.com/vi/${encoded}/hqdefault.jpg`
-        ],
-        mime: "image/jpeg",
-        size: 1280 * 720,
-        source: "youtube-video"
-      };
+      return buildYoutubeVideoJacket(videoId, "youtube-video");
     }
     const video = player && player.querySelector ? player.querySelector("video[poster]") : null;
     if (video && video.poster) {
@@ -126,6 +117,41 @@
       };
     }
     return null;
+  }
+
+  function normalizeYoutubeImageJacket(jacket, data) {
+    const urlVideoId = extractYoutubeImageVideoId(jacket && jacket.url);
+    const dataVideoId = data && typeof data.video_id === "string" ? data.video_id : "";
+    const videoId = urlVideoId || dataVideoId;
+    if (!urlVideoId || !videoId) return null;
+    return buildYoutubeVideoJacket(videoId, "youtube-video");
+  }
+
+  function buildYoutubeVideoJacket(videoId, source) {
+    const encoded = encodeURIComponent(videoId);
+    return {
+      url: `https://i.ytimg.com/vi/${encoded}/maxresdefault.jpg`,
+      fallbackUrls: [
+        `https://i.ytimg.com/vi/${encoded}/hq720.jpg`,
+        `https://i.ytimg.com/vi/${encoded}/sddefault.jpg`,
+        `https://i.ytimg.com/vi/${encoded}/hqdefault.jpg`
+      ],
+      mime: "image/jpeg",
+      size: 1280 * 720,
+      source
+    };
+  }
+
+  function extractYoutubeImageVideoId(value) {
+    try {
+      const url = new URL(value || "", location.href);
+      if (!url.hostname.endsWith("ytimg.com")) return "";
+      const parts = url.pathname.split("/");
+      const vi = parts.indexOf("vi");
+      return vi >= 0 && parts[vi + 1] ? parts[vi + 1] : "";
+    } catch (_) {
+      return "";
+    }
   }
 
   function readFirstImageJacket(selectors, source) {

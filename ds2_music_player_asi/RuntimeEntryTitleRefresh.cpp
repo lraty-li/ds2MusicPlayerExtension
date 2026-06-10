@@ -26,6 +26,7 @@ using UiSharedStringMoveAssignFn = void* (__fastcall*)(void**, void**);
 HMODULE g_gameModule = nullptr;
 std::atomic<uint32_t> g_generation{0};
 std::atomic<uint32_t> g_appliedGeneration{0};
+std::atomic<void*> g_track{nullptr};
 std::atomic<void*> g_titleText{nullptr};
 std::atomic<void*> g_artistText{nullptr};
 
@@ -58,7 +59,7 @@ void* ReadMusicRuntime()
     }
 }
 
-void* FindCustomTrackEntry(void* runtime)
+void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
 {
     __try
     {
@@ -77,6 +78,7 @@ void* FindCustomTrackEntry(void* runtime)
             return nullptr;
         }
 
+        void* idMatchedEntry = nullptr;
         for (int32_t index = 0; index < count; ++index)
         {
             auto* entry = entries + static_cast<size_t>(index) * kEntryStride;
@@ -86,14 +88,19 @@ void* FindCustomTrackEntry(void* runtime)
             {
                 continue;
             }
+            if (preferredTrack && track == preferredTrack)
+            {
+                return entry;
+            }
 
             const uint32_t trackId =
                 *reinterpret_cast<uint32_t*>(track + kTrackIdOffset);
             if (trackId == SpecialTrackIds::kCustomTrackId)
             {
-                return entry;
+                idMatchedEntry = entry;
             }
         }
+        return idMatchedEntry;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
@@ -149,12 +156,17 @@ void Reset()
 {
     g_generation.store(0);
     g_appliedGeneration.store(0);
+    g_track.store(nullptr);
     g_titleText.store(nullptr);
     g_artistText.store(nullptr);
 }
 
-void Request(void* titleText, void* artistText)
+void Request(void* track, void* titleText, void* artistText)
 {
+    if (track)
+    {
+        g_track.store(track);
+    }
     if (titleText)
     {
         g_titleText.store(titleText);
@@ -182,7 +194,7 @@ void TryApplyPending()
         return;
     }
 
-    void* entry = FindCustomTrackEntry(runtime);
+    void* entry = FindCustomTrackEntry(runtime, g_track.load());
     if (!entry)
     {
         return;

@@ -6,6 +6,6 @@ namespace RuntimeEntryTitleRefresh
 {
 void Configure(HMODULE gameModule);
 void Reset();
-void Request(void* titleText, void* artistText);
+void Request(void* track, void* titleText, void* artistText);
 void TryApplyPending();
 }

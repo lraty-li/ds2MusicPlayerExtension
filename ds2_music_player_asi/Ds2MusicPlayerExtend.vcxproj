@@ -142,7 +142,6 @@
     <ClCompile Include="CustomJacketActiveResource.cpp" />
     <ClCompile Include="CustomJacketSourceTexture.cpp" />
     <ClCompile Include="CustomJacketBc7External.cpp" />
-    <ClCompile Include="CustomJacketBc7Fallback.cpp" />
     <ClCompile Include="CustomJacketD3D12Create.cpp" />
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
     <ClCompile Include="CustomJacketD3D12UploadPixels.cpp" />

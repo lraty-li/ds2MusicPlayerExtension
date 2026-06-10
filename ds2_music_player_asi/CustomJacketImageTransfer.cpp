@@ -19,7 +19,7 @@ using ReadStatusFn = int(__cdecl*)(unsigned int*, char*, unsigned int,
     unsigned int*, char*, unsigned int, char*, unsigned int,
     char*, unsigned int, char*, unsigned int);
 
-constexpr DWORD kPollMs = 1000;
+constexpr DWORD kPollMs = 200;
 constexpr unsigned int kTargetWidth = 640;
 constexpr unsigned int kTargetHeight = 640;
 constexpr unsigned int kMaxJacketBytes = 2 * 1024 * 1024;

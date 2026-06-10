@@ -45,9 +45,7 @@ const char* FillBc7FromRgba(uint8_t* dst, const D3D12_PLACED_SUBRESOURCE_FOOTPRI
     {
         return "prepared-bc7e-pixels";
     }
-    CustomJacketInternal::FillFallbackBc7FromRgba(dst, fp.Offset, dstW, dstH,
-        rowPitch, rgba, srcW, srcH);
-    return "prepared-bc7-fallback-pixels";
+    return nullptr;
 }
 
 D3D12_RESOURCE_BARRIER Barrier(ID3D12Resource* res,
@@ -169,6 +167,11 @@ bool TryUploadCustomJacketD3D12Pixels(uint64_t resource, const uint8_t* rgba,
     {
         memset(mapped, 0, size_t(uploadBytes));
         preparedPhase = FillBc7FromRgba(mapped, fp, rgba, width, height, logger);
+        if (!preparedPhase)
+        {
+            hr = E_FAIL;
+            preparedPhase = "prepared-bc7e-unavailable";
+        }
     }
     upload->Unmap(0, nullptr);
     LogUpload(preparedPhase, desc, uploadBytes, hr, logger);

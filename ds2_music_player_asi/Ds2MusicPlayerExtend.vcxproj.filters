@@ -94,9 +94,6 @@
     <ClCompile Include="CustomJacketBc7External.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketBc7Fallback.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="CustomJacketD3D12Create.cpp">
       <Filter>源文件</Filter>
     </ClCompile>

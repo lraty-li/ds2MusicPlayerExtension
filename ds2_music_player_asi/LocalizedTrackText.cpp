@@ -33,6 +33,21 @@ bool ResolveTextObject(void* owner, uint32_t offset, void*& textObject)
     }
 }
 
+bool BindSlot(void* owner, uint32_t offset, LocalizedTrackText::TextSlot& slot)
+{
+    void* textObject = nullptr;
+    if (!ResolveTextObject(owner, offset, textObject))
+    {
+        return false;
+    }
+    if (slot.text != textObject)
+    {
+        slot.text = textObject;
+        slot.buffer = nullptr;
+    }
+    return true;
+}
+
 const char* ReadTextValue(void* textObject)
 {
     __try
@@ -53,42 +68,42 @@ const char* ReadTextValue(void* textObject)
     }
 }
 
-bool TextMatches(void* textObject, const char* value)
+bool TextMatches(const LocalizedTrackText::TextSlot& slot, const char* value)
 {
-    return strcmp(ReadTextValue(textObject), value ? value : "") == 0;
+    return strcmp(ReadTextValue(slot.text), value ? value : "") == 0;
 }
 
-bool EnsureMutableText(void* textObject, char*& buffer)
+bool EnsureMutableText(LocalizedTrackText::TextSlot& slot)
 {
     __try
     {
-        if (!textObject)
+        if (!slot.text)
         {
             return false;
         }
-        if (!buffer)
+        if (!slot.buffer)
         {
-            buffer = static_cast<char*>(
+            slot.buffer = static_cast<char*>(
                 SpecialTrackHelpers::HeapAllocZero(kTextBytes));
-            if (!buffer)
+            if (!slot.buffer)
             {
                 return false;
             }
         }
 
-        auto* textBytes = static_cast<uint8_t*>(textObject);
+        auto* textBytes = static_cast<uint8_t*>(slot.text);
         char* oldText = *reinterpret_cast<char**>(textBytes + 0x20);
-        if (oldText == buffer)
+        if (oldText == slot.buffer)
         {
             return true;
         }
         if (oldText && oldText[0])
         {
-            strcpy_s(buffer, kTextBytes, oldText);
+            strcpy_s(slot.buffer, kTextBytes, oldText);
         }
 
-        *reinterpret_cast<char**>(textBytes + 0x20) = buffer;
-        const size_t length = strlen(buffer);
+        *reinterpret_cast<char**>(textBytes + 0x20) = slot.buffer;
+        const size_t length = strlen(slot.buffer);
         *reinterpret_cast<uint16_t*>(textBytes + 0x28) =
             static_cast<uint16_t>(length);
         *reinterpret_cast<int16_t*>(textBytes + 0x2A) = 0;
@@ -104,18 +119,18 @@ bool EnsureMutableText(void* textObject, char*& buffer)
     }
 }
 
-bool WriteMutableText(void* textObject, char* buffer, const char* value)
+bool WriteMutableText(LocalizedTrackText::TextSlot& slot, const char* value)
 {
     __try
     {
-        if (!textObject || !buffer)
+        if (!slot.text || !slot.buffer)
         {
             return false;
         }
 
-        strcpy_s(buffer, kTextBytes, value ? value : "");
-        const size_t length = strlen(buffer);
-        auto* textBytes = static_cast<uint8_t*>(textObject);
+        strcpy_s(slot.buffer, kTextBytes, value ? value : "");
+        const size_t length = strlen(slot.buffer);
+        auto* textBytes = static_cast<uint8_t*>(slot.text);
         *reinterpret_cast<uint16_t*>(textBytes + 0x28) =
             static_cast<uint16_t>(length);
         return true;
@@ -126,10 +141,15 @@ bool WriteMutableText(void* textObject, char* buffer, const char* value)
     }
 }
 
-bool SetText(void* textObject, char*& buffer, const char* value)
+bool SetText(LocalizedTrackText::TextSlot& slot, const char* value)
 {
-    return EnsureMutableText(textObject, buffer) &&
-        WriteMutableText(textObject, buffer, value);
+    return EnsureMutableText(slot) && WriteMutableText(slot, value);
+}
+
+void ResetSlot(LocalizedTrackText::TextSlot& slot)
+{
+    slot.text = nullptr;
+    slot.buffer = nullptr;
 }
 }
 
@@ -137,32 +157,24 @@ namespace LocalizedTrackText
 {
 void Reset(State& state)
 {
-    state.titleText = nullptr;
-    state.artistText = nullptr;
-    state.telopArtistText = nullptr;
+    ResetSlot(state.title);
+    ResetSlot(state.artist);
+    ResetSlot(state.telopArtist);
     state.lastTitle.clear();
     state.lastArtist.clear();
 }
 
 bool Resolve(State& state, void* track, void* album)
 {
-    if (!state.titleText &&
-        !ResolveTextObject(track, kTrackTitleOffset, state.titleText))
+    if (!BindSlot(track, kTrackTitleOffset, state.title))
     {
         return false;
     }
 
     if (album)
     {
-        if (!state.artistText)
-        {
-            ResolveTextObject(album, kAlbumArtistOffset, state.artistText);
-        }
-        if (!state.telopArtistText)
-        {
-            ResolveTextObject(
-                album, kAlbumTelopArtistOffset, state.telopArtistText);
-        }
+        BindSlot(album, kAlbumArtistOffset, state.artist);
+        BindSlot(album, kAlbumTelopArtistOffset, state.telopArtist);
     }
 
     return true;
@@ -171,13 +183,12 @@ bool Resolve(State& state, void* track, void* album)
 UpdateResult Apply(State& state, const char* title, const char* artist)
 {
     UpdateResult result;
-    result.titleText = state.titleText;
-    result.artistText = state.artistText;
+    result.titleText = state.title.text;
+    result.artistText = state.artist.text;
 
     if (title && strcmp(title, state.lastTitle.c_str()) != 0)
     {
-        if (TextMatches(state.titleText, title) ||
-            SetText(state.titleText, state.titleBuffer, title))
+        if (TextMatches(state.title, title) || SetText(state.title, title))
         {
             state.lastTitle = title;
             result.changed = true;
@@ -186,21 +197,20 @@ UpdateResult Apply(State& state, const char* title, const char* artist)
 
     if (artist && strcmp(artist, state.lastArtist.c_str()) != 0)
     {
-        const bool artistCurrent = TextMatches(state.artistText, artist);
-        const bool telopCurrent = !state.telopArtistText ||
-            TextMatches(state.telopArtistText, artist);
+        const bool artistCurrent = TextMatches(state.artist, artist);
+        const bool telopCurrent = !state.telopArtist.text ||
+            TextMatches(state.telopArtist, artist);
         if (artistCurrent && telopCurrent)
         {
             state.lastArtist = artist;
             result.changed = true;
         }
-        else if (SetText(state.artistText, state.artistBuffer, artist))
+        else if (SetText(state.artist, artist))
         {
-            if (state.telopArtistText &&
-                state.telopArtistText != state.artistText)
+            if (state.telopArtist.text &&
+                state.telopArtist.text != state.artist.text)
             {
-                SetText(
-                    state.telopArtistText, state.telopArtistBuffer, artist);
+                SetText(state.telopArtist, artist);
             }
 
             state.lastArtist = artist;
