@@ -2,22 +2,13 @@
 
 #include "RuntimeEntryTitleRefresh.h"
 
+#include "GameLayout.h"
 #include "SpecialTrackIds.h"
 
 #include <atomic>
 
 namespace
 {
-constexpr uintptr_t kMusicRuntimeGlobalRva = 0x623E5F0;
-constexpr uintptr_t kLocalizedTextToUiSharedStringRva = 0x27023A0;
-constexpr uintptr_t kUiSharedStringMoveAssignRva = 0x0A3920;
-constexpr uint32_t kEntryCountOffset = 0x1938;
-constexpr uint32_t kEntryDataOffset = 0x1940;
-constexpr uint32_t kEntryStride = 0x38;
-constexpr uint32_t kEntryTitleOffset = 0x00;
-constexpr uint32_t kEntryArtistOffset = 0x08;
-constexpr uint32_t kEntryTrackOffset = 0x10;
-constexpr uint32_t kTrackIdOffset = 0x20;
 constexpr int32_t kMaxEntryCount = 1024;
 
 using LocalizedTextToUiSharedStringFn = void* (__fastcall*)(void*, void**);
@@ -50,7 +41,8 @@ void* ReadMusicRuntime()
             return nullptr;
         }
 
-        auto** runtimeSlot = ResolveGameRva<void**>(kMusicRuntimeGlobalRva);
+        auto** runtimeSlot = ResolveGameRva<void**>(
+            GameLayout::Rva::kMusicRuntimeGlobal);
         return runtimeSlot ? *runtimeSlot : nullptr;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -70,9 +62,11 @@ void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
 
         auto* runtimeBytes = static_cast<uint8_t*>(runtime);
         const int32_t count =
-            *reinterpret_cast<int32_t*>(runtimeBytes + kEntryCountOffset);
+            *reinterpret_cast<int32_t*>(
+                runtimeBytes + GameLayout::MusicRuntime::kEntryCount);
         auto* entries =
-            *reinterpret_cast<uint8_t**>(runtimeBytes + kEntryDataOffset);
+            *reinterpret_cast<uint8_t**>(
+                runtimeBytes + GameLayout::MusicRuntime::kEntryData);
         if (!entries || count <= 0 || count > kMaxEntryCount)
         {
             return nullptr;
@@ -81,9 +75,11 @@ void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
         void* idMatchedEntry = nullptr;
         for (int32_t index = 0; index < count; ++index)
         {
-            auto* entry = entries + static_cast<size_t>(index) * kEntryStride;
+            auto* entry = entries + static_cast<size_t>(index) *
+                GameLayout::MusicEntry::kStride;
             auto* track =
-                *reinterpret_cast<uint8_t**>(entry + kEntryTrackOffset);
+                *reinterpret_cast<uint8_t**>(
+                    entry + GameLayout::MusicEntry::kTrack);
             if (!track)
             {
                 continue;
@@ -94,7 +90,7 @@ void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
             }
 
             const uint32_t trackId =
-                *reinterpret_cast<uint32_t*>(track + kTrackIdOffset);
+                *reinterpret_cast<uint32_t*>(track + GameLayout::Track::kId);
             if (trackId == SpecialTrackIds::kCustomTrackId)
             {
                 idMatchedEntry = entry;
@@ -121,10 +117,10 @@ bool ReplaceEntryString(void* entry, uint32_t offset, void* localizedText)
 
         auto toUiSharedString =
             ResolveGameRva<LocalizedTextToUiSharedStringFn>(
-                kLocalizedTextToUiSharedStringRva);
+                GameLayout::Rva::kLocalizedTextToUiSharedString);
         auto moveAssign =
             ResolveGameRva<UiSharedStringMoveAssignFn>(
-                kUiSharedStringMoveAssignRva);
+                GameLayout::Rva::kUiSharedStringMoveAssign);
 
         void* newSlot = nullptr;
         toUiSharedString(localizedText, &newSlot);
@@ -203,9 +199,9 @@ void TryApplyPending()
     void* titleText = g_titleText.load();
     void* artistText = g_artistText.load();
     const bool titleOk = !titleText ||
-        ReplaceEntryString(entry, kEntryTitleOffset, titleText);
+        ReplaceEntryString(entry, GameLayout::MusicEntry::kTitle, titleText);
     const bool artistOk = !artistText ||
-        ReplaceEntryString(entry, kEntryArtistOffset, artistText);
+        ReplaceEntryString(entry, GameLayout::MusicEntry::kArtist, artistText);
     if (!titleOk || !artistOk)
     {
         return;

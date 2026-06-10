@@ -112,16 +112,20 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CustomJacketImageLayout.h" />
     <ClInclude Include="CustomJacketInternal.h" />
     <ClInclude Include="CustomJacketInstaller.h" />
     <ClInclude Include="DynamicTrackTitleSync.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="GameLayout.h" />
     <ClInclude Include="GameSymbols.h" />
     <ClInclude Include="DecimaTypes.h" />
     <ClInclude Include="GeneratedSourcePluginTemplates.h" />
     <ClInclude Include="Hooks.h" />
     <ClInclude Include="HookUtils.h" />
     <ClInclude Include="CustomJacketImageTransfer.h" />
+    <ClInclude Include="JacketPendingImage.h" />
+    <ClInclude Include="JacketUploadPipeline.h" />
     <ClInclude Include="LocalizedTrackText.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="MusicPlayerInjection.h" />
@@ -130,11 +134,13 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="PlayStateMonitor.h" />
     <ClInclude Include="RuntimeEntryTitleRefresh.h" />
+    <ClInclude Include="RuntimeJacketBridge.h" />
     <ClInclude Include="SourceAudioBootstrap.h" />
     <ClInclude Include="SourcePluginBank.h" />
     <ClInclude Include="SpecialTrackHelpers.h" />
     <ClInclude Include="SpecialTrackIds.h" />
     <ClInclude Include="SpecialTrackInjection.h" />
+    <ClInclude Include="SpecialTrackSoundClone.h" />
     <ClInclude Include="TextureBindProbe.h" />
     <ClInclude Include="WwisePluginRegistration.h" />
   </ItemGroup>
@@ -146,6 +152,7 @@
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
     <ClCompile Include="CustomJacketD3D12UploadPixels.cpp" />
     <ClCompile Include="CustomJacketImageDecodeWic.cpp" />
+    <ClCompile Include="CustomJacketImageLayout.cpp" />
     <ClCompile Include="CustomJacketSeh.cpp" />
     <ClCompile Include="CustomJacketUiClone.cpp" />
     <ClCompile Include="CustomJacketInstaller.cpp" />
@@ -157,6 +164,8 @@
     <ClCompile Include="Hooks.cpp" />
     <ClCompile Include="HookUtils.cpp" />
     <ClCompile Include="CustomJacketImageTransfer.cpp" />
+    <ClCompile Include="JacketPendingImage.cpp" />
+    <ClCompile Include="JacketUploadPipeline.cpp" />
     <ClCompile Include="LocalizedTrackText.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MusicPlayerInjection.cpp" />
@@ -164,10 +173,12 @@
     <ClCompile Include="PatternScan.cpp" />
     <ClCompile Include="PlayStateMonitor.cpp" />
     <ClCompile Include="RuntimeEntryTitleRefresh.cpp" />
+    <ClCompile Include="RuntimeJacketBridge.cpp" />
     <ClCompile Include="SourceAudioBootstrap.cpp" />
     <ClCompile Include="SourcePluginBank.cpp" />
     <ClCompile Include="SpecialTrackHelpers.cpp" />
     <ClCompile Include="SpecialTrackInjection.cpp" />
+    <ClCompile Include="SpecialTrackSoundClone.cpp" />
     <ClCompile Include="TextureBindProbe.cpp" />
     <ClCompile Include="WwisePluginRegistration.cpp" />
     <ClCompile Include="pch.cpp">

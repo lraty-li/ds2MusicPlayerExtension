@@ -2,6 +2,7 @@
 
 #include "CustomJacketInternal.h"
 
+#include "CustomJacketImageLayout.h"
 #include "HookUtils.h"
 
 #include <d3d12.h>
@@ -63,8 +64,8 @@ D3D12_HEAP_PROPERTIES DefaultHeapProps()
 D3D12_RESOURCE_DESC NormalizeTextureDesc(D3D12_RESOURCE_DESC desc)
 {
     desc.Alignment = 0;
-    desc.Width = 640;
-    desc.Height = 640;
+    desc.Width = CustomJacketImageLayout::kDefaultTargetWidth;
+    desc.Height = CustomJacketImageLayout::kDefaultTargetHeight;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.SampleDesc.Count = desc.SampleDesc.Count ? desc.SampleDesc.Count : 1;

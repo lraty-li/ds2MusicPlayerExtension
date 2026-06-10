@@ -2,6 +2,7 @@
 
 #include "CustomJacketInternal.h"
 
+#include "GameLayout.h"
 #include "HookUtils.h"
 
 #include <sstream>
@@ -28,11 +29,13 @@ bool ReadLoadedTexture(uint64_t target, uint64_t& loaded, uint64_t& texture)
 {
     loaded = 0;
     texture = 0;
-    if (!CustomJacketInternal::SehReadU64(target + 0x20, loaded) || !loaded)
+    if (!CustomJacketInternal::SehReadU64(
+        target + GameLayout::StreamingTarget::kLoaded, loaded) || !loaded)
     {
         return false;
     }
-    return CustomJacketInternal::SehReadU64(loaded + 0x30, texture) && texture;
+    return CustomJacketInternal::SehReadU64(
+        loaded + GameLayout::UiTexture::kTexture, texture) && texture;
 }
 
 bool ReadTextureDx12Resource(uint64_t textureDx12, uint64_t& wrapper, uint64_t& resource)
@@ -40,9 +43,11 @@ bool ReadTextureDx12Resource(uint64_t textureDx12, uint64_t& wrapper, uint64_t& 
     wrapper = 0;
     resource = 0;
     return textureDx12
-        && CustomJacketInternal::SehReadU64(textureDx12 + 0x88, wrapper)
+        && CustomJacketInternal::SehReadU64(
+            textureDx12 + GameLayout::TextureDx12::kMainWrapper, wrapper)
         && wrapper
-        && CustomJacketInternal::SehReadU64(wrapper + 0x08, resource)
+        && CustomJacketInternal::SehReadU64(
+            wrapper + GameLayout::ResourceWrapper::kD3D12Resource, resource)
         && resource;
 }
 } // namespace
@@ -64,7 +69,9 @@ bool PrepareSourceJacketTexture(void* catalogueResource, const Logger& logger)
 
     const uint64_t base = reinterpret_cast<uint64_t>(catalogueResource);
     CustomJacketSlot slot = {};
-    if (!ReadSlotPointer(base + 0xC8, slot))
+    if (!ReadSlotPointer(
+        base + GameLayout::CatalogueResource::kDefaultConstructionHoloImageTexture,
+        slot))
     {
         logger.Log("jacket source texture: DefaultConstructionHoloImageTexture slot unreadable");
         g_sourcePrepared = true;
@@ -94,7 +101,8 @@ bool TryGetSourceJacketTextureDx12(uint64_t& textureDx12, const Logger& logger)
         return false;
     }
     g_sourceTexture = texture;
-    if (!SehReadU64(texture + 0x20, g_sourceTextureDx12) || !g_sourceTextureDx12)
+    if (!SehReadU64(texture + GameLayout::Texture::kTextureDx12,
+        g_sourceTextureDx12) || !g_sourceTextureDx12)
     {
         return false;
     }

@@ -2,9 +2,9 @@
 
 #include "CustomJacketInternal.h"
 
+#include "CustomJacketImageLayout.h"
 #include "HookUtils.h"
 
-#include <algorithm>
 #include <sstream>
 #include <wincodec.h>
 #include <wrl/client.h>
@@ -44,35 +44,6 @@ void LogDecodeFail(const char* step, HRESULT hr, const Logger& logger)
     std::ostringstream oss;
     oss << "jacket image decode " << step << " failed hr=" << H(hr);
     logger.Log(oss.str());
-}
-
-uint32_t ScaleCrop(uint32_t value, uint32_t source, uint32_t target)
-{
-    const uint64_t scaled = (uint64_t(value) * target + source / 2) / source;
-    return std::max<uint32_t>(1, static_cast<uint32_t>(scaled));
-}
-
-WICRect CoverCropRect(uint32_t sourceW, uint32_t sourceH,
-    uint32_t targetW, uint32_t targetH)
-{
-    WICRect rect = {};
-    uint32_t cropW = sourceW;
-    uint32_t cropH = sourceH;
-    if (uint64_t(sourceW) * targetH > uint64_t(sourceH) * targetW)
-    {
-        cropW = ScaleCrop(sourceH, targetH, targetW);
-    }
-    else if (uint64_t(sourceW) * targetH < uint64_t(sourceH) * targetW)
-    {
-        cropH = ScaleCrop(sourceW, targetW, targetH);
-    }
-    cropW = cropW < sourceW ? cropW : sourceW;
-    cropH = cropH < sourceH ? cropH : sourceH;
-    rect.X = static_cast<INT>((sourceW - cropW) / 2);
-    rect.Y = static_cast<INT>((sourceH - cropH) / 2);
-    rect.Width = static_cast<INT>(cropW);
-    rect.Height = static_cast<INT>(cropH);
-    return rect;
 }
 
 void LogDecodeOk(uint32_t encodedBytes, uint32_t sourceW, uint32_t sourceH,
@@ -132,9 +103,15 @@ bool TryDecodeCustomJacketImageToRgba(const uint8_t* encoded, uint32_t encodedBy
         return false;
     }
 
-    const WICRect cropRect = CoverCropRect(sourceW, sourceH, targetW, targetH);
-    drawW = targetW;
-    drawH = targetH;
+    const auto layout = CustomJacketImageLayout::Compute(
+        CustomJacketImageLayout::Mode::Cover, sourceW, sourceH, targetW, targetH);
+    WICRect cropRect = {};
+    cropRect.X = static_cast<INT>(layout.source.x);
+    cropRect.Y = static_cast<INT>(layout.source.y);
+    cropRect.Width = static_cast<INT>(layout.source.width);
+    cropRect.Height = static_cast<INT>(layout.source.height);
+    drawW = layout.drawW;
+    drawH = layout.drawH;
     ComPtr<IWICBitmapClipper> clipper;
     hr = factory->CreateBitmapClipper(clipper.GetAddressOf());
     if (FAILED(hr)) { LogDecodeFail("clipper", hr, logger); return false; }

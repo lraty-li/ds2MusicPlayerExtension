@@ -3,6 +3,7 @@
 #include "CustomJacketInstaller.h"
 
 #include "CustomJacketInternal.h"
+#include "GameLayout.h"
 #include "HookUtils.h"
 
 #include <sstream>
@@ -87,11 +88,14 @@ bool ReadTextureDx12Resource(uint64_t texture,
     wrapper = 0;
     resource = 0;
     return texture
-        && CustomJacketInternal::SehReadU64(texture + 0x20, textureDx12)
+        && CustomJacketInternal::SehReadU64(
+            texture + GameLayout::Texture::kTextureDx12, textureDx12)
         && textureDx12
-        && CustomJacketInternal::SehReadU64(textureDx12 + 0x88, wrapper)
+        && CustomJacketInternal::SehReadU64(
+            textureDx12 + GameLayout::TextureDx12::kMainWrapper, wrapper)
         && wrapper
-        && CustomJacketInternal::SehReadU64(wrapper + 0x08, resource)
+        && CustomJacketInternal::SehReadU64(
+            wrapper + GameLayout::ResourceWrapper::kD3D12Resource, resource)
         && resource;
 }
 
@@ -196,13 +200,15 @@ DWORD WINAPI CloneThread(LPVOID param)
         if (!g_target) return 0;
 
         uint64_t loaded = 0;
-        if (!CustomJacketInternal::SehReadU64(g_target + 0x20, loaded) || !loaded)
+        if (!CustomJacketInternal::SehReadU64(
+            g_target + GameLayout::StreamingTarget::kLoaded, loaded) || !loaded)
         {
             continue;
         }
 
         uint64_t texture = 0;
-        CustomJacketInternal::SehReadU64(loaded + 0x30, texture);
+        CustomJacketInternal::SehReadU64(
+            loaded + GameLayout::UiTexture::kTexture, texture);
 
         if (!g_uiCloneApplied)
         {

@@ -2,6 +2,7 @@
 
 #include "LocalizedTrackText.h"
 
+#include "GameLayout.h"
 #include "SpecialTrackHelpers.h"
 
 #include <cstdint>
@@ -10,9 +11,6 @@
 namespace
 {
 constexpr size_t kTextBytes = 1024;
-constexpr uint32_t kTrackTitleOffset = 0x38;
-constexpr uint32_t kAlbumArtistOffset = 0x30;
-constexpr uint32_t kAlbumTelopArtistOffset = 0x40;
 
 bool ResolveTextObject(void* owner, uint32_t offset, void*& textObject)
 {
@@ -59,7 +57,8 @@ const char* ReadTextValue(void* textObject)
 
         const auto* textBytes = static_cast<uint8_t*>(textObject);
         const char* value =
-            *reinterpret_cast<const char* const*>(textBytes + 0x20);
+            *reinterpret_cast<const char* const*>(
+                textBytes + GameLayout::LocalizedText::kText);
         return value ? value : "";
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -92,7 +91,8 @@ bool EnsureMutableText(LocalizedTrackText::TextSlot& slot)
         }
 
         auto* textBytes = static_cast<uint8_t*>(slot.text);
-        char* oldText = *reinterpret_cast<char**>(textBytes + 0x20);
+        char* oldText = *reinterpret_cast<char**>(
+            textBytes + GameLayout::LocalizedText::kText);
         if (oldText == slot.buffer)
         {
             return true;
@@ -102,11 +102,14 @@ bool EnsureMutableText(LocalizedTrackText::TextSlot& slot)
             strcpy_s(slot.buffer, kTextBytes, oldText);
         }
 
-        *reinterpret_cast<char**>(textBytes + 0x20) = slot.buffer;
+        *reinterpret_cast<char**>(
+            textBytes + GameLayout::LocalizedText::kText) = slot.buffer;
         const size_t length = strlen(slot.buffer);
-        *reinterpret_cast<uint16_t*>(textBytes + 0x28) =
+        *reinterpret_cast<uint16_t*>(
+            textBytes + GameLayout::LocalizedText::kLength) =
             static_cast<uint16_t>(length);
-        *reinterpret_cast<int16_t*>(textBytes + 0x2A) = 0;
+        *reinterpret_cast<int16_t*>(
+            textBytes + GameLayout::LocalizedText::kFlags) = 0;
         if (oldText)
         {
             HeapFree(GetProcessHeap(), 0, oldText);
@@ -131,7 +134,8 @@ bool WriteMutableText(LocalizedTrackText::TextSlot& slot, const char* value)
         strcpy_s(slot.buffer, kTextBytes, value ? value : "");
         const size_t length = strlen(slot.buffer);
         auto* textBytes = static_cast<uint8_t*>(slot.text);
-        *reinterpret_cast<uint16_t*>(textBytes + 0x28) =
+        *reinterpret_cast<uint16_t*>(
+            textBytes + GameLayout::LocalizedText::kLength) =
             static_cast<uint16_t>(length);
         return true;
     }
@@ -166,15 +170,15 @@ void Reset(State& state)
 
 bool Resolve(State& state, void* track, void* album)
 {
-    if (!BindSlot(track, kTrackTitleOffset, state.title))
+    if (!BindSlot(track, GameLayout::Track::kTitle, state.title))
     {
         return false;
     }
 
     if (album)
     {
-        BindSlot(album, kAlbumArtistOffset, state.artist);
-        BindSlot(album, kAlbumTelopArtistOffset, state.telopArtist);
+        BindSlot(album, GameLayout::Album::kArtist, state.artist);
+        BindSlot(album, GameLayout::Album::kTelopArtist, state.telopArtist);
     }
 
     return true;

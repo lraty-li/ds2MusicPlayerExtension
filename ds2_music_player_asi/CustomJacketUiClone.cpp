@@ -2,6 +2,7 @@
 
 #include "CustomJacketInternal.h"
 
+#include "GameLayout.h"
 #include "HookUtils.h"
 #include "SpecialTrackHelpers.h"
 
@@ -13,22 +14,26 @@ bool ReadCurrentLoaded(void* track, uint64_t& slotAddr,
     CustomJacketSlot& slot, uint64_t& loaded, uint64_t& texture)
 {
     auto* bytes = static_cast<uint8_t*>(track);
-    if (!CustomJacketInternal::SehReadU64(reinterpret_cast<uint64_t>(bytes + 0x50), slotAddr)
+    if (!CustomJacketInternal::SehReadU64(
+        reinterpret_cast<uint64_t>(bytes + GameLayout::Track::kJacket), slotAddr)
         || !slotAddr
         || !CustomJacketInternal::SehReadSlot(slotAddr, slot)
-        || !CustomJacketInternal::SehReadU64(slot.target + 0x20, loaded)
+        || !CustomJacketInternal::SehReadU64(
+            slot.target + GameLayout::StreamingTarget::kLoaded, loaded)
         || !loaded)
     {
         return false;
     }
-    return CustomJacketInternal::SehReadU64(loaded + 0x30, texture) && texture;
+    return CustomJacketInternal::SehReadU64(
+        loaded + GameLayout::UiTexture::kTexture, texture) && texture;
 }
 
 bool ReadTextureDx12(uint64_t texture, uint64_t& textureDx12)
 {
     __try
     {
-        textureDx12 = *reinterpret_cast<uint64_t*>(texture + 0x20);
+        textureDx12 = *reinterpret_cast<uint64_t*>(
+            texture + GameLayout::Texture::kTextureDx12);
         return true;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -69,12 +74,16 @@ uint8_t* CloneTexture(uint64_t sourceTexture, const Logger& logger)
         return nullptr;
     }
 
-    *reinterpret_cast<uint64_t*>(texture + 0x20) = reinterpret_cast<uint64_t>(textureDx12Copy);
-    *reinterpret_cast<uint64_t*>(texture + 0x70) = reinterpret_cast<uint64_t>(texture + 0xE0);
-    *reinterpret_cast<uint64_t*>(texture + 0xE0) = reinterpret_cast<uint64_t>(texture + 0x150);
-    *reinterpret_cast<uint64_t*>(texture + 0x150) = reinterpret_cast<uint64_t>(texture + 0x1C0);
-    *reinterpret_cast<uint64_t*>(texture + 0x1C0) = 0;
-    *reinterpret_cast<uint32_t*>(texture + 0x08) = 1;
+    *reinterpret_cast<uint64_t*>(texture + GameLayout::Texture::kTextureDx12) =
+        reinterpret_cast<uint64_t>(textureDx12Copy);
+    *reinterpret_cast<uint64_t*>(texture + GameLayout::Texture::kChain0) =
+        reinterpret_cast<uint64_t>(texture + GameLayout::Texture::kChain1);
+    *reinterpret_cast<uint64_t*>(texture + GameLayout::Texture::kChain1) =
+        reinterpret_cast<uint64_t>(texture + GameLayout::Texture::kChain2);
+    *reinterpret_cast<uint64_t*>(texture + GameLayout::Texture::kChain2) =
+        reinterpret_cast<uint64_t>(texture + GameLayout::Texture::kChain3);
+    *reinterpret_cast<uint64_t*>(texture + GameLayout::Texture::kChain3) = 0;
+    *reinterpret_cast<uint32_t*>(texture + GameLayout::Texture::kRefCount) = 1;
 
     std::ostringstream oss;
     oss << "uiclone TextureDX12 copy: src=" << HookUtils::HexU64(textureDx12)
@@ -109,8 +118,10 @@ uint8_t* CloneUiTexture(uint64_t loaded, uint8_t* texture, const Logger& logger)
     }
 
     SpecialTrackHelpers::ResetObjectHeader(ui);
-    if (!CustomJacketInternal::SehWritePtrVal(ui, 0x30, texture)
-        || !CustomJacketInternal::SehWritePtrVal(ui, 0x38, ui))
+    if (!CustomJacketInternal::SehWritePtrVal(
+            ui, GameLayout::UiTexture::kTexture, texture)
+        || !CustomJacketInternal::SehWritePtrVal(
+            ui, GameLayout::UiTexture::kSelf, ui))
     {
         logger.Log("uiclone: UITexture wire failed");
         return nullptr;
@@ -135,7 +146,8 @@ uint8_t* BuildLoadedTarget(uint64_t originalTarget, uint8_t* loaded, const Logge
     const uint32_t tick = GetTickCount();
     q[2] = 0xAD90000100000000ull | tick;
     q[3] = 0xAD90000100000000ull | (tick ^ 0x13579BDFu);
-    *reinterpret_cast<void**>(target + 0x20) = loaded;
+    *reinterpret_cast<void**>(
+        target + GameLayout::StreamingTarget::kLoaded) = loaded;
     q[5] = 1;
     return target;
 }
@@ -169,7 +181,9 @@ bool CloneLoadedUiTextureToTrack(void* track, uint64_t& newTarget, const Logger&
 
     const uint64_t ctx = slot.packed & 0x000FFFFFFFFFFFFFULL;
     if (!SehAssignLoaded(reinterpret_cast<void*>(ctx),
-        reinterpret_cast<uint64_t**>(static_cast<uint8_t*>(track) + 0x50), newUi, target))
+        reinterpret_cast<uint64_t**>(
+            static_cast<uint8_t*>(track) + GameLayout::Track::kJacket),
+        newUi, target))
     {
         logger.Log("uiclone: assign failed");
         return false;

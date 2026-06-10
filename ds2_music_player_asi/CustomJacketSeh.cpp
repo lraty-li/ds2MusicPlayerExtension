@@ -2,6 +2,7 @@
 
 #include "CustomJacketInternal.h"
 
+#include "GameLayout.h"
 #include "SpecialTrackHelpers.h"
 
 namespace CustomJacketInternal
@@ -69,8 +70,8 @@ bool SehCopySlotToTrack(uint8_t* track, const CustomJacketSlot& src)
         if (!slot) return false;
         slot[0] = src.target;
         slot[1] = src.packed;
-        reinterpret_cast<uint64_t*>(src.target)[5] += 1;
-        *reinterpret_cast<uint64_t**>(track + 0x50) = slot;
+        *reinterpret_cast<uint64_t*>(src.target + GameLayout::StreamingTarget::kRefCount) += 1;
+        *reinterpret_cast<uint64_t**>(track + GameLayout::Track::kJacket) = slot;
         return true;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -86,7 +87,8 @@ bool SehTriggerLoad(uint8_t* track, const CustomJacketSlot& slot)
         uint64_t ctx = slot.packed & 0x000FFFFFFFFFFFFFULL;
         if (!ctx) return false;
         uint64_t* vt = *reinterpret_cast<uint64_t**>(ctx);
-        uint64_t** slotField = reinterpret_cast<uint64_t**>(track + 0x50);
+        uint64_t** slotField = reinterpret_cast<uint64_t**>(
+            track + GameLayout::Track::kJacket);
         using Fn = void(__fastcall*)(void*, uint64_t**, uint64_t);
         reinterpret_cast<Fn>(vt[8])(reinterpret_cast<void*>(ctx), slotField, 1);
         return true;
@@ -108,7 +110,8 @@ bool SehTriggerDetachedLoad(const CustomJacketSlot& slot)
         auto** slotField = static_cast<uint64_t**>(SpecialTrackHelpers::HeapAllocZero(sizeof(uint64_t*)));
         if (!slotField) return false;
         *slotField = temp;
-        reinterpret_cast<uint64_t*>(slot.target)[5] += 1;
+        *reinterpret_cast<uint64_t*>(
+            slot.target + GameLayout::StreamingTarget::kRefCount) += 1;
 
         uint64_t ctx = slot.packed & 0x000FFFFFFFFFFFFFULL;
         if (!ctx) return false;

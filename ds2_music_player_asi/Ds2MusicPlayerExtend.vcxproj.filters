@@ -11,6 +11,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CustomJacketImageLayout.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="CustomJacketInternal.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -21,6 +24,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="GameSymbols.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="GameLayout.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="framework.h">
@@ -39,6 +45,12 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="CustomJacketImageTransfer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="JacketPendingImage.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="JacketUploadPipeline.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Logger.h">
@@ -71,6 +83,9 @@
     <ClInclude Include="SpecialTrackInjection.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="SpecialTrackSoundClone.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="WwisePluginRegistration.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -78,6 +93,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="RuntimeEntryTitleRefresh.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RuntimeJacketBridge.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="LocalizedTrackText.h">
@@ -104,6 +122,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketImageDecodeWic.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomJacketImageLayout.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketInstaller.cpp">
@@ -139,6 +160,12 @@
     <ClCompile Include="CustomJacketImageTransfer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="JacketPendingImage.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="JacketUploadPipeline.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="Logger.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -163,6 +190,9 @@
     <ClCompile Include="SpecialTrackInjection.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="SpecialTrackSoundClone.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="WwisePluginRegistration.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -170,6 +200,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="RuntimeEntryTitleRefresh.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RuntimeJacketBridge.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="LocalizedTrackText.cpp">

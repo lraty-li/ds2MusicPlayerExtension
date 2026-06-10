@@ -2,6 +2,8 @@
 
 #include "SpecialTrackHelpers.h"
 
+#include "GameLayout.h"
+
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -48,9 +50,11 @@ void* CreateLocalizedText(const char* text, void* sourceText)
 
     *reinterpret_cast<void**>(object) = *reinterpret_cast<void**>(sourceText);
     ResetObjectHeader(object);
-    *reinterpret_cast<const char**>(object + 0x20) = CloneCString(text);
-    *reinterpret_cast<uint16_t*>(object + 0x28) = static_cast<uint16_t>(strlen(text));
-    *reinterpret_cast<int16_t*>(object + 0x2A) = 0;
+    *reinterpret_cast<const char**>(object + GameLayout::LocalizedText::kText) =
+        CloneCString(text);
+    *reinterpret_cast<uint16_t*>(object + GameLayout::LocalizedText::kLength) =
+        static_cast<uint16_t>(strlen(text));
+    *reinterpret_cast<int16_t*>(object + GameLayout::LocalizedText::kFlags) = 0;
     *reinterpret_cast<void**>(object + 0x30) = nullptr;
     return object;
 }
@@ -59,12 +63,14 @@ const char* ReadTrackTitle(void* track)
 {
     __try
     {
-        void* text = *reinterpret_cast<void**>(static_cast<uint8_t*>(track) + 0x38);
+        void* text = *reinterpret_cast<void**>(
+            static_cast<uint8_t*>(track) + GameLayout::Track::kTitle);
         if (!text)
         {
             return "";
         }
-        const char* value = *reinterpret_cast<const char**>(static_cast<uint8_t*>(text) + 0x20);
+        const char* value = *reinterpret_cast<const char**>(
+            static_cast<uint8_t*>(text) + GameLayout::LocalizedText::kText);
         return value ? value : "";
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
