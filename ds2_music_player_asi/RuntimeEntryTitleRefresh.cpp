@@ -173,7 +173,6 @@ void Request(void* track, void* titleText, void* artistText)
     }
 
     g_generation.fetch_add(1);
-    TryApplyPending();
 }
 
 void TryApplyPending()

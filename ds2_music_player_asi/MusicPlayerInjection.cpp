@@ -4,6 +4,7 @@
 
 #include "CustomJacketInstaller.h"
 #include "DecimaTypes.h"
+#include "DynamicTrackTitleSync.h"
 #include "FailFast.h"
 #include "PatternScan.h"
 #include "RuntimeFeatureState.h"
@@ -88,10 +89,12 @@ public:
                 CustomJacketInstaller::TryApply(object, *g_logger);
             }
         }
+        DynamicTrackTitleSync::ApplyPendingOnGameThread();
     }
 
     virtual void OnBeforeUnloadGroup(const RawArray* objects)
     {
+        DynamicTrackTitleSync::ApplyPendingOnGameThread();
         if (!objects || !objects->entries)
         {
             return;
@@ -111,6 +114,7 @@ public:
 
     virtual void OnLoadAssetGroup(const RawArray*)
     {
+        DynamicTrackTitleSync::ApplyPendingOnGameThread();
     }
 };
 

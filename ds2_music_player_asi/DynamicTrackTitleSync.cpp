@@ -2,10 +2,12 @@
 
 #include "DynamicTrackTitleSync.h"
 
+#include "GameThreadDispatcher.h"
 #include "LocalizedTrackText.h"
 #include "RuntimeEntryTitleRefresh.h"
 
 #include <atomic>
+#include <mutex>
 #include <string>
 
 namespace
@@ -23,6 +25,11 @@ HANDLE g_stopEvent = nullptr;
 Logger* g_logger = nullptr;
 ReadMetadataFn g_readMetadata = nullptr;
 LocalizedTrackText::State g_textState;
+std::mutex g_pendingMutex;
+std::string g_pendingTitle;
+std::string g_pendingArtist;
+uint32_t g_pendingGeneration = 0;
+uint32_t g_appliedGeneration = 0;
 
 void Log(const std::string& text)
 {
@@ -55,39 +62,49 @@ bool WaitForStopSignal()
     return result != WAIT_TIMEOUT;
 }
 
+bool StorePendingMetadata(const char* title, const char* artist)
+{
+    std::lock_guard<std::mutex> lock(g_pendingMutex);
+    const std::string nextTitle = title ? title : "";
+    const std::string nextArtist = artist ? artist : "";
+    if (nextTitle != g_pendingTitle || nextArtist != g_pendingArtist)
+    {
+        g_pendingTitle = nextTitle;
+        g_pendingArtist = nextArtist;
+        ++g_pendingGeneration;
+    }
+    return g_pendingGeneration != g_appliedGeneration;
+}
+
+void RequestApply()
+{
+    if (g_logger &&
+        GameThreadDispatcher::EnsureInstalled(*g_logger) &&
+        GameThreadDispatcher::Post(&DynamicTrackTitleSync::ApplyPendingOnGameThread))
+    {
+        return;
+    }
+}
+
 DWORD WINAPI SyncThread(LPVOID)
 {
     while (g_running.load())
     {
         void* track = g_track.load();
-        void* album = g_album.load();
         auto readMetadata = ResolveReadMetadata();
         if (track && readMetadata)
         {
-            if (!LocalizedTrackText::Resolve(g_textState, track, album))
-            {
-                if (WaitForStopSignal())
-                {
-                    break;
-                }
-                continue;
-            }
-
             char title[kMetadataBytes] = {};
             char artist[kMetadataBytes] = {};
             if (readMetadata(title, static_cast<unsigned int>(sizeof(title)),
                 artist, static_cast<unsigned int>(sizeof(artist))) && title[0])
             {
-                auto update = LocalizedTrackText::Apply(
-                    g_textState, title, artist);
-                if (update.changed)
+                if (StorePendingMetadata(title, artist))
                 {
-                    RuntimeEntryTitleRefresh::Request(
-                        track, update.titleText, update.artistText);
+                    RequestApply();
                 }
             }
         }
-        RuntimeEntryTitleRefresh::TryApplyPending();
         if (WaitForStopSignal())
         {
             break;
@@ -117,8 +134,15 @@ void Reset()
     g_track.store(nullptr);
     g_album.store(nullptr);
     g_readMetadata = nullptr;
-    LocalizedTrackText::Reset(g_textState);
     RuntimeEntryTitleRefresh::Reset();
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        g_pendingTitle.clear();
+        g_pendingArtist.clear();
+        g_pendingGeneration = 0;
+        g_appliedGeneration = 0;
+        LocalizedTrackText::Reset(g_textState);
+    }
 }
 
 void Start(void* track, void* album, const Logger& logger)
@@ -156,5 +180,53 @@ void Start(void* track, void* album, const Logger& logger)
         g_album.store(nullptr);
         Log("dynamic title sync failed to start thread");
     }
+}
+
+void ApplyPendingOnGameThread()
+{
+    RuntimeEntryTitleRefresh::TryApplyPending();
+
+    void* track = g_track.load();
+    if (!track)
+    {
+        return;
+    }
+
+    std::string title;
+    std::string artist;
+    uint32_t generation = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        generation = g_pendingGeneration;
+        if (!generation || g_appliedGeneration == generation)
+        {
+            return;
+        }
+        title = g_pendingTitle;
+        artist = g_pendingArtist;
+    }
+
+    void* album = g_album.load();
+    if (!LocalizedTrackText::Resolve(g_textState, track, album))
+    {
+        return;
+    }
+
+    auto update = LocalizedTrackText::Apply(g_textState,
+        title.c_str(), artist.c_str());
+    if (update.changed)
+    {
+        RuntimeEntryTitleRefresh::Request(
+            track, update.titleText, update.artistText);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        if (g_pendingGeneration == generation)
+        {
+            g_appliedGeneration = generation;
+        }
+    }
+    RuntimeEntryTitleRefresh::TryApplyPending();
 }
 }

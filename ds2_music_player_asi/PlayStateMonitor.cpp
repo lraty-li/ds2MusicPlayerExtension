@@ -2,6 +2,7 @@
 
 #include "PlayStateMonitor.h"
 
+#include "DynamicTrackTitleSync.h"
 #include "HookUtils.h"
 #include "PatternScan.h"
 #include "SpecialTrackIds.h"
@@ -168,6 +169,7 @@ int64_t __fastcall DetourSetPlayState(void* runtime, uint8_t newState)
     const uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     const int64_t result = g_original(runtime, newState);
     const uint8_t finalState = ReadU8(runtime, kStateOffset);
+    DynamicTrackTitleSync::ApplyPendingOnGameThread();
 
     if (oldState != finalState || oldState != newState)
     {
