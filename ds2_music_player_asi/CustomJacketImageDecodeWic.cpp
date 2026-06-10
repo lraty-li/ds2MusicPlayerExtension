@@ -46,52 +46,33 @@ void LogDecodeFail(const char* step, HRESULT hr, const Logger& logger)
     logger.Log(oss.str());
 }
 
-uint32_t ScaleToFit(uint32_t value, uint32_t source, uint32_t target)
+uint32_t ScaleCrop(uint32_t value, uint32_t source, uint32_t target)
 {
     const uint64_t scaled = (uint64_t(value) * target + source / 2) / source;
     return std::max<uint32_t>(1, static_cast<uint32_t>(scaled));
 }
 
-uint32_t MinU32(uint32_t a, uint32_t b)
+WICRect CoverCropRect(uint32_t sourceW, uint32_t sourceH,
+    uint32_t targetW, uint32_t targetH)
 {
-    return a < b ? a : b;
-}
-
-void FitRect(uint32_t sourceW, uint32_t sourceH, uint32_t targetW,
-    uint32_t targetH, uint32_t& drawW, uint32_t& drawH)
-{
+    WICRect rect = {};
+    uint32_t cropW = sourceW;
+    uint32_t cropH = sourceH;
     if (uint64_t(sourceW) * targetH > uint64_t(sourceH) * targetW)
     {
-        drawW = targetW;
-        drawH = ScaleToFit(sourceH, sourceW, targetW);
+        cropW = ScaleCrop(sourceH, targetH, targetW);
     }
-    else
+    else if (uint64_t(sourceW) * targetH < uint64_t(sourceH) * targetW)
     {
-        drawH = targetH;
-        drawW = ScaleToFit(sourceW, sourceH, targetH);
+        cropH = ScaleCrop(sourceW, targetW, targetH);
     }
-    drawW = MinU32(drawW, targetW);
-    drawH = MinU32(drawH, targetH);
-}
-
-void FillOpaqueBlack(std::vector<uint8_t>& rgba)
-{
-    rgba.assign(rgba.size(), 0);
-    for (size_t i = 3; i < rgba.size(); i += 4) rgba[i] = 255;
-}
-
-void CopyCentered(std::vector<uint8_t>& dst, uint32_t targetW, uint32_t targetH,
-    const std::vector<uint8_t>& src, uint32_t drawW, uint32_t drawH)
-{
-    const uint32_t dstX = (targetW - drawW) / 2;
-    const uint32_t dstY = (targetH - drawH) / 2;
-    const uint32_t rowBytes = drawW * 4;
-    for (uint32_t y = 0; y < drawH; ++y)
-    {
-        uint8_t* out = dst.data() + (uint64_t(dstY + y) * targetW + dstX) * 4;
-        const uint8_t* in = src.data() + uint64_t(y) * rowBytes;
-        memcpy(out, in, rowBytes);
-    }
+    cropW = cropW < sourceW ? cropW : sourceW;
+    cropH = cropH < sourceH ? cropH : sourceH;
+    rect.X = static_cast<INT>((sourceW - cropW) / 2);
+    rect.Y = static_cast<INT>((sourceH - cropH) / 2);
+    rect.Width = static_cast<INT>(cropW);
+    rect.Height = static_cast<INT>(cropH);
+    return rect;
 }
 
 void LogDecodeOk(uint32_t encodedBytes, uint32_t sourceW, uint32_t sourceH,
@@ -151,11 +132,19 @@ bool TryDecodeCustomJacketImageToRgba(const uint8_t* encoded, uint32_t encodedBy
         return false;
     }
 
-    FitRect(sourceW, sourceH, targetW, targetH, drawW, drawH);
+    const WICRect cropRect = CoverCropRect(sourceW, sourceH, targetW, targetH);
+    drawW = targetW;
+    drawH = targetH;
+    ComPtr<IWICBitmapClipper> clipper;
+    hr = factory->CreateBitmapClipper(clipper.GetAddressOf());
+    if (FAILED(hr)) { LogDecodeFail("clipper", hr, logger); return false; }
+    hr = clipper->Initialize(frame.Get(), &cropRect);
+    if (FAILED(hr)) { LogDecodeFail("crop", hr, logger); return false; }
+
     ComPtr<IWICBitmapScaler> scaler;
     hr = factory->CreateBitmapScaler(scaler.GetAddressOf());
     if (FAILED(hr)) { LogDecodeFail("scaler", hr, logger); return false; }
-    hr = scaler->Initialize(frame.Get(), drawW, drawH, WICBitmapInterpolationModeFant);
+    hr = scaler->Initialize(clipper.Get(), drawW, drawH, WICBitmapInterpolationModeFant);
     if (FAILED(hr)) { LogDecodeFail("scale", hr, logger); return false; }
 
     ComPtr<IWICFormatConverter> converter;
@@ -165,14 +154,11 @@ bool TryDecodeCustomJacketImageToRgba(const uint8_t* encoded, uint32_t encodedBy
         WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
     if (FAILED(hr)) { LogDecodeFail("format", hr, logger); return false; }
 
-    std::vector<uint8_t> scaled(uint64_t(drawW) * drawH * 4);
+    rgba.resize(uint64_t(targetW) * targetH * 4);
     hr = converter->CopyPixels(nullptr, drawW * 4,
-        static_cast<UINT>(scaled.size()), scaled.data());
+        static_cast<UINT>(rgba.size()), rgba.data());
     if (FAILED(hr)) { LogDecodeFail("copy", hr, logger); return false; }
 
-    rgba.resize(uint64_t(targetW) * targetH * 4);
-    FillOpaqueBlack(rgba);
-    CopyCentered(rgba, targetW, targetH, scaled, drawW, drawH);
     LogDecodeOk(encodedBytes, sourceW, sourceH, drawW, drawH, targetW, targetH, logger);
     return true;
 }

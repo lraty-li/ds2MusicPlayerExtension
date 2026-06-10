@@ -16,14 +16,16 @@
       return { score: wants ? 130 : 80, media: audio ? 1 : 0, button: button ? 1 : 0 };
     },
     metadata() {
+      const playerBar = readPlayerBarMetadata();
       const session = tools.readMediaSessionMetadata(170);
+      if (session && playerBar && playerBar.jacket) session.jacket = playerBar.jacket;
+      if (playerBar) return playerBar;
       if (session) return session;
       const title = tools.cleanTitle(document.title).replace(/\s*-\s*网易云音乐\s*$/, "");
       return title ? {
         score: 80,
         title,
-        artist: "",
-        jacket: tools.readDocumentArtwork()
+        artist: ""
       } : null;
     },
     async control(command) {
@@ -85,5 +87,74 @@
       if (element) return element;
     }
     return null;
+  }
+
+  function readPlayerBarMetadata() {
+    const title = readFirstText([
+      "#g_player .words .name",
+      ".m-playbar .words .name",
+      "#g_player .f-thide.name",
+      ".m-playbar .f-thide.name"
+    ]);
+    if (!title) return null;
+    return {
+      score: 190,
+      title,
+      artist: readFirstText([
+        "#g_player .words .by a",
+        ".m-playbar .words .by a",
+        "#g_player .words .by",
+        ".m-playbar .words .by"
+      ]),
+      jacket: readPlayerBarJacket()
+    };
+  }
+
+  function readPlayerBarJacket() {
+    return readFirstImageJacket([
+      "#g_player .head img",
+      ".m-playbar .head img",
+      "#g_player .cover img",
+      ".m-playbar .cover img"
+    ]);
+  }
+
+  function readFirstText(selectors) {
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      const text = tools.cleanTitle(element && element.textContent);
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function readFirstImageJacket(selectors) {
+    for (const selector of selectors) {
+      const image = document.querySelector(selector);
+      const jacket = image && readImageJacket(image);
+      if (jacket) return jacket;
+    }
+    return null;
+  }
+
+  function readImageJacket(image) {
+    const raw = image.currentSrc || image.src ||
+      image.getAttribute("data-src") || image.getAttribute("src") || "";
+    if (!raw || raw.startsWith("data:")) return null;
+    return {
+      url: normalizeNeteaseImageUrl(raw),
+      mime: "image/jpeg",
+      size: 640 * 640,
+      source: "netease-player"
+    };
+  }
+
+  function normalizeNeteaseImageUrl(raw) {
+    const url = new URL(raw, location.href);
+    if (url.hostname.endsWith("music.126.net") ||
+      url.hostname.endsWith("music.163.com")) {
+      url.search = "param=640y640";
+    }
+    return url.href;
   }
 })();

@@ -4,29 +4,30 @@ async function sendJacket(jacket) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return { ok: false, sent: false, error: "socket closed" };
   }
-  if (!jacket || !jacket.url) {
+  const urls = readJacketUrls(jacket);
+  if (!jacket || urls.length === 0) {
     sendJacketStatus("missing_url", { error: "missing artwork url" });
     return { ok: false, sent: false, error: "missing url" };
   }
 
   try {
-    const url = String(jacket.url || "");
     const source = String(jacket.source || "");
-    sendJacketStatus("fetch_start", { url, mime: jacket.mime || "", source });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    let url = "";
     let response = null;
-    try {
-      response = await fetch(url, {
-        credentials: "include",
-        cache: "force-cache",
-        signal: controller.signal
+    for (const candidateUrl of urls) {
+      sendJacketStatus("fetch_start", { url: candidateUrl, mime: jacket.mime || "", source });
+      response = await fetchJacket(candidateUrl);
+      if (response && response.ok) {
+        url = candidateUrl;
+        break;
+      }
+      sendJacketStatus("fetch_failed", {
+        url: candidateUrl,
+        source,
+        error: response ? `http ${response.status}` : "fetch failed"
       });
-    } finally {
-      clearTimeout(timer);
     }
-    if (!response.ok) {
-      sendJacketStatus("fetch_failed", { url, source, error: `http ${response.status}` });
+    if (!response || !response.ok) {
       return { ok: false, sent: false, error: "fetch failed" };
     }
     const blob = await response.blob();
@@ -63,6 +64,36 @@ async function sendJacket(jacket) {
       error: String(error)
     });
     return { ok: false, sent: false, error: String(error) };
+  }
+}
+
+function readJacketUrls(jacket) {
+  const values = [];
+  if (jacket && jacket.url) values.push(jacket.url);
+  if (jacket && Array.isArray(jacket.fallbackUrls)) values.push(...jacket.fallbackUrls);
+
+  const urls = [];
+  const seen = new Set();
+  for (const value of values) {
+    const url = String(value || "");
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
+async function fetchJacket(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    return await fetch(url, {
+      credentials: "include",
+      cache: "force-cache",
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
