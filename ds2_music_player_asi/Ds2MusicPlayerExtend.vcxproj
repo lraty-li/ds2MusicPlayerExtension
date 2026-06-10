@@ -138,23 +138,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CustomJacketActiveResource.cpp" />
-    <ClCompile Include="CustomJacketAltTextureProbe.cpp" />
+    <ClCompile Include="CustomJacketSourceTexture.cpp" />
     <ClCompile Include="CustomJacketBc7External.cpp" />
     <ClCompile Include="CustomJacketBc7Fallback.cpp" />
-    <ClCompile Include="CustomJacketBcn.cpp" />
-    <ClCompile Include="CustomJacketClone.cpp" />
     <ClCompile Include="CustomJacketD3D12Create.cpp" />
     <ClCompile Include="CustomJacketD3D12Resource.cpp" />
-    <ClCompile Include="CustomJacketD3D12UploadRgba.cpp" />
+    <ClCompile Include="CustomJacketD3D12UploadPixels.cpp" />
     <ClCompile Include="CustomJacketImageDecodeWic.cpp" />
-    <ClCompile Include="CustomJacketDXBCPageProbe.cpp" />
-    <ClCompile Include="CustomJacketPointerProbe.cpp" />
-    <ClCompile Include="CustomJacketProbe.cpp" />
-    <ClCompile Include="CustomJacketResourceProbe.cpp" />
-    <ClCompile Include="CustomJacketResourceTrackProbe.cpp" />
     <ClCompile Include="CustomJacketSeh.cpp" />
-    <ClCompile Include="CustomJacketTextureOverrideProbe.cpp" />
-    <ClCompile Include="CustomJacketTextureDx12Bind.cpp" />
     <ClCompile Include="CustomJacketUiClone.cpp" />
     <ClCompile Include="CustomJacketInstaller.cpp" />
     <ClCompile Include="CustomJacketPixelBufferClone.cpp" />

@@ -156,7 +156,7 @@ void TryUploadPendingImage()
         static_cast<unsigned int>(buffer.size()), mime.c_str(), "pending");
 }
 
-DWORD WINAPI ProbeThread(LPVOID)
+DWORD WINAPI TransferThread(LPVOID)
 {
     unsigned int lastVersion = 0;
     unsigned int lastStatusVersion = 0;
@@ -232,7 +232,7 @@ void Start(const Logger& logger)
 {
     if (g_started.exchange(true)) return;
     g_logger = const_cast<Logger*>(&logger);
-    HANDLE thread = CreateThread(nullptr, 0, ProbeThread, nullptr, 0, nullptr);
+    HANDLE thread = CreateThread(nullptr, 0, TransferThread, nullptr, 0, nullptr);
     if (thread)
     {
         CloseHandle(thread);

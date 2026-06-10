@@ -80,6 +80,21 @@ bool TryReadInlineSlot(uint64_t addr, uint64_t& slotAddr, CustomJacketSlot& slot
     return true;
 }
 
+bool ReadTextureDx12Resource(uint64_t texture,
+    uint64_t& textureDx12, uint64_t& wrapper, uint64_t& resource)
+{
+    textureDx12 = 0;
+    wrapper = 0;
+    resource = 0;
+    return texture
+        && CustomJacketInternal::SehReadU64(texture + 0x20, textureDx12)
+        && textureDx12
+        && CustomJacketInternal::SehReadU64(textureDx12 + 0x88, wrapper)
+        && wrapper
+        && CustomJacketInternal::SehReadU64(wrapper + 0x08, resource)
+        && resource;
+}
+
 bool TryReadCatalogueSlot(void* catalogue, const char* name, uint32_t offset, SlotChoice& out)
 {
     const uint64_t addr = reinterpret_cast<uint64_t>(catalogue) + offset;
@@ -192,19 +207,16 @@ DWORD WINAPI CloneThread(LPVOID param)
         if (!g_uiCloneApplied)
         {
             uint64_t newTarget = 0;
-            uint64_t noDataPixelBuffer = 0;
-            if (!CustomJacketInternal::TryGetAlternateJacketPixelBuffer(noDataPixelBuffer, *logger))
+            uint64_t sourceTextureDx12 = 0;
+            if (!CustomJacketInternal::TryGetSourceJacketTextureDx12(sourceTextureDx12, *logger))
             {
                 continue;
             }
 
-            uint64_t sourcePixelBuffer = 0;
-            CustomJacketPixelBufferInfo pbInfo = {};
-            if (!texture
-                || !CustomJacketInternal::SehReadU64(texture + 0x20, sourcePixelBuffer)
-                || !sourcePixelBuffer
-                || !CustomJacketInternal::ProbePixelBuffer(sourcePixelBuffer, pbInfo)
-                || pbInfo.dxbcPages == 0)
+            uint64_t textureDx12 = 0;
+            uint64_t wrapper = 0;
+            uint64_t resource = 0;
+            if (!ReadTextureDx12Resource(texture, textureDx12, wrapper, resource))
             {
                 continue;
             }
@@ -229,9 +241,7 @@ void Reset()
     g_applied = false;
     g_target = 0;
     g_uiCloneApplied = false;
-    CustomJacketInternal::ResetResourceProbeDiagnostics();
-    CustomJacketInternal::ResetPixelBufferDiagnostics();
-    CustomJacketInternal::ResetAlternateJacketTextureProbe();
+    CustomJacketInternal::ResetSourceJacketTexture();
 }
 
 void TrackCreated(void* track)
@@ -243,7 +253,7 @@ void TrackCreated(void* track)
 void TryApply(void* catalogueResource, const Logger& logger)
 {
     if (!g_track || g_applied || !catalogueResource) return;
-    CustomJacketInternal::PrepareAlternateJacketTextureProbe(catalogueResource, logger);
+    CustomJacketInternal::PrepareSourceJacketTexture(catalogueResource, logger);
 
     SlotChoice choice = {};
     if (!PickJacketSlot(catalogueResource, choice))

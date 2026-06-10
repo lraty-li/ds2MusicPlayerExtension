@@ -6,8 +6,6 @@
 
 namespace
 {
-constexpr uint32_t kDxbcFourcc = 0x43425844;
-
 bool IsReadableProtect(DWORD protect)
 {
     if (protect & PAGE_GUARD) return false;
@@ -78,7 +76,7 @@ uint64_t CloneExternalBlock(uint8_t* pbCopy, uint64_t sourcePB,
     const uint64_t blockSize = ReadableBytes(block);
     if (blockSize < 0x120)
     {
-        logger.Log("uiclone PB ext38: source block too small");
+        logger.Log("uiclone TextureDX12 ext38: source block too small");
         return 0;
     }
 
@@ -99,145 +97,28 @@ uint64_t CloneExternalBlock(uint8_t* pbCopy, uint64_t sourcePB,
     *reinterpret_cast<uint64_t*>(pbCopy + 0x38) = reinterpret_cast<uint64_t>(copy);
 
     std::ostringstream oss;
-    oss << "uiclone PB ext38 clone: srcBlock=0x" << std::hex << block
+    oss << "uiclone TextureDX12 ext38 clone: srcBlock=0x" << std::hex << block
         << " newBlock=0x" << reinterpret_cast<uint64_t>(copy)
         << std::dec << " size=" << blockSize
-        << " relocatedPBRefs=" << relocated
+        << " relocatedTextureRefs=" << relocated
         << " relocatedSelfRefs=" << selfRelocated;
     logger.Log(oss.str());
     return reinterpret_cast<uint64_t>(copy);
-}
-
-bool FindDXBCMarker(uint8_t* page, uint32_t& markerRel)
-{
-    __try
-    {
-        for (uint32_t rel = 0x40; rel <= 0x70; ++rel)
-        {
-            if (*reinterpret_cast<uint32_t*>(page + rel) == kDxbcFourcc)
-            {
-                markerRel = rel;
-                return true;
-            }
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-    return false;
-}
-
-struct PatchPage
-{
-    uint64_t off = 0;
-    uint32_t markerRel = 0;
-    uint32_t payloadRel = 0;
-    uint32_t dataSize = 0;
-    uint32_t writeBytes = 0;
-    uint8_t mipCount = 0;
-};
-
-bool ReadDXBCPage(uint8_t* page, PatchPage& out)
-{
-    __try
-    {
-        uint32_t markerRel = 0;
-        if (!FindDXBCMarker(page, markerRel)) return false;
-
-        const uint32_t dataSize = *reinterpret_cast<uint32_t*>(page + markerRel + 0x18);
-        const uint32_t mips = *reinterpret_cast<uint8_t*>(page + markerRel + 0x1C);
-        if (!dataSize || dataSize > 0x100000 || !mips || mips > 16) return false;
-
-        const uint32_t firstMipOffset = *reinterpret_cast<uint32_t*>(page + markerRel + 0x20);
-        const uint32_t payloadRel = markerRel + firstMipOffset;
-        const uint32_t tableEnd = markerRel + 0x20 + mips * 4;
-        if (payloadRel < tableEnd || payloadRel >= 0x10000) return false;
-
-        out.markerRel = markerRel;
-        out.payloadRel = payloadRel;
-        out.dataSize = dataSize;
-        out.writeBytes = dataSize;
-        out.mipCount = static_cast<uint8_t>(mips);
-        if (out.writeBytes > 0x10000 - payloadRel)
-        {
-            out.writeBytes = 0x10000 - payloadRel;
-        }
-        return out.writeBytes >= 16;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
-void FillTestBlock(uint8_t* dst, uint32_t seed)
-{
-    const uint8_t colors[][16] = {
-        {0xFF,0x00,0,0,0,0,0,0, 0x00,0xF8,0x1F,0x00,0,0,0,0},
-        {0xFF,0x00,0,0,0,0,0,0, 0xE0,0x07,0x00,0x00,0,0,0,0},
-        {0xFF,0x00,0,0,0,0,0,0, 0x1F,0x00,0x00,0xF8,0,0,0,0},
-        {0xFF,0x00,0,0,0,0,0,0, 0xE0,0xFF,0x1F,0x00,0,0,0,0},
-    };
-    memcpy(dst, colors[seed % 4], 16);
-}
-
-void LogPatchPage(const PatchPage& page, uint32_t index, const Logger& logger)
-{
-    if (index >= 8) return;
-
-    std::ostringstream oss;
-    oss << "uiclone PB patch page off=0x" << std::hex << page.off
-        << " marker=0x" << page.markerRel
-        << " payload=0x" << page.payloadRel
-        << std::dec << " dataSize=" << page.dataSize
-        << " writeBytes=" << page.writeBytes
-        << " mips=" << static_cast<uint32_t>(page.mipCount);
-    logger.Log(oss.str());
-}
-
-uint32_t PatchDXBCPayloads(uint8_t* buffer, uint64_t size,
-    uint32_t& bytesWritten, const Logger& logger)
-{
-    uint32_t pages = 0;
-    bytesWritten = 0;
-    __try
-    {
-        for (uint64_t off = 0x10000; off + 0x10000 <= size; off += 0x1000)
-        {
-            PatchPage page = {};
-            if (!ReadDXBCPage(buffer + off, page)) continue;
-            if (off + page.payloadRel + page.writeBytes > size) continue;
-
-            page.off = off;
-            LogPatchPage(page, pages, logger);
-            for (uint32_t rel = 0; rel + 16 <= page.writeBytes; rel += 16)
-            {
-                FillTestBlock(buffer + off + page.payloadRel + rel, pages + rel / 16);
-            }
-            ++pages;
-            bytesWritten += page.writeBytes;
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return pages;
-    }
-    return pages;
 }
 } // namespace
 
 namespace CustomJacketInternal
 {
-uint8_t* CloneAndPatchPixelBufferForUiClone(uint64_t source,
-    uint64_t& cloneSize, uint32_t& relocated, uint32_t& patchedPages, const Logger& logger)
+uint8_t* ClonePixelBufferForUiClone(uint64_t source,
+    uint64_t& cloneSize, uint32_t& relocated, uint32_t& relocatedExt38,
+    const Logger& logger)
 {
     cloneSize = ReadableBytes(source);
     relocated = 0;
-    patchedPages = 0;
+    relocatedExt38 = 0;
     if (cloneSize < 0x10000)
     {
-        logger.Log("uiclone: source pixelBuffer readable too small");
+        logger.Log("uiclone: source TextureDX12 readable too small");
         return nullptr;
     }
 
@@ -245,26 +126,18 @@ uint8_t* CloneAndPatchPixelBufferForUiClone(uint64_t source,
         static_cast<size_t>(cloneSize), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
     if (!copy)
     {
-        logger.Log("uiclone: VirtualAlloc pixelBuffer failed");
+        logger.Log("uiclone: VirtualAlloc TextureDX12 failed");
         return nullptr;
     }
     if (!SehMemcpySafe(copy, reinterpret_cast<void*>(source), static_cast<size_t>(cloneSize)))
     {
-        logger.Log("uiclone: memcpy pixelBuffer failed");
+        logger.Log("uiclone: memcpy TextureDX12 failed");
         VirtualFree(copy, 0, MEM_RELEASE);
         return nullptr;
     }
 
     relocated = RelocateInternalPointers(copy, source, cloneSize);
-    uint32_t extRelocated = 0;
-    CloneExternalBlock(copy, source, cloneSize, extRelocated, logger);
-    uint32_t patchedBytes = 0;
-    patchedPages = PatchDXBCPayloads(copy, cloneSize, patchedBytes, logger);
-
-    std::ostringstream oss;
-    oss << "uiclone PB patch: pages=" << patchedPages
-        << " bytes=" << patchedBytes;
-    logger.Log(oss.str());
+    CloneExternalBlock(copy, source, cloneSize, relocatedExt38, logger);
     return copy;
 }
 } // namespace CustomJacketInternal

@@ -82,7 +82,7 @@
     <ClCompile Include="CustomJacketActiveResource.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketAltTextureProbe.cpp">
+    <ClCompile Include="CustomJacketSourceTexture.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketBc7External.cpp">
@@ -91,19 +91,13 @@
     <ClCompile Include="CustomJacketBc7Fallback.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketBcn.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketClone.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="CustomJacketD3D12Create.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketD3D12Resource.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketD3D12UploadRgba.cpp">
+    <ClCompile Include="CustomJacketD3D12UploadPixels.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketImageDecodeWic.cpp">
@@ -112,28 +106,7 @@
     <ClCompile Include="CustomJacketInstaller.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CustomJacketDXBCPageProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketPointerProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketResourceProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketResourceTrackProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="CustomJacketSeh.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketTextureOverrideProbe.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CustomJacketTextureDx12Bind.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CustomJacketUiClone.cpp">
