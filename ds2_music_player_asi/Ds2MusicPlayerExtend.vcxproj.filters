@@ -80,6 +80,9 @@
     <ClInclude Include="RuntimeEntryTitleRefresh.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="LocalizedTrackText.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CustomJacketActiveResource.cpp">
@@ -170,6 +173,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="RuntimeEntryTitleRefresh.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="LocalizedTrackText.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">

@@ -2,20 +2,16 @@
 
 #include "DynamicTrackTitleSync.h"
 
+#include "LocalizedTrackText.h"
 #include "RuntimeEntryTitleRefresh.h"
-#include "SpecialTrackHelpers.h"
 
 #include <atomic>
-#include <cstring>
 #include <string>
 
 namespace
 {
 constexpr DWORD kUpdateIntervalMs = 1000;
-constexpr size_t kTitleBytes = 1024;
-constexpr uint32_t kTrackTitleOffset = 0x38;
-constexpr uint32_t kAlbumArtistOffset = 0x30;
-constexpr uint32_t kAlbumTelopArtistOffset = 0x40;
+constexpr size_t kMetadataBytes = 1024;
 
 using ReadMetadataFn = int(__cdecl*)(char*, unsigned int, char*, unsigned int);
 
@@ -24,11 +20,7 @@ std::atomic<void*> g_album{nullptr};
 std::atomic<bool> g_running{false};
 Logger* g_logger = nullptr;
 ReadMetadataFn g_readMetadata = nullptr;
-void* g_titleObject = nullptr;
-void* g_artistObject = nullptr;
-void* g_telopArtistObject = nullptr;
-char* g_titleBuffer = nullptr;
-char* g_artistBuffer = nullptr;
+LocalizedTrackText::State g_textState;
 
 void Log(const std::string& text)
 {
@@ -48,101 +40,8 @@ ReadMetadataFn ResolveReadMetadata()
     return g_readMetadata;
 }
 
-bool ResolveTextObject(void* owner, uint32_t offset, void*& textObject)
-{
-    __try
-    {
-        textObject = *reinterpret_cast<void**>(static_cast<uint8_t*>(owner) + offset);
-        return textObject != nullptr;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
-const char* ReadTextValue(void* textObject)
-{
-    __try
-    {
-        if (!textObject) return "";
-        const auto* textBytes = static_cast<uint8_t*>(textObject);
-        const char* value = *reinterpret_cast<const char* const*>(textBytes + 0x20);
-        return value ? value : "";
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return "";
-    }
-}
-
-bool TextMatches(void* textObject, const char* value)
-{
-    return strcmp(ReadTextValue(textObject), value ? value : "") == 0;
-}
-
-bool EnsureMutableText(void* textObject, char*& buffer)
-{
-    __try
-    {
-        if (!textObject) return false;
-        if (!buffer)
-        {
-            buffer = static_cast<char*>(SpecialTrackHelpers::HeapAllocZero(kTitleBytes));
-            if (!buffer) return false;
-        }
-
-        auto* textBytes = static_cast<uint8_t*>(textObject);
-        char* oldText = *reinterpret_cast<char**>(textBytes + 0x20);
-        if (oldText == buffer)
-        {
-            return true;
-        }
-        if (oldText && oldText[0])
-        {
-            strcpy_s(buffer, kTitleBytes, oldText);
-        }
-        *reinterpret_cast<char**>(textBytes + 0x20) = buffer;
-        const size_t length = strlen(buffer);
-        *reinterpret_cast<uint16_t*>(textBytes + 0x28) = static_cast<uint16_t>(length);
-        *reinterpret_cast<int16_t*>(textBytes + 0x2A) = 0;
-        if (oldText)
-        {
-            HeapFree(GetProcessHeap(), 0, oldText);
-        }
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
-bool UpdateMutableText(void* textObject, char* buffer, const char* value)
-{
-    __try
-    {
-        if (!textObject || !buffer)
-        {
-            return false;
-        }
-
-        strcpy_s(buffer, kTitleBytes, value ? value : "");
-        const size_t length = strlen(buffer);
-        auto* textBytes = static_cast<uint8_t*>(textObject);
-        *reinterpret_cast<uint16_t*>(textBytes + 0x28) = static_cast<uint16_t>(length);
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
 DWORD WINAPI SyncThread(LPVOID)
 {
-    std::string lastTitle;
-    std::string lastArtist;
     while (g_running.load())
     {
         void* track = g_track.load();
@@ -150,62 +49,23 @@ DWORD WINAPI SyncThread(LPVOID)
         auto readMetadata = ResolveReadMetadata();
         if (track && readMetadata)
         {
-            if (!g_titleObject &&
-                !ResolveTextObject(track, kTrackTitleOffset, g_titleObject))
+            if (!LocalizedTrackText::Resolve(g_textState, track, album))
             {
                 Sleep(kUpdateIntervalMs);
                 continue;
             }
-            if (album && !g_artistObject)
-            {
-                ResolveTextObject(album, kAlbumArtistOffset, g_artistObject);
-                ResolveTextObject(album, kAlbumTelopArtistOffset, g_telopArtistObject);
-            }
 
-            char title[kTitleBytes] = {};
-            char artist[kTitleBytes] = {};
+            char title[kMetadataBytes] = {};
+            char artist[kMetadataBytes] = {};
             if (readMetadata(title, static_cast<unsigned int>(sizeof(title)),
                 artist, static_cast<unsigned int>(sizeof(artist))) && title[0])
             {
-                bool metadataChanged = false;
-                if (strcmp(title, lastTitle.c_str()) != 0)
+                auto update = LocalizedTrackText::Apply(
+                    g_textState, title, artist);
+                if (update.changed)
                 {
-                    if (TextMatches(g_titleObject, title))
-                    {
-                        lastTitle = title;
-                        metadataChanged = true;
-                    }
-                    else if (EnsureMutableText(g_titleObject, g_titleBuffer) &&
-                        UpdateMutableText(g_titleObject, g_titleBuffer, title))
-                    {
-                        lastTitle = title;
-                        metadataChanged = true;
-                    }
-                }
-                if (strcmp(artist, lastArtist.c_str()) != 0)
-                {
-                    const bool artistCurrent = TextMatches(g_artistObject, artist);
-                    const bool telopCurrent = !g_telopArtistObject ||
-                        TextMatches(g_telopArtistObject, artist);
-                    if (artistCurrent && telopCurrent)
-                    {
-                        lastArtist = artist;
-                        metadataChanged = true;
-                    }
-                    else if (EnsureMutableText(g_artistObject, g_artistBuffer) &&
-                        UpdateMutableText(g_artistObject, g_artistBuffer, artist))
-                    {
-                        if (EnsureMutableText(g_telopArtistObject, g_artistBuffer))
-                        {
-                            UpdateMutableText(g_telopArtistObject, g_artistBuffer, artist);
-                        }
-                        lastArtist = artist;
-                        metadataChanged = true;
-                    }
-                }
-                if (metadataChanged)
-                {
-                    RuntimeEntryTitleRefresh::Request(g_titleObject, g_artistObject);
+                    RuntimeEntryTitleRefresh::Request(
+                        update.titleText, update.artistText);
                 }
             }
         }
@@ -225,9 +85,7 @@ void Reset()
     g_track.store(nullptr);
     g_album.store(nullptr);
     g_readMetadata = nullptr;
-    g_titleObject = nullptr;
-    g_artistObject = nullptr;
-    g_telopArtistObject = nullptr;
+    LocalizedTrackText::Reset(g_textState);
     RuntimeEntryTitleRefresh::Reset();
 }
 
