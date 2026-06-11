@@ -143,6 +143,8 @@
     <ClInclude Include="SpecialTrackInjection.h" />
     <ClInclude Include="SpecialTrackSoundClone.h" />
     <ClInclude Include="TextureBindProbe.h" />
+    <ClInclude Include="TextureDx12BindResolver.h" />
+    <ClInclude Include="TextSharedStringResolver.h" />
     <ClInclude Include="WwisePluginRegistration.h" />
   </ItemGroup>
   <ItemGroup>
@@ -182,6 +184,8 @@
     <ClCompile Include="SpecialTrackInjection.cpp" />
     <ClCompile Include="SpecialTrackSoundClone.cpp" />
     <ClCompile Include="TextureBindProbe.cpp" />
+    <ClCompile Include="TextureDx12BindResolver.cpp" />
+    <ClCompile Include="TextSharedStringResolver.cpp" />
     <ClCompile Include="WwisePluginRegistration.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

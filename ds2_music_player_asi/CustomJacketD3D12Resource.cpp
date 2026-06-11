@@ -3,16 +3,13 @@
 #include "CustomJacketInternal.h"
 
 #include "HookUtils.h"
+#include "TextureDx12BindResolver.h"
 
 #include <d3d12.h>
 #include <sstream>
 
 namespace
 {
-constexpr uintptr_t kBindResourceHandleRva = 0x2116B40;
-
-using BindFn = void(__fastcall*)(uint64_t textureDx12, void* handleSlot);
-
 struct HandleSlot
 {
     uint64_t q0 = 0x304;
@@ -64,20 +61,6 @@ bool Write64(uint64_t addr, uint64_t value)
     }
 }
 
-bool ResolveBindFn(BindFn& bindFn, const Logger& logger)
-{
-    auto* gameModule = GetModuleHandleW(nullptr);
-    const auto base = reinterpret_cast<uintptr_t>(gameModule);
-    const auto bindAddr = base + kBindResourceHandleRva;
-    if (!gameModule || !HookUtils::IsAddressRangeInModule(gameModule, bindAddr, 16))
-    {
-        logger.Log("txdx12own skipped: bind address outside module");
-        return false;
-    }
-    bindFn = reinterpret_cast<BindFn>(bindAddr);
-    return true;
-}
-
 void CaptureResourceState(uint64_t textureDx12, ResourceState& out)
 {
     for (uint32_t i = 0; i < ARRAYSIZE(kResourceOffsets); ++i)
@@ -123,7 +106,8 @@ void LogState(const char* phase, uint64_t textureDx12, const Logger& logger)
     logger.Log(oss.str());
 }
 
-bool CallBind(BindFn bindFn, uint64_t textureDx12, HandleSlot& slot)
+bool CallBind(TextureDx12BindResolver::BindFn bindFn, uint64_t textureDx12,
+    HandleSlot& slot)
 {
     __try
     {
@@ -162,8 +146,8 @@ bool TryBindTextureDx12CloneWrapperToNewResource(uint64_t textureDx12,
         return false;
     }
 
-    BindFn bindFn = nullptr;
-    if (!ResolveBindFn(bindFn, logger))
+    TextureDx12BindResolver::BindFn bindFn = nullptr;
+    if (!TextureDx12BindResolver::Resolve(GetModuleHandleW(nullptr), bindFn, logger))
     {
         reinterpret_cast<ID3D12Resource*>(ownResource)->Release();
         return false;

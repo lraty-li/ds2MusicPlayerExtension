@@ -4,6 +4,7 @@
 
 #include "GameLayout.h"
 #include "SpecialTrackIds.h"
+#include "TextSharedStringResolver.h"
 
 #include <atomic>
 
@@ -11,45 +12,16 @@ namespace
 {
 constexpr int32_t kMaxEntryCount = 1024;
 
-using LocalizedTextToUiSharedStringFn = void* (__fastcall*)(void*, void**);
-using UiSharedStringMoveAssignFn = void* (__fastcall*)(void**, void**);
-
 HMODULE g_gameModule = nullptr;
 std::atomic<uint32_t> g_generation{0};
 std::atomic<uint32_t> g_appliedGeneration{0};
+std::atomic<void*> g_runtime{nullptr};
 std::atomic<void*> g_track{nullptr};
 std::atomic<void*> g_titleText{nullptr};
 std::atomic<void*> g_artistText{nullptr};
 
-uintptr_t GameBase()
-{
-    return reinterpret_cast<uintptr_t>(g_gameModule);
-}
-
-template <typename T>
-T ResolveGameRva(uintptr_t rva)
-{
-    return reinterpret_cast<T>(GameBase() + rva);
-}
-
-void* ReadMusicRuntime()
-{
-    __try
-    {
-        if (!g_gameModule)
-        {
-            return nullptr;
-        }
-
-        auto** runtimeSlot = ResolveGameRva<void**>(
-            GameLayout::Rva::kMusicRuntimeGlobal);
-        return runtimeSlot ? *runtimeSlot : nullptr;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return nullptr;
-    }
-}
+TextSharedStringResolver::LocalizedTextToUiSharedStringFn g_toUiSharedString = nullptr;
+TextSharedStringResolver::UiSharedStringMoveAssignFn g_moveAssign = nullptr;
 
 void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
 {
@@ -102,28 +74,33 @@ void* FindCustomTrackEntry(void* runtime, void* preferredTrack)
     {
         return nullptr;
     }
+}
 
-    return nullptr;
+bool EnsureResolved()
+{
+    if (g_toUiSharedString && g_moveAssign)
+    {
+        return true;
+    }
+    if (!g_gameModule)
+    {
+        return false;
+    }
+    return TextSharedStringResolver::Resolve(
+        g_gameModule, g_toUiSharedString, g_moveAssign);
 }
 
 bool ReplaceEntryString(void* entry, uint32_t offset, void* localizedText)
 {
     __try
     {
-        if (!entry || !localizedText || !g_gameModule)
+        if (!entry || !localizedText || !EnsureResolved())
         {
             return false;
         }
 
-        auto toUiSharedString =
-            ResolveGameRva<LocalizedTextToUiSharedStringFn>(
-                GameLayout::Rva::kLocalizedTextToUiSharedString);
-        auto moveAssign =
-            ResolveGameRva<UiSharedStringMoveAssignFn>(
-                GameLayout::Rva::kUiSharedStringMoveAssign);
-
         void* newSlot = nullptr;
-        toUiSharedString(localizedText, &newSlot);
+        g_toUiSharedString(localizedText, &newSlot);
         if (!newSlot)
         {
             return false;
@@ -131,7 +108,7 @@ bool ReplaceEntryString(void* entry, uint32_t offset, void* localizedText)
 
         auto** target = reinterpret_cast<void**>(
             static_cast<uint8_t*>(entry) + offset);
-        moveAssign(target, &newSlot);
+        g_moveAssign(target, &newSlot);
         return true;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
@@ -146,15 +123,26 @@ namespace RuntimeEntryTitleRefresh
 void Configure(HMODULE gameModule)
 {
     g_gameModule = gameModule;
+    g_toUiSharedString = nullptr;
+    g_moveAssign = nullptr;
 }
 
 void Reset()
 {
     g_generation.store(0);
     g_appliedGeneration.store(0);
+    g_runtime.store(nullptr);
     g_track.store(nullptr);
     g_titleText.store(nullptr);
     g_artistText.store(nullptr);
+}
+
+void SetRuntime(void* runtime)
+{
+    if (runtime)
+    {
+        g_runtime.store(runtime);
+    }
 }
 
 void Request(void* track, void* titleText, void* artistText)
@@ -171,7 +159,6 @@ void Request(void* track, void* titleText, void* artistText)
     {
         g_artistText.store(artistText);
     }
-
     g_generation.fetch_add(1);
 }
 
@@ -183,13 +170,7 @@ void TryApplyPending()
         return;
     }
 
-    void* runtime = ReadMusicRuntime();
-    if (!runtime)
-    {
-        return;
-    }
-
-    void* entry = FindCustomTrackEntry(runtime, g_track.load());
+    void* entry = FindCustomTrackEntry(g_runtime.load(), g_track.load());
     if (!entry)
     {
         return;
@@ -201,11 +182,9 @@ void TryApplyPending()
         ReplaceEntryString(entry, GameLayout::MusicEntry::kTitle, titleText);
     const bool artistOk = !artistText ||
         ReplaceEntryString(entry, GameLayout::MusicEntry::kArtist, artistText);
-    if (!titleOk || !artistOk)
+    if (titleOk && artistOk)
     {
-        return;
+        g_appliedGeneration.store(generation);
     }
-
-    g_appliedGeneration.store(generation);
 }
 }

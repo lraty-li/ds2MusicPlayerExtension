@@ -5,6 +5,7 @@
 #include "DynamicTrackTitleSync.h"
 #include "HookUtils.h"
 #include "PatternScan.h"
+#include "RuntimeEntryTitleRefresh.h"
 #include "SpecialTrackIds.h"
 
 #include <intrin.h>
@@ -167,6 +168,7 @@ void HandleExternalStateChange(uint8_t oldState, uint8_t finalState)
 
 int64_t __fastcall DetourSetPlayState(void* runtime, uint8_t newState)
 {
+    RuntimeEntryTitleRefresh::SetRuntime(runtime);
     const uint8_t oldState = ReadU8(runtime, kStateOffset);
     const uint32_t trackId = ReadU32(runtime, kCurrentTrackIdOffset);
     void* currentRuntime = ReadPtr(runtime, kCurrentRuntimeOffset);

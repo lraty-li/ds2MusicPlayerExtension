@@ -4,13 +4,6 @@
 
 namespace GameLayout
 {
-namespace Rva
-{
-constexpr uintptr_t kMusicRuntimeGlobal = 0x623E5F0;
-constexpr uintptr_t kLocalizedTextToUiSharedString = 0x27023A0;
-constexpr uintptr_t kUiSharedStringMoveAssign = 0x0A3920;
-}
-
 namespace Track
 {
 constexpr uint32_t kId = 0x20;

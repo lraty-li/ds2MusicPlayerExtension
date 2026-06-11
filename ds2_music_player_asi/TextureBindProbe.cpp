@@ -3,12 +3,12 @@
 #include "TextureBindProbe.h"
 
 #include "HookUtils.h"
+#include "TextureDx12BindResolver.h"
 
 #include <sstream>
 
 namespace
 {
-constexpr uintptr_t kBindResourceHandleRva = 0x2116B40;
 constexpr uint32_t kPatchBytes = 18;
 constexpr LONG kEventLimit = 64;
 
@@ -191,12 +191,13 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
     g_logger = const_cast<Logger*>(&logger);
     if (!gameModule) return false;
 
-    const uintptr_t target = reinterpret_cast<uintptr_t>(gameModule) + kBindResourceHandleRva;
-    if (!HookUtils::IsAddressRangeInModule(gameModule, target, kPatchBytes))
+    TextureDx12BindResolver::BindFn bindFn = nullptr;
+    if (!TextureDx12BindResolver::Resolve(gameModule, bindFn, logger))
     {
-        Log("txbind install skipped: target outside module");
+        Log("txbind install skipped: bind function unresolved");
         return false;
     }
+    const uintptr_t target = reinterpret_cast<uintptr_t>(bindFn);
 
     void* gateway = nullptr;
     if (!BuildGateway(target, &gateway))
@@ -224,7 +225,8 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
     FlushInstructionCache(GetCurrentProcess(), patch, kPatchBytes);
 
     CreateThread(nullptr, 0, FlushThread, nullptr, 0, nullptr);
-    Log("txbind installed at rva=" + H(kBindResourceHandleRva));
+    Log("txbind installed at rva=" +
+        H(target - reinterpret_cast<uintptr_t>(gameModule)));
     Log("txbind memory recorder installed bytes=18");
     return true;
 }
