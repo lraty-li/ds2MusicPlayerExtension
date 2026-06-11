@@ -106,6 +106,8 @@ function Copy-BrowserExtension {
         "manifest.json",
         "service_worker.js",
         "media_control.js",
+        "metadata_transfer.js",
+        "jacket_transfer.js",
         "page_control.js",
         "adapters\youtube.js",
         "adapters\netease.js",
