@@ -137,6 +137,11 @@ void HandleExternalStateChange(uint8_t oldState, uint8_t finalState)
         g_browserPauseReason = BrowserPauseReason::AutoBlock;
         SendBrowserControl("pause", "auto_block");
     }
+    else if ((oldState == 0 || oldState == 5) && finalState == 1)
+    {
+        g_browserPauseReason = BrowserPauseReason::None;
+        SendBrowserControl("resume", "start");
+    }
     else if (oldState == 4 && finalState == 1 &&
         g_browserPauseReason == BrowserPauseReason::AutoBlock)
     {
