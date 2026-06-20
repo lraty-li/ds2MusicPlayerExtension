@@ -1,7 +1,7 @@
 const MAX_JACKET_IMAGE_BYTES = 2 * 1024 * 1024;
 
 async function sendJacket(jacket) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
+  if (!isStreamSocketOpen()) {
     return { ok: false, sent: false, error: "socket closed" };
   }
   const urls = readJacketUrls(jacket);
@@ -54,7 +54,9 @@ async function sendJacket(jacket) {
       bytes: bytes.length,
       error: imageInfo
     });
-    socket.send(JSON.stringify(payload));
+    if (!sendJsonPayload(payload)) {
+      return { ok: false, sent: false, error: "send failed" };
+    }
     sendJacketStatus("sent", { url, source, mime, bytes: bytes.length, error: imageInfo });
     return { ok: true, sent: true, bytes: bytes.length, mime: payload.mime };
   } catch (error) {
@@ -109,7 +111,7 @@ function formatJacketImageInfo(bytes, jacket) {
 }
 
 function sendJacketStatus(stage, details) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!isStreamSocketOpen()) return;
   const payload = {
     type: "jacket_status",
     stage: String(stage || "").slice(0, 64),
@@ -119,11 +121,7 @@ function sendJacketStatus(stage, details) {
     bytes: Number(details && details.bytes || 0),
     error: String(details && details.error || "").slice(0, 256)
   };
-  try {
-    socket.send(JSON.stringify(payload));
-  } catch (_) {
-    if (typeof handleSocketClosed === "function") handleSocketClosed(socket);
-  }
+  sendJsonPayload(payload);
 }
 
 function bytesToBase64(bytes) {

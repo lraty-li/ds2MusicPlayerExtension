@@ -1,6 +1,5 @@
-importScripts("media_control.js");
+importScripts("media_control.js", "background_chromium_host.js");
 
-const OFFSCREEN_DOCUMENT = "offscreen.html";
 const STREAM_URL = "ws://127.0.0.1:47832";
 const AUTO_PAUSE_DELAY_MS = 1500;
 
@@ -54,13 +53,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-async function toggleStream(tabId, streamId) {
-  const status = await readOffscreenStatus();
+async function toggleStream(tabId) {
+  const status = await readCaptureHostStatus();
   if (state.streaming || status.active) {
     await stopActiveStream();
     return;
   }
-  await startStream(tabId, streamId || null);
+  await startStream(tabId);
 }
 
 function scheduleBrowserControl(message) {
@@ -96,27 +95,15 @@ function clearAutoPauseTimer() {
   autoPauseTimer = null;
 }
 
-async function startStream(tabId, streamId) {
+async function startStream(tabId) {
   if (typeof tabId !== "number") {
     throw new Error("missing active tab");
   }
-  if (!streamId) {
-    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
-  }
 
   try {
-    await ensureOffscreenDocument();
     state = { streaming: true, tabId, status: "waiting", lastControl: "" };
     setBadge("WAIT", "#7a5c00");
-    const response = await chrome.runtime.sendMessage({
-      type: "start-stream",
-      tabId,
-      streamId,
-      streamUrl: STREAM_URL
-    });
-    if (!response || !response.ok) {
-      throw new Error(response && response.error ? response.error : "stream start failed");
-    }
+    await startCaptureHost(tabId, STREAM_URL);
   } catch (error) {
     state = { streaming: false, tabId: null, status: "idle", lastControl: "ERR" };
     setBadge("ERR", "#8b0000");
@@ -148,28 +135,10 @@ async function runBrowserControl(message) {
   }
 }
 
-async function readOffscreenStatus() {
-  const documentUrl = chrome.runtime.getURL(OFFSCREEN_DOCUMENT);
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [documentUrl]
-  });
-  if (contexts.length === 0) {
-    return { exists: false, active: false, connected: false, tabId: null };
-  }
-
-  try {
-    const status = await chrome.runtime.sendMessage({ type: "get-status" });
-    return Object.assign({ exists: true }, status);
-  } catch (_) {
-    return { exists: true, active: false, connected: false, tabId: null };
-  }
-}
-
 async function stopActiveStream() {
   clearAutoPauseTimer();
   try {
-    await chrome.runtime.sendMessage({ type: "stop-stream" });
+    await stopCaptureHost();
     state = { streaming: false, tabId: null, status: "idle", lastControl: "" };
     setBadge("OK", "#006b3c");
     clearBadgeLater();
@@ -178,17 +147,6 @@ async function stopActiveStream() {
     setBadge("OK", "#006b3c");
     clearBadgeLater();
   }
-}
-
-async function ensureOffscreenDocument() {
-  const status = await readOffscreenStatus();
-  if (status.exists) return;
-
-  await chrome.offscreen.createDocument({
-    url: OFFSCREEN_DOCUMENT,
-    reasons: ["USER_MEDIA"],
-    justification: "Capture tab audio and stream PCM to the local DS2 runtime plugin."
-  });
 }
 
 function setBadge(text, color) {
