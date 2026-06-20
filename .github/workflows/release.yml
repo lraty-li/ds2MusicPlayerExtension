@@ -7,6 +7,11 @@ on:
         description: "Package version suffix, for example v0.1.0"
         required: false
         type: string
+      publish_nexusmods:
+        description: "Upload this package to Nexus Mods"
+        required: false
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -58,3 +63,41 @@ jobs:
         with:
           files: ${{ steps.package.outputs.zip_path }}
           generate_release_notes: true
+
+      - name: Resolve Nexus Mods publish
+        id: nexusmods
+        shell: pwsh
+        env:
+          NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+          NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
+        run: |
+          $manualPublish = "${{ github.event.inputs.publish_nexusmods }}" -eq "true"
+          $tagPublish = "${{ github.ref_type }}" -eq "tag"
+          $requested = $manualPublish -or $tagPublish
+          $hasApiKey = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_API_KEY)
+          $hasFileId = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_FILE_ID)
+          $configured = $hasApiKey -and $hasFileId
+          if ($manualPublish -and -not $configured) {
+            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or NEXUSMODS_FILE_ID is missing."
+          }
+          if ($tagPublish -and -not $configured) {
+            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and NEXUSMODS_FILE_ID."
+          }
+          $enabled = $requested -and $configured
+          "enabled=$($enabled.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish Nexus Mods Release
+        if: steps.nexusmods.outputs.enabled == 'true'
+        id: nexusmods_upload
+        shell: pwsh
+        env:
+          NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          ./tools/publish-nexusmods.ps1 `
+            -FilePath "${{ steps.package.outputs.zip_path }}" `
+            -ModFileId "${{ vars.NEXUSMODS_FILE_ID }}" `
+            -Version "${{ steps.version.outputs.value }}" `
+            -DisplayName "DS2MusicPlayer ${{ steps.version.outputs.value }}" `
+            -Description "Automated release from GitHub run ${{ github.run_id }}" `
+            -ArchiveExistingFile

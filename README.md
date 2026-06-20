@@ -85,6 +85,25 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## Nexus Mods Releases
+
+The same release workflow can also publish the package to Nexus Mods. Configure
+these repository settings first:
+
+```text
+Secret:   NEXUSMODS_API_KEY
+Variable: NEXUSMODS_FILE_ID
+```
+
+`NEXUSMODS_FILE_ID` is the existing Nexus Mods v3 mod-file ID used by
+`POST /mod-files/{id}/versions`; it is not the game mod page number. Create the
+Nexus Mods mod page and first file manually, then use that file ID for automated
+version uploads.
+
+After those values are set, pushing a `v*` tag publishes both the GitHub Release
+and a Nexus Mods file version. For a manual workflow run, set
+`publish_nexusmods` to `true`.
+
 ## Credit
 
 Thanks to plyrthn:
