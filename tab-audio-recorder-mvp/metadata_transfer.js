@@ -21,8 +21,9 @@ function stopMetadataPolling() {
 }
 
 async function collectAndSendMetadata() {
-  if (!isStreamSocketOpen() || typeof targetTabId !== "number") return;
-  const result = await chrome.runtime.sendMessage({ type: "read-metadata", tabId: targetTabId });
+  const tabId = getTargetTabId();
+  if (!isStreamSocketOpen() || typeof tabId !== "number") return;
+  const result = await chrome.runtime.sendMessage({ type: "read-metadata", tabId });
   if (!result || !result.ok || !result.metadata || !result.metadata.title) return;
 
   const metadata = result.metadata;

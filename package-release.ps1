@@ -105,6 +105,7 @@ function Copy-BrowserExtension {
     $files = @(
         "manifest.json",
         "service_worker.js",
+        "background_chromium_host.js",
         "media_control.js",
         "metadata_transfer.js",
         "jacket_transfer.js",
@@ -113,6 +114,9 @@ function Copy-BrowserExtension {
         "adapters\netease.js",
         "adapters\media_session_hook.js",
         "offscreen.html",
+        "offscreen_chromium_capture.js",
+        "offscreen_audio_graph.js",
+        "stream_socket.js",
         "offscreen.js",
         "pcm-worklet.js",
         "README.md"
