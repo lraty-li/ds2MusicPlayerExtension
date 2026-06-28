@@ -18,6 +18,10 @@ build.ps1 ： 构建脚本，发生代码更改时执行该脚本，只有失败
 
 不准使用 dumpbin.exe 去读取 DS2.exe 本身， 不准以任何形式去读取 DS2.exe 本身
 
+如果有任何 ida mcp 调用超时，就说明你进行了一个非常复杂的操作，必须等到 ida mcp 响应。不得继续调用导致 ida 直到卡死
+
+没有我的允许，不得操作 git stage 命令
+
 游戏日志：
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/ds2_dll_music_resource.log>)
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/log.txt>)
