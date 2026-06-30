@@ -57,10 +57,15 @@ public static class $siClassName {
     [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern int GetWindowText(IntPtr h, StringBuilder t, int max);
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lp);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int left, top, right, bottom; }
 
     public static string GetTitle(IntPtr h) {
         var sb = new StringBuilder(256);
@@ -74,6 +79,17 @@ public static class $siClassName {
 
     public static void Click(IntPtr hwnd) {
         Focus(hwnd);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(50);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    public static void ClickRel(IntPtr hwnd, double rx, double ry) {
+        Focus(hwnd);
+        RECT r; if (!GetWindowRect(hwnd, out r)) return;
+        int x = r.left + (int)((r.right - r.left) * rx);
+        int y = r.top + (int)((r.bottom - r.top) * ry);
+        SetCursorPos(x, y); System.Threading.Thread.Sleep(80);
         mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
         System.Threading.Thread.Sleep(50);
         mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
@@ -131,6 +147,10 @@ $logPath = Join-Path $gameDir "log.txt"
 Write-Host "=== DS2 Boarding Test (SendInput scancode) ==="
 if (Test-Path $logPath) { Clear-Content $logPath -EA SilentlyContinue }
 
+Write-Host "Cleaning stale game processes..."
+& (Join-Path $PSScriptRoot "kill_ds2.ps1")
+Start-Sleep 2
+
 Write-Host "Launching via Steam..."
 Start-Process "steam://rungameid/3280350"
 $p = $null
@@ -143,6 +163,39 @@ if (!$p -or $p.MainWindowHandle -eq 0) { Write-Host "FAIL"; exit 1 }
 Write-Host "DS2 PID: $($p.Id)"
 $hwnd = $p.MainWindowHandle
 Write-Host "DS2 hwnd: 0x$($hwnd.ToString('X')) title=`"$($SI::GetTitle($hwnd))`""
+$script:gamePid = $p.Id
+$script:gameHwnd = $hwnd
+
+function Enter-LauncherIfPresent {
+    param([System.Diagnostics.Process]$Process)
+
+    $launcherHwnd = $Process.MainWindowHandle
+    if ($launcherHwnd -eq [IntPtr]::Zero) { return $Process }
+
+    $title = $SI::GetTitle($launcherHwnd)
+    if ($title -notmatch '^DEATH STRANDING 2: ON THE BEACH$') { return $Process }
+
+    Write-Host "Launcher detected, disabling launcher checkbox and clicking Play"
+    $SI::ClickRel($launcherHwnd, 0.871, 0.930)
+    Start-Sleep -Milliseconds 250
+    $SI::ClickRel($launcherHwnd, 0.742, 0.699)
+
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep 1
+        $next = Get-Process -Name "DS2" -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 } |
+            Select-Object -First 1
+        if ($next -and $SI::GetTitle($next.MainWindowHandle) -match 'v\d') {
+            Write-Host "Game window: 0x$($next.MainWindowHandle.ToString('X')) title=`"$($SI::GetTitle($next.MainWindowHandle))`""
+            return $next
+        }
+    }
+
+    return $Process
+}
+
+$p = Enter-LauncherIfPresent $p
+$hwnd = $p.MainWindowHandle
 $script:gamePid = $p.Id
 $script:gameHwnd = $hwnd
 
@@ -191,11 +244,7 @@ function Stop-IfGameCrashed {
 }
 
 function Wait-GameSeconds {
-    param(
-        [string]$Label,
-        [int]$Seconds
-    )
-
+    param([string]$Label, [int]$Seconds)
     Write-Host "$Label ($($Seconds)s)"
     for ($i = 0; $i -lt $Seconds; $i++) {
         Stop-IfGameCrashed "waiting for $Label"
@@ -205,23 +254,14 @@ function Wait-GameSeconds {
 }
 
 function Wait-GameMilliseconds {
-    param(
-        [string]$Label,
-        [int]$Milliseconds
-    )
-
+    param([string]$Label, [int]$Milliseconds)
     Stop-IfGameCrashed "waiting for $Label"
     Start-Sleep -Milliseconds $Milliseconds
     Stop-IfGameCrashed "after $Label"
 }
 
 function Send-GameKey {
-    param(
-        [UInt16]$Scan,
-        [string]$Name,
-        [int]$HoldMs = 60
-    )
-
+    param([UInt16]$Scan, [string]$Name, [int]$HoldMs = 60)
     Stop-IfGameCrashed "sending $Name"
     Write-Host "  Focus + $Name (SendInput scancode 0x$($Scan.ToString('X')))"
     [void]$SI::KeyScan($hwnd, $Scan, $HoldMs)
@@ -232,9 +272,12 @@ Stop-IfGameCrashed "click skip"
 Write-Host "  Focus + Click (skip)"; $SI::Click($hwnd)
 
 Wait-GameSeconds "Wait" 5
-Send-GameKey 0x1C "ENTER"
+Send-GameKey 0x1C "ENTER (CONTINUE)"
+Wait-GameSeconds "Recover prompt" 2
+Send-GameKey 0x1E "A (RECOVER YES)"
+Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
 
-Wait-GameSeconds "Load" 4
+Wait-GameSeconds "Load" 15
 Send-GameKey 0x21 "F (BOARD)"
 
 Wait-GameSeconds "Ride" 4
