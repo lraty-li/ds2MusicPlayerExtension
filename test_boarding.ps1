@@ -275,6 +275,7 @@ Wait-GameSeconds "Wait" 5
 Send-GameKey 0x1C "ENTER (CONTINUE)"
 Wait-GameSeconds "Recover prompt" 2
 Send-GameKey 0x1E "A (RECOVER YES)"
+Wait-GameSeconds "Recover confirm delay" 2
 Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
 
 Wait-GameSeconds "Load" 15

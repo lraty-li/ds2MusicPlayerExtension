@@ -1,195 +1,281 @@
 #include "pch.h"
 #include "VehicleSeatTrace.h"
-#include "HookUtils.h"
-#include "PatternScan.h"
-#include <sstream>
+#include "JumpHook.h"
+#include "VehicleSnapshot.h"
 
+#include <atomic>
+#include <cstdint>
+#include <sstream>
+#include <string>
+
+namespace VehicleSeatTrace {
 namespace {
 
-// sub_1402F1EF0 (StartMount) - NPC boarding entry
-const char* kStartMountPattern =
-    "40 57 48 83 EC ? 80 79 ? ? 48 8B F9 0F 84 ? ? ? ? 0F B6 44 24";
+constexpr uintptr_t kImageBase = 0x140000000ull;
+constexpr uintptr_t kInitRva = 0x1410047B0ull - kImageBase;
+constexpr uintptr_t kAttachRva = 0x140F9A370ull - kImageBase;
+constexpr uintptr_t kRideOnExitRva = 0x140F99990ull - kImageBase;
+constexpr uintptr_t kDriveEnterRva = 0x140F8EB40ull - kImageBase;
+constexpr uintptr_t kClassifyApproachRva = 0x140F9B4A0ull - kImageBase;
+constexpr uintptr_t kPresentationRequestRva = 0x140E21860ull - kImageBase;
+constexpr uintptr_t kProcessAttachPresentationRetRva = 0x140F9AFB1ull - kImageBase;
+constexpr size_t kInitPatchLen = 9;
+constexpr size_t kAttachPatchLen = 12;
+constexpr size_t kRideOnExitPatchLen = 19;
+constexpr size_t kDriveEnterPatchLen = 15;
+constexpr size_t kClassifyApproachPatchLen = 15;
+constexpr size_t kPresentationRequestPatchLen = 15;
 
-// sub_140EF1E70 (DSActionPlugin vtable[9])
-const char* kActionCheckPattern =
-    "40 53 48 83 EC ? 80 79 ? ? 48 8B D9 75 ? 48 8B 01 FF 50";
+using InitFn = char(__fastcall*)(uintptr_t plugin);
+using AttachFn = void(__fastcall*)(uintptr_t rideOn);
+using RideOnExitFn = int64_t(__fastcall*)(uintptr_t rideOn);
+using DriveEnterFn = int64_t(__fastcall*)(uintptr_t driveState, uintptr_t a2, uintptr_t a3);
+using ClassifyApproachFn = uint8_t(__fastcall*)(uintptr_t rideOn, uintptr_t seatObject);
+using PresentationRequestFn = void(__fastcall*)(
+    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force);
 
-// sub_1410047B0: RideVehicleActionPlugin::Init
-// THE boarding entry point — sets *(WORD*)(plugin+282)=1 to trigger RideOn
-// Prologue: push rbx; sub rsp, 90h = 8 bytes  (detourable)
-// Signature verified by IDA: unique
-const char* kInitPattern =
-    "40 53 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 8B D9"
-    " 80 B8 ? ? ? ? ? 0F 85 ? ? ? ? 48 8B 49";
+std::atomic<bool> g_started{false};
+HMODULE g_module = nullptr;
+const Logger* g_logger = nullptr;
+InitFn g_originalInit = nullptr;
+AttachFn g_originalAttach = nullptr;
+RideOnExitFn g_originalRideOnExit = nullptr;
+DriveEnterFn g_originalDriveEnter = nullptr;
+ClassifyApproachFn g_originalClassifyApproach = nullptr;
+PresentationRequestFn g_originalPresentationRequest = nullptr;
 
-using StartMountFn = void(__fastcall*)(__int64, __int64, __int64, __int64, char);
-using ActionCheckFn = bool(__fastcall*)(void*);
-using InitFn = char(__fastcall*)(void*);
+char __fastcall HookInit(uintptr_t plugin);
+void __fastcall HookAttach(uintptr_t rideOn);
+int64_t __fastcall HookRideOnExit(uintptr_t rideOn);
+int64_t __fastcall HookDriveEnter(uintptr_t driveState, uintptr_t a2, uintptr_t a3);
+uint8_t __fastcall HookClassifyApproach(uintptr_t rideOn, uintptr_t seatObject);
+void __fastcall HookPresentationRequest(
+    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force);
 
-constexpr uint32_t kPatchBytes = 13;
-constexpr uint32_t kInitPatchBytes = 16;  // Init: push(2)+sub(7)+mov_rip(7)=16
-  // push rbx = 40 53 (2B, REX prefix!)
-  // sub rsp,90h = 48 81 EC 90 00 00 00 (7B)
-  // mov rax,[rip+X] = 48 8B 05 XX XX XX XX (7B, disp at +12)
-
-Logger* g_logger = nullptr;
-StartMountFn g_startMountOriginal = nullptr;
-ActionCheckFn g_actionCheckOriginal = nullptr;
-InitFn g_initOriginal = nullptr;
-uintptr_t g_gameBase = 0;
-
-void Log(const std::string& text) { if (g_logger) g_logger->Log(text); }
-
-void WriteAbsoluteJump(uint8_t* target, void* dest) {
-    target[0] = 0x48; target[1] = 0xB8;
-    *reinterpret_cast<void**>(target + 2) = dest;
-    target[10] = 0xFF; target[11] = 0xE0;
+bool InstallInitHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kInitRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kInitPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalInit = reinterpret_cast<InitFn>(trampoline);
+    return JumpHook::WriteEntryJump(target, reinterpret_cast<void*>(&HookInit), kInitPatchLen);
 }
 
-bool InstallDetour(uintptr_t target, void* detour, void** original) {
-    auto* gateway = static_cast<uint8_t*>(VirtualAlloc(nullptr,
-        kPatchBytes + 12, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-    if (!gateway) return false;
-    memcpy(gateway, reinterpret_cast<void*>(target), kPatchBytes);
-    WriteAbsoluteJump(gateway + kPatchBytes,
-        reinterpret_cast<void*>(target + kPatchBytes));
-    DWORD old = 0;
-    if (!VirtualProtect(reinterpret_cast<void*>(target), kPatchBytes,
-        PAGE_EXECUTE_READWRITE, &old)) return false;
-    auto* patch = reinterpret_cast<uint8_t*>(target);
-    WriteAbsoluteJump(patch, detour);
-    patch[12] = 0x90;
-    VirtualProtect(patch, kPatchBytes, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), patch, kPatchBytes);
-    *original = gateway;
-    return true;
+bool InstallAttachHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kAttachRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kAttachPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalAttach = reinterpret_cast<AttachFn>(trampoline);
+    return JumpHook::WriteEntryJump(target, reinterpret_cast<void*>(&HookAttach), kAttachPatchLen);
 }
 
-// Special 16-byte detour for Init with RIP-relative fixup
-// Init prologue (16 bytes):
-//   40 53              push rbx           (2B, REX prefix!)
-//   48 81 EC 90 00 00 00  sub rsp, 0x90     (7B)
-//   48 8B 05 XX XX XX XX  mov rax, [rip+X]  (7B, disp at offset 12)
-bool InstallInitDetour(uintptr_t target, void* detour, void** original) {
-    constexpr size_t kGateSize = kInitPatchBytes + 14;
-    constexpr int kRipDispOff = 12;  // displacement in mov rax,[rip+X]
-
-    // Allocate gateway near target so RIP-relative offset fits in int32
-    uint8_t* gateway = nullptr;
-    for (int step = 0; step < 64; ++step) {
-        int64_t delta64 = -(int64_t)(step * 0x1000000LL);
-        uintptr_t hint = (uintptr_t)((int64_t)target + delta64);
-        if (hint > target) break;
-        gateway = static_cast<uint8_t*>(VirtualAlloc(
-            reinterpret_cast<void*>(hint), kGateSize,
-            MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-        if (gateway) break;
-    }
-    if (!gateway) return false;
-
-    memcpy(gateway, reinterpret_cast<void*>(target), kInitPatchBytes);
-
-    // Fix RIP-relative displacement at gateway + kRipDispOff
-    int32_t origDisp = *reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(target) + kRipDispOff);
-    int64_t fullDelta = (int64_t)target - (int64_t)gateway;
-    *reinterpret_cast<int32_t*>(gateway + kRipDispOff) =
-        origDisp + (int32_t)fullDelta;
-
-    WriteAbsoluteJump(gateway + kInitPatchBytes,
-        reinterpret_cast<void*>(target + kInitPatchBytes));
-    DWORD old = 0;
-    if (!VirtualProtect(reinterpret_cast<void*>(target), kInitPatchBytes,
-        PAGE_EXECUTE_READWRITE, &old)) return false;
-    auto* patch = reinterpret_cast<uint8_t*>(target);
-    WriteAbsoluteJump(patch, detour);
-    VirtualProtect(patch, kInitPatchBytes, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), patch, kInitPatchBytes);
-    *original = gateway;
-    return true;
+bool InstallRideOnExitHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kRideOnExitRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kRideOnExitPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalRideOnExit = reinterpret_cast<RideOnExitFn>(trampoline);
+    return JumpHook::WriteEntryJump(
+        target, reinterpret_cast<void*>(&HookRideOnExit), kRideOnExitPatchLen);
 }
 
-void __fastcall StartMountDetour(__int64 a1, __int64 a2, __int64 a3, __int64 a4, char a5) {
-    uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+bool InstallDriveEnterHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kDriveEnterRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kDriveEnterPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalDriveEnter = reinterpret_cast<DriveEnterFn>(trampoline);
+    return JumpHook::WriteEntryJump(
+        target, reinterpret_cast<void*>(&HookDriveEnter), kDriveEnterPatchLen);
+}
+
+bool InstallClassifyApproachHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kClassifyApproachRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kClassifyApproachPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalClassifyApproach = reinterpret_cast<ClassifyApproachFn>(trampoline);
+    return JumpHook::WriteEntryJump(
+        target, reinterpret_cast<void*>(&HookClassifyApproach), kClassifyApproachPatchLen);
+}
+
+bool InstallPresentationRequestHook()
+{
+    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kPresentationRequestRva;
+    void* trampoline = JumpHook::MakeTrampoline(target, kPresentationRequestPatchLen);
+    if (!trampoline)
+        return false;
+    g_originalPresentationRequest = reinterpret_cast<PresentationRequestFn>(trampoline);
+    return JumpHook::WriteEntryJump(
+        target, reinterpret_cast<void*>(&HookPresentationRequest), kPresentationRequestPatchLen);
+}
+
+char __fastcall HookInit(uintptr_t plugin)
+{
+    const char result = g_originalInit(plugin);
+    if (!result)
+        return result;
+
+    Snapshot s = {};
     std::ostringstream oss;
-    oss << "StartMount: a1=" << HookUtils::HexU64(a1)
-        << " a2=" << HookUtils::HexU64(a2)
-        << " caller=" << HookUtils::HexU64(caller - g_gameBase);
-    Log(oss.str());
-    g_startMountOriginal(a1, a2, a3, a4, a5);
-}
-
-bool __fastcall ActionCheckDetour(void* a1) {
-    uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-    std::ostringstream oss;
-    oss << "ActionCheck: a1=" << HookUtils::HexU64((uint64_t)a1)
-        << " caller=" << HookUtils::HexU64(caller - g_gameBase);
-    Log(oss.str());
-    return g_actionCheckOriginal(a1);
-}
-
-char __fastcall InitDetour(void* a1) {
-    // Log IMMEDIATELY to confirm we entered the detour
-    Log("Init: ENTERED");
-
-    // Call original Init — this sets next_state to 1 (RideOn) if boarding
-    char result = g_initOriginal(a1);
-
-    uint8_t* plugin = (uint8_t*)a1;
-    uint8_t oldNext = plugin[282];
-    uint8_t oldFlag = plugin[283];
-    std::ostringstream oss;
-    oss << "Init: plugin=" << HookUtils::HexU64((uint64_t)a1)
-        << " result=" << (int)result
-        << " oldNext=" << (int)oldNext
-        << " oldFlag=" << (int)oldFlag;
-    Log(oss.str());
-
-    if (result == 1) {
-        if (oldNext == 1) {
-            plugin[282] = 2;
-            plugin[283] = 0;
-            Log("  -> Redirect: RideOn(1) -> Drive(2)");
-        }
-    }
-
+    oss << "Init result=1";
+    if (CaptureSnapshot(plugin, s))
+        oss << FormatSnapshot(plugin, s);
+    else
+        oss << " plugin=" << Hex(plugin) << " snapshot=unavailable";
+    g_logger->Log(oss.str());
     return result;
 }
 
-} // anonymous
+void LogAttachChange(uintptr_t rideOn, const Snapshot& before, const Snapshot& after)
+{
+    if (before.stage == after.stage && before.current == after.current &&
+        before.next == after.next && before.b18A == after.b18A &&
+        before.b18B == after.b18B && before.b189 == after.b189)
+        return;
 
-namespace VehicleSeatTrace {
+    std::ostringstream oss;
+    oss << "Attach rideOn=" << Hex(rideOn)
+        << " stage " << before.stage << "->" << after.stage
+        << " cur " << static_cast<int>(before.current)
+        << "->" << static_cast<int>(after.current)
+        << " next " << static_cast<int>(before.next)
+        << "->" << static_cast<int>(after.next)
+        << " b189 " << static_cast<int>(before.b189)
+        << "->" << static_cast<int>(after.b189)
+        << " b18A " << static_cast<int>(before.b18A)
+        << "->" << static_cast<int>(after.b18A)
+        << " b18B " << static_cast<int>(before.b18B)
+        << "->" << static_cast<int>(after.b18B)
+        << " kind=" << after.rideKind
+        << " b3B1=" << static_cast<int>(after.b3B1)
+        << " seatKey=" << Hex(after.seatKey);
+    g_logger->Log(oss.str());
+}
 
-bool TryInstall(HMODULE gameModule, const Logger& logger) {
-    g_logger = const_cast<Logger*>(&logger);
-    g_gameBase = (uintptr_t)gameModule;
-    DWORD imageSize = 0;
-    HookUtils::TryGetModuleSize(gameModule, imageSize);
-    uintptr_t base = g_gameBase;
-    size_t size = imageSize;
-
-    uintptr_t sm = 0; //PatternScan::Find(base, size, kStartMountPattern);
-    uintptr_t ac = 0; //PatternScan::Find(base, size, kActionCheckPattern);
-    uintptr_t init = PatternScan::Find(base, size, kInitPattern);
-    bool ok = true;
-
-    if (sm) {
-        std::ostringstream o; o << "StartMount at " << HookUtils::HexU64(sm - g_gameBase); Log(o.str());
-        ok |= InstallDetour(sm, (void*)&StartMountDetour, (void**)&g_startMountOriginal);
+void __fastcall HookAttach(uintptr_t rideOn)
+{
+    uintptr_t plugin = 0;
+    ReadValue(rideOn + 0x88, plugin);
+    Snapshot before = {};
+    const bool haveBefore = CaptureSnapshot(plugin, before);
+    g_originalAttach(rideOn);
+    Snapshot after = {};
+    if (haveBefore && CaptureSnapshot(plugin, after)) {
+        LogAttachChange(rideOn, before, after);
+        if (before.stage != 2 && after.stage == 2 &&
+            after.current == 1 && after.next == 1 && after.b18A) {
+            *reinterpret_cast<uint16_t*>(plugin + 0x11A) = 2;
+            g_logger->Log("FastDrive requested after ProcessVehicleAttach stage 2");
+        }
     }
-    if (ac) {
-        std::ostringstream o; o << "ActionCheck at " << HookUtils::HexU64(ac - g_gameBase); Log(o.str());
-        ok |= InstallDetour(ac, (void*)&ActionCheckDetour, (void**)&g_actionCheckOriginal);
-    }
-    if (init) {
-        std::ostringstream o; o << "Init at " << HookUtils::HexU64(init - g_gameBase); Log(o.str());
-        ok |= InstallInitDetour(init, (void*)&InitDetour, (void**)&g_initOriginal);
-    } else {
-        Log("Init NOT FOUND");
-    }
+}
 
-    if (!ok) { Log("no hooks"); return false; }
-    Log("hooks installed");
+int64_t __fastcall HookRideOnExit(uintptr_t rideOn)
+{
+    uintptr_t plugin = 0;
+    ReadValue(rideOn + 0x88, plugin);
+    Snapshot before = {};
+    if (CaptureSnapshot(plugin, before))
+        g_logger->Log(std::string("RideOnExit entry") + FormatSnapshot(plugin, before));
+
+    const int64_t result = g_originalRideOnExit(rideOn);
+
+    Snapshot after = {};
+    if (CaptureSnapshot(plugin, after))
+        g_logger->Log(std::string("RideOnExit exit") + FormatSnapshot(plugin, after));
+    return result;
+}
+
+int64_t __fastcall HookDriveEnter(uintptr_t driveState, uintptr_t a2, uintptr_t a3)
+{
+    uintptr_t plugin = 0;
+    ReadValue(driveState + 0x88, plugin);
+    Snapshot before = {};
+    const bool haveBefore = CaptureSnapshot(plugin, before);
+    if (haveBefore)
+        g_logger->Log(std::string("DriveEnter entry") + FormatSnapshot(plugin, before));
+
+    const int64_t result = g_originalDriveEnter(driveState, a2, a3);
+
+    Snapshot after = {};
+    if (CaptureSnapshot(plugin, after))
+        g_logger->Log(std::string("DriveEnter exit") + FormatSnapshot(plugin, after));
+    return result;
+}
+
+uint8_t __fastcall HookClassifyApproach(uintptr_t rideOn, uintptr_t seatObject)
+{
+    const uint8_t result = g_originalClassifyApproach(rideOn, seatObject);
+    uintptr_t plugin = 0;
+    ReadValue(rideOn + 0x88, plugin);
+    Snapshot s = {};
+    std::ostringstream oss;
+    oss << "ClassifyApproach result=" << static_cast<int>(result)
+        << " seatObject=" << Hex(seatObject);
+    if (CaptureSnapshot(plugin, s))
+        oss << FormatSnapshot(plugin, s);
+    g_logger->Log(oss.str());
+    return result;
+}
+
+void __fastcall HookPresentationRequest(
+    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force)
+{
+    const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+    const uintptr_t expected = reinterpret_cast<uintptr_t>(g_module) + kProcessAttachPresentationRetRva;
+    if (caller == expected) {
+        std::ostringstream oss;
+        oss << "PresentationRequest suppressed request=" << Hex(requestId)
+            << " mode=" << mode
+            << " target=" << Hex(target);
+        g_logger->Log(oss.str());
+        return;
+    }
+    g_originalPresentationRequest(global, requestId, a3, mode, target, force);
+}
+
+} // namespace
+
+bool TryInstall(HMODULE gameModule, const Logger& logger)
+{
+    if (g_started.exchange(true))
+        return true;
+
+    g_module = gameModule;
+    g_logger = &logger;
+    logger.Log("VehicleBoard fast drive + presentation suppress experiment hook enabled");
+
+    if (!InstallInitHook()) {
+        logger.Log("InstallInitHook failed");
+        return false;
+    }
+    if (!InstallAttachHook()) {
+        logger.Log("InstallAttachHook failed");
+        return false;
+    }
+    if (!InstallRideOnExitHook()) {
+        logger.Log("InstallRideOnExitHook failed");
+        return false;
+    }
+    if (!InstallDriveEnterHook()) {
+        logger.Log("InstallDriveEnterHook failed");
+        return false;
+    }
+    if (!InstallClassifyApproachHook()) {
+        logger.Log("InstallClassifyApproachHook failed");
+        return false;
+    }
+    if (!InstallPresentationRequestHook()) {
+        logger.Log("InstallPresentationRequestHook failed");
+        return false;
+    }
     return true;
 }
 
