@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "VehicleSeatTrace.h"
 #include "JumpHook.h"
+#include "RideOnAnimationComponentTrace.h"
+#include "SeatTransitionTrace.h"
 #include "VehicleSnapshot.h"
 
 #include <atomic>
@@ -243,6 +245,20 @@ void __fastcall HookPresentationRequest(
 
 } // namespace
 
+bool TryProcessAttachImmediately(uintptr_t rideOn)
+{
+    if (!rideOn || !g_originalAttach)
+        return false;
+
+    __try {
+        g_originalAttach(rideOn);
+        g_originalAttach(rideOn);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool TryInstall(HMODULE gameModule, const Logger& logger)
 {
     if (g_started.exchange(true))
@@ -250,7 +266,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
 
     g_module = gameModule;
     g_logger = &logger;
-    logger.Log("VehicleBoard fast drive + presentation suppress experiment hook enabled");
+    logger.Log("VehicleBoard fast drive + RideOn animation-component trace hook enabled");
 
     if (!InstallInitHook()) {
         logger.Log("InstallInitHook failed");
@@ -272,10 +288,10 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
         logger.Log("InstallClassifyApproachHook failed");
         return false;
     }
-    if (!InstallPresentationRequestHook()) {
-        logger.Log("InstallPresentationRequestHook failed");
+    if (!RideOnAnimationComponentTrace::TryInstall(gameModule, logger))
         return false;
-    }
+    if (!SeatTransitionTrace::TryInstall(gameModule, logger))
+        return false;
     return true;
 }
 

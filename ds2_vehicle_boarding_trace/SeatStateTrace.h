@@ -1,10 +1,9 @@
 #pragma once
+
 #include <windows.h>
 #include "Logger.h"
 
-#include <cstdint>
-
-namespace VehicleSeatTrace {
+namespace SeatStateTrace {
+    void RememberSeatObject(uintptr_t rideOn, uintptr_t seatObject);
     bool TryInstall(HMODULE gameModule, const Logger& logger);
-    bool TryProcessAttachImmediately(uintptr_t rideOn);
 }

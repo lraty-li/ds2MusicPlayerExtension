@@ -173,6 +173,21 @@ PassengerCargo_UpdateMaybeVehicleMount
   -> Entity_AttachToParentAndNotify
 ```
 
+2026-07-02 direct-attach experiment update:
+
+- A player experiment skipped the original `RideOnState_OnEnter` body and manually
+  called the original `ProcessVehicleAttach` trampoline twice from the OnEnter hook.
+- That path reached the player `ProcessVehicleAttach -> Entity_AttachToParentAndNotify`
+  chain and then requested Drive by writing `plugin + 0x11A = 2`.
+- Runtime reached `RideOnExit` and `DriveEnter` in the same frame
+  (`elapsed=0.0166834` in the automated screenshot run), instead of waiting for
+  the normal RideOn timer.
+- Screenshots showed the long climb sequence was removed, but a short pose/position
+  settling artifact remains before the player is fully seated.
+- This strengthens the conclusion that the reusable primitive for the player mod is
+  the player `ProcessVehicleAttach -> Entity_AttachToParentAndNotify` chain, not a
+  direct call to `MountableComponent_StartMount`.
+
 ## Player Path Comparison
 
 Confirmed facts:

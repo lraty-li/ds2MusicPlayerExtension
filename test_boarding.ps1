@@ -278,7 +278,7 @@ Send-GameKey 0x1E "A (RECOVER YES)"
 Wait-GameSeconds "Recover confirm delay" 2
 Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
 
-Wait-GameSeconds "Load" 15
+Wait-GameSeconds "Load" 2
 Send-GameKey 0x21 "F (BOARD)"
 
 Wait-GameSeconds "Ride" 4
