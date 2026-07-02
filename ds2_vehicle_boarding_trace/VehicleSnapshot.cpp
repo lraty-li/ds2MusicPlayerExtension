@@ -36,6 +36,7 @@ bool CaptureSnapshot(uintptr_t plugin, Snapshot& s)
     ReadValue(s.runtime + 0x192, s.b192);
     ReadValue(s.runtime + 0x381, s.b381);
     ReadValue(s.runtime + 0x2A0, s.rideKind);
+    ReadValue(s.runtime + 0x2A4, s.rideVariant);
     ReadValue(s.runtime + 0x3B1, s.b3B1);
     return s.current <= 8 && s.next <= 8 && s.stage <= 16;
 }
@@ -51,6 +52,7 @@ std::string FormatSnapshot(uintptr_t plugin, const Snapshot& s)
         << " rideOn=" << Hex(s.rideOn)
         << " runtime=" << Hex(s.runtime)
         << " kind=" << s.rideKind
+        << " variant=" << s.rideVariant
         << " stage=" << s.stage
         << " elapsed=" << s.elapsed
         << " b189=" << static_cast<int>(s.b189)

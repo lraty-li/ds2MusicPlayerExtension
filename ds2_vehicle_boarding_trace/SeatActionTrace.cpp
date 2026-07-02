@@ -34,11 +34,6 @@ int64_t __fastcall HookActionPush(uintptr_t list, const uint8_t* value)
         oss << "DriveSeatActionPush action=0x" << std::hex
             << static_cast<int>(action) << std::dec
             << " list=" << VehicleSeatTrace::Hex(list);
-        if (hasAction && action == 0x49) {
-            oss << " suppressed";
-            g_logger->Log(oss.str());
-            return static_cast<int64_t>(list);
-        }
         g_logger->Log(oss.str());
     }
     return g_originalActionPush(list, value);

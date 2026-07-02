@@ -464,3 +464,134 @@ Update exit  cur=1 next=2 stage=2 elapsed=3.61611 b189=1 b18A=1 b18B=1 b190=0 b1
 ```
 
 - Runtime result: in this normal player boarding run, `RideVehicleRuntime_CheckAbortAndRequestState5` did not request state `5`; it returned `0` both before and after `rideRuntime + 0x18B` became `1`.
+
+2026-07-02 dismount pose trace follow-up:
+
+- Manual validation of the skip-OnEnter direct attach path showed that the first
+  dismount played an incorrect pose, made the player fall forward, and left the
+  player away from the vehicle.
+- The relevant `AnimSetState state=4` caller is `DSPlayerVehicleRideOffState_OnEnter`
+  (`0x140F97761`), so the bad later visuals are caused by missing or corrupt RideOn
+  pose setup rather than a RideOn-side request for the RideOff animation.
+- The restored safe baseline keeps original `RideOnState_OnEnter`, then requests
+  Drive only after normal `ProcessVehicleAttach` reaches stage `2`.
+- A read-only automated run logged the first dismount side chain:
+
+```text
+DismountSideClassify result=2 ... kind=1 ... sideX=0 sideZ=0 flags7358=0
+RideOffPoseVariant side=2 result=0 ... kind=1 runtime+2A4=4
+```
+
+- Runtime result: player dismount pose selection is stateful and depends on data
+  established before RideOff. Fast boarding must preserve the mount-side pose/action
+  initialization; skipping the entire RideOn OnEnter corrupts the first dismount.
+
+2026-07-02 animation wrapper follow-up:
+
+- `0x140DB9A10` is a thin animation state wrapper that dispatches through
+  `inner(animComponent + 0x8)->vtable + 0x168`.
+- `0x140DBA820` is the animation-component vtable `+0x250` wrapper and writes the
+  float parameter to `inner + 0x544`.
+- In the stable baseline, `RideOnState_OnEnter` calls the `+0x250` wrapper
+  immediately before `AnimSetState(5)`:
+
+```text
+AnimFloat544 caller=0x140F99880 ... value=0 f544 4->0
+AnimSetState call state=5 caller=0x140F99892
+```
+
+- Before/after snapshots around `AnimSetState(5)`, `state=4`, and `state=1` did not
+  change the sampled inner fields. This explains why the skip-OnEnter path plus a
+  standalone pre-call to `state=5` did not fix the standing-on-seat pose.
+- Runtime result: the mount-side pose setup includes animation parameters around
+  the state request, not just the state request itself.
+
+2026-07-02 RideOn pose/action parameter trace:
+
+- Before original `RideOnState_OnEnter`, the traced parameter block at `rideOn+0x98`
+  had `f3920=0`, `f3DD0=0`, and runtime `kind=0`, `b191=0`.
+- After original OnEnter, the same run had `f3920=1`, `f3DD0=1`, `kind=1`, and
+  `b191=1`.
+- Several parameter flags also changed into RideOn-active values:
+  `fl1030 1->5`, `fl1090 33->37`, `fl1120 225->229`, `fl1510 1->5`,
+  `fl3910 1->5`.
+- `runtime+0x2A4` stayed `1` at OnEnter exit, but the later RideOff pose trace saw
+  `runtime+0x2A4=4`.
+- Runtime result: the skip-OnEnter path bypassed a concrete pose/action parameter
+  setup block, not merely a cosmetic presentation call.
+
+2026-07-02 `runtime+0x2A4` follow-up:
+
+- After adding `variant=runtime+0x2A4` to the normal state snapshots, the automated
+  run showed `variant=1` through `ClassifyApproach`, `RideOnExit`, and
+  `DriveEnter exit`.
+- The same run still saw `runtime+0x2A4=4` inside the RideOff pose-variant trace.
+- Runtime result: `runtime+0x2A4` is not the missing mount-side seated pose setup
+  for the skip-OnEnter path. It changes later, around the transition into RideOff
+  or the RideOff pose chain.
+
+2026-07-02 static animation-system follow-up:
+
+- `0x140DB9A10` dispatches through `inner(animComponent+0x8)->vtable+0x168`.
+- The vtable target is now named `AnimInner_SetStateAndEvaluateTracks`
+  (`0x140EF6A20`).
+- This function uses `r8b` as the visible state selector and `xmm1` as blend/phase
+  input; it is not a trivial state setter.
+- The state `5` path reaches `AnimInner_RebuildTrackSlots` (`0x140EF6040`), which
+  rebuilds a multi-track clip set on the object at `inner+0x28`.
+- `AnimInner_RebuildTrackSlots` clears and repopulates track-slot fields between
+  approximately `+0x3B0` and `+0x510`.
+- `AnimTrackSlot_SelectClipByType` (`0x140EF5E90`) selects clips by fixed type ids
+  and writes 0x20-byte track slots, including active flags and default weights.
+- Static result: the correct mounted pose depends on a rebuilt multi-track animation
+  set plus RideOn parameter setup. A standalone call to `AnimSetState(5)` is
+  structurally insufficient.
+
+2026-07-02 RideOn parameter-block static layout:
+
+- `rideOn+0x98` points to a large action/animation parameter block.
+- Many OnEnter writes use a `flag/value` pair: value at `params+N`, validity flag at
+  `params+N-0x10`, with bit `0x04` marking the parameter as updated/active.
+- Examples include `+0x3950`, `+0x34D0`, `+0x3980`, `+0x3740`, `+0x3770`,
+  `+0x3DD0`, and `+0x53C0`.
+- A later flag-only section enables a sequence of parameters at `+0x1030` through
+  `+0x1210` plus `+0x1510`.
+- Static result: RideOn setup consists of both an action-parameter envelope and an
+  inner multi-track animation rebuild. Removing either side can produce a state
+  machine that reaches Drive but leaves the visible character in an invalid pose.
+
+2026-07-02 presentation helper distinction:
+
+- `PresentationGlobal_RequestAction` and `PresentationGlobal_WriteActionParam`
+  operate on the global presentation/action object at `qword_14623E908`.
+- They do not populate `rideOn+0x98` and do not rebuild animation inner track slots.
+- Static result: presentation suppression is orthogonal to the seated-pose failure;
+  it can affect camera/action presentation but cannot replace the missing RideOn
+  animation setup.
+
+2026-07-02 RideOn update-side animation/action follow-up:
+
+- `DSPlayerVehicleRideOnState_Update` has two separate completion exits. The normal
+  Drive completion path writes `plugin+0x11A = 2` at `0x140F9A2C7`; the
+  pre-threshold early-finish branch writes `plugin+0x11A = 3` at `0x140F9A0A2`.
+- `ActionParams_QueryBoolByParamId` (`0x140DBEA00`) maps an external action param id
+  through vtable `+0xA0` and queries a bool through `params+0x8A8` vtable `+0xE0`.
+  RideOn update uses id `0xED` as one normal-completion gate.
+- `RideOnState_UpdateSeatPoseRequest` (`0x140F9B070`) runs once RideOn attach stage
+  is `2`. It chooses a RideOn seat pose id from the current seat/vehicle action
+  object and writes pose request fields at `+0x788`, `+0x7BC`, `+0x2104`, and
+  `+0x2154` in the pose/action owner block.
+- `RideRuntime_SetRideOnActionSlotFilters` (`0x1410139A0`) toggles action slots
+  `4`, `5`, `6`, `7`, `9`, `15`, and `17`, recording state at `runtime+0x24596`.
+  It uses `ActionTree_FindSlotByByteId` (`0x141198FB0`),
+  `ActionSlot_SetTagFiltered` (`0x141194500`), and
+  `PlayerActionFilters_SetSlotTag` (`0x140F779C0`).
+- Static result: player fast boarding should not be modeled as a passenger-style
+  direct mount. The player path needs the RideOn OnEnter parameter envelope plus
+  the RideOn update-side pose request and action slot filters before requesting the
+  normal Drive transition.
+- Runtime result: the current ASI implements this boundary by leaving
+  `ProcessVehicleAttach` log-only and requesting Drive after original
+  `RideOnState_Update` returns with `stage=2`. `test_boarding.ps1` completed with
+  `FastDrive requested after RideOnUpdate pose/filter pass ... elapsed=0.0500501`,
+  followed by `DriveEnter exit ... b18B=1 b191=1 b381=0x4`.

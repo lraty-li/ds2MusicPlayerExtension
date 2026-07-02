@@ -122,8 +122,11 @@
     <ClInclude Include="PatternScan.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="RideOnAnimationComponentTrace.h" />
+    <ClInclude Include="RideOffPoseTrace.h" />
+    <ClInclude Include="RideOnPoseParamTrace.h" />
     <ClInclude Include="RideOnPresentationParamTrace.h" />
     <ClInclude Include="RideOnMessageTrace.h" />
+    <ClInclude Include="RideOnUpdateTrace.h" />
     <ClInclude Include="SeatActionTrace.h" />
     <ClInclude Include="SeatStateTrace.h" />
     <ClInclude Include="SeatTransitionTrace.h" />
@@ -138,8 +141,11 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="PatternScan.cpp" />
     <ClCompile Include="RideOnAnimationComponentTrace.cpp" />
+    <ClCompile Include="RideOffPoseTrace.cpp" />
+    <ClCompile Include="RideOnPoseParamTrace.cpp" />
     <ClCompile Include="RideOnPresentationParamTrace.cpp" />
     <ClCompile Include="RideOnMessageTrace.cpp" />
+    <ClCompile Include="RideOnUpdateTrace.cpp" />
     <ClCompile Include="SeatActionTrace.cpp" />
     <ClCompile Include="SeatStateTrace.cpp" />
     <ClCompile Include="SeatTransitionTrace.cpp" />

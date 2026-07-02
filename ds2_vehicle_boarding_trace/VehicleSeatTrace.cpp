@@ -19,22 +19,17 @@ constexpr uintptr_t kAttachRva = 0x140F9A370ull - kImageBase;
 constexpr uintptr_t kRideOnExitRva = 0x140F99990ull - kImageBase;
 constexpr uintptr_t kDriveEnterRva = 0x140F8EB40ull - kImageBase;
 constexpr uintptr_t kClassifyApproachRva = 0x140F9B4A0ull - kImageBase;
-constexpr uintptr_t kPresentationRequestRva = 0x140E21860ull - kImageBase;
-constexpr uintptr_t kProcessAttachPresentationRetRva = 0x140F9AFB1ull - kImageBase;
 constexpr size_t kInitPatchLen = 9;
 constexpr size_t kAttachPatchLen = 12;
 constexpr size_t kRideOnExitPatchLen = 19;
 constexpr size_t kDriveEnterPatchLen = 15;
 constexpr size_t kClassifyApproachPatchLen = 15;
-constexpr size_t kPresentationRequestPatchLen = 15;
 
 using InitFn = char(__fastcall*)(uintptr_t plugin);
 using AttachFn = void(__fastcall*)(uintptr_t rideOn);
 using RideOnExitFn = int64_t(__fastcall*)(uintptr_t rideOn);
 using DriveEnterFn = int64_t(__fastcall*)(uintptr_t driveState, uintptr_t a2, uintptr_t a3);
 using ClassifyApproachFn = uint8_t(__fastcall*)(uintptr_t rideOn, uintptr_t seatObject);
-using PresentationRequestFn = void(__fastcall*)(
-    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force);
 
 std::atomic<bool> g_started{false};
 HMODULE g_module = nullptr;
@@ -44,15 +39,12 @@ AttachFn g_originalAttach = nullptr;
 RideOnExitFn g_originalRideOnExit = nullptr;
 DriveEnterFn g_originalDriveEnter = nullptr;
 ClassifyApproachFn g_originalClassifyApproach = nullptr;
-PresentationRequestFn g_originalPresentationRequest = nullptr;
 
 char __fastcall HookInit(uintptr_t plugin);
 void __fastcall HookAttach(uintptr_t rideOn);
 int64_t __fastcall HookRideOnExit(uintptr_t rideOn);
 int64_t __fastcall HookDriveEnter(uintptr_t driveState, uintptr_t a2, uintptr_t a3);
 uint8_t __fastcall HookClassifyApproach(uintptr_t rideOn, uintptr_t seatObject);
-void __fastcall HookPresentationRequest(
-    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force);
 
 bool InstallInitHook()
 {
@@ -105,17 +97,6 @@ bool InstallClassifyApproachHook()
     g_originalClassifyApproach = reinterpret_cast<ClassifyApproachFn>(trampoline);
     return JumpHook::WriteEntryJump(
         target, reinterpret_cast<void*>(&HookClassifyApproach), kClassifyApproachPatchLen);
-}
-
-bool InstallPresentationRequestHook()
-{
-    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kPresentationRequestRva;
-    void* trampoline = JumpHook::MakeTrampoline(target, kPresentationRequestPatchLen);
-    if (!trampoline)
-        return false;
-    g_originalPresentationRequest = reinterpret_cast<PresentationRequestFn>(trampoline);
-    return JumpHook::WriteEntryJump(
-        target, reinterpret_cast<void*>(&HookPresentationRequest), kPresentationRequestPatchLen);
 }
 
 char __fastcall HookInit(uintptr_t plugin)
@@ -171,11 +152,6 @@ void __fastcall HookAttach(uintptr_t rideOn)
     Snapshot after = {};
     if (haveBefore && CaptureSnapshot(plugin, after)) {
         LogAttachChange(rideOn, before, after);
-        if (before.stage != 2 && after.stage == 2 &&
-            after.current == 1 && after.next == 1 && after.b18A) {
-            *reinterpret_cast<uint16_t*>(plugin + 0x11A) = 2;
-            g_logger->Log("FastDrive requested after ProcessVehicleAttach stage 2");
-        }
     }
 }
 
@@ -227,22 +203,6 @@ uint8_t __fastcall HookClassifyApproach(uintptr_t rideOn, uintptr_t seatObject)
     return result;
 }
 
-void __fastcall HookPresentationRequest(
-    uintptr_t global, uint32_t requestId, uintptr_t a3, int mode, uintptr_t target, uint8_t force)
-{
-    const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-    const uintptr_t expected = reinterpret_cast<uintptr_t>(g_module) + kProcessAttachPresentationRetRva;
-    if (caller == expected) {
-        std::ostringstream oss;
-        oss << "PresentationRequest suppressed request=" << Hex(requestId)
-            << " mode=" << mode
-            << " target=" << Hex(target);
-        g_logger->Log(oss.str());
-        return;
-    }
-    g_originalPresentationRequest(global, requestId, a3, mode, target, force);
-}
-
 } // namespace
 
 bool TryProcessAttachImmediately(uintptr_t rideOn)
@@ -266,7 +226,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
 
     g_module = gameModule;
     g_logger = &logger;
-    logger.Log("VehicleBoard fast drive + RideOn animation-component trace hook enabled");
+    logger.Log("VehicleBoard RideOn attach/animation trace hook enabled");
 
     if (!InstallInitHook()) {
         logger.Log("InstallInitHook failed");

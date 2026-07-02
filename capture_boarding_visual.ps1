@@ -34,7 +34,7 @@ public static class $siClassName {
     }
 
     [DllImport("user32.dll", SetLastError=true)] static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-    [DllImport("user32.dll")] static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);
+    [DllImport("user32.dll")] static extern void mouse_event(uint f, int x, int y, uint d, UIntPtr e);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int n);
     [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
@@ -67,6 +67,12 @@ public static class $siClassName {
         SetCursorPos(x, y);
         System.Threading.Thread.Sleep(80);
         Click(hwnd);
+    }
+
+    public static void MouseMove(IntPtr hwnd, int dx, int dy) {
+        Focus(hwnd);
+        mouse_event(0x0001, dx, dy, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(80);
     }
 
     static uint SendScan(ushort scancode, bool keyUp) {
@@ -120,6 +126,7 @@ $SI = [type]$siClassName
 $gameDir = "F:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH"
 $outDir = Join-Path $PSScriptRoot "build\boarding_capture\current"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+Remove-Item -LiteralPath (Join-Path $outDir "*.png") -Force -ErrorAction SilentlyContinue
 if (Test-Path (Join-Path $gameDir "log.txt")) {
     Clear-Content (Join-Path $gameDir "log.txt") -EA SilentlyContinue
 }
@@ -156,6 +163,7 @@ function Wait-Safe([int]$seconds) {
     }
 }
 function Key([UInt16]$scan, [int]$hold = 60) { $SI::KeyScan($hwnd, $scan, $hold) }
+function MouseMove([int]$dx, [int]$dy = 0) { $SI::MouseMove($hwnd, $dx, $dy) }
 function Shot([string]$name) { $SI::CaptureWindow($hwnd, (Join-Path $outDir $name)) }
 
 Wait-Safe 15
@@ -177,6 +185,8 @@ Start-Sleep -Milliseconds 1000; Shot "04_board_2200ms.png"
 Start-Sleep -Milliseconds 1500; Shot "05_board_3700ms.png"
 
 Key 0x21
-Start-Sleep 2
+Start-Sleep 12
+Shot "06_after_dismount.png"
+
 & (Join-Path $PSScriptRoot "kill_ds2.ps1")
 Write-Host "CAPTURE_OK $outDir"

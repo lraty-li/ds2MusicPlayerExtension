@@ -23,6 +23,7 @@ struct Snapshot {
     uint8_t b381 = 0;
     uint8_t b3B1 = 0;
     uint32_t rideKind = 0;
+    uint32_t rideVariant = 0;
 };
 
 template <typename T>

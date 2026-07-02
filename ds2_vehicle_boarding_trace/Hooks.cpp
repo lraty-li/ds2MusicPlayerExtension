@@ -2,6 +2,9 @@
 #include "Hooks.h"
 #include "HookUtils.h"
 #include "Logger.h"
+#include "RideOffPoseTrace.h"
+#include "RideOnUpdateTrace.h"
+#include "SeatActionTrace.h"
 #include "VehicleSeatTrace.h"
 #include <sstream>
 
@@ -44,6 +47,9 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     }
 
     bool ok = VehicleSeatTrace::TryInstall(gameModule, g_logger);
+    ok = ok && RideOnUpdateTrace::TryInstall(gameModule, g_logger);
+    ok = ok && RideOffPoseTrace::TryInstall(gameModule, g_logger);
+    ok = ok && SeatActionTrace::TryInstall(gameModule, g_logger);
     g_logger.Log(ok ? "hook installed" : "hook install FAILED");
     return 0;
 }
