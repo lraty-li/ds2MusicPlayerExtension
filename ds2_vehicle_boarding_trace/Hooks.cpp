@@ -2,10 +2,7 @@
 #include "Hooks.h"
 #include "HookUtils.h"
 #include "Logger.h"
-#include "RideOffPoseTrace.h"
-#include "RideOnUpdateTrace.h"
-#include "SeatActionTrace.h"
-#include "VehicleSeatTrace.h"
+#include "RideOnEnterInterceptor.h"
 #include <sstream>
 
 namespace {
@@ -33,7 +30,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     Logger::ResetLogFile(resetErr);
 
     HMODULE gameModule = GetModuleHandleW(nullptr);
-    g_logger.Log("VehicleBoard init start");
+    g_logger.Log("VehicleBoard DIAGNOSTIC v0.5.0 start");
 
     if (!gameModule) {
         g_logger.Log("GetModuleHandleW failed");
@@ -46,10 +43,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         return 1;
     }
 
-    bool ok = VehicleSeatTrace::TryInstall(gameModule, g_logger);
-    ok = ok && RideOnUpdateTrace::TryInstall(gameModule, g_logger);
-    ok = ok && RideOffPoseTrace::TryInstall(gameModule, g_logger);
-    ok = ok && SeatActionTrace::TryInstall(gameModule, g_logger);
+    // Only RideOnUpdateTrace (which includes cmd dispatch hook + cmd6 suppress)
+    const bool ok = RideOnEnterInterceptor::TryInstall(gameModule, g_logger);
     g_logger.Log(ok ? "hook installed" : "hook install FAILED");
     return 0;
 }

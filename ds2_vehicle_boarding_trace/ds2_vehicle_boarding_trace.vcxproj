@@ -121,16 +121,8 @@
     <ClInclude Include="Logger.h" />
     <ClInclude Include="PatternScan.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="RideOnAnimationComponentTrace.h" />
-    <ClInclude Include="RideOffPoseTrace.h" />
-    <ClInclude Include="RideOnPoseParamTrace.h" />
-    <ClInclude Include="RideOnPresentationParamTrace.h" />
-    <ClInclude Include="RideOnMessageTrace.h" />
+    <ClInclude Include="RideOnEnterInterceptor.h" />
     <ClInclude Include="RideOnUpdateTrace.h" />
-    <ClInclude Include="SeatActionTrace.h" />
-    <ClInclude Include="SeatStateTrace.h" />
-    <ClInclude Include="SeatTransitionTrace.h" />
-    <ClInclude Include="VehicleSeatTrace.h" />
     <ClInclude Include="VehicleSnapshot.h" />
   </ItemGroup>
   <ItemGroup>
@@ -140,16 +132,8 @@
     <ClCompile Include="JumpHook.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="PatternScan.cpp" />
-    <ClCompile Include="RideOnAnimationComponentTrace.cpp" />
-    <ClCompile Include="RideOffPoseTrace.cpp" />
-    <ClCompile Include="RideOnPoseParamTrace.cpp" />
-    <ClCompile Include="RideOnPresentationParamTrace.cpp" />
-    <ClCompile Include="RideOnMessageTrace.cpp" />
+    <ClCompile Include="RideOnEnterInterceptor.cpp" />
     <ClCompile Include="RideOnUpdateTrace.cpp" />
-    <ClCompile Include="SeatActionTrace.cpp" />
-    <ClCompile Include="SeatStateTrace.cpp" />
-    <ClCompile Include="SeatTransitionTrace.cpp" />
-    <ClCompile Include="VehicleSeatTrace.cpp" />
     <ClCompile Include="VehicleSnapshot.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>

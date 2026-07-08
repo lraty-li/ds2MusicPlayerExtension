@@ -37,6 +37,17 @@ bool ReadValue(uintptr_t addr, T& out)
     }
 }
 
+template <typename T>
+bool WriteValue(uintptr_t addr, T value)
+{
+    __try {
+        *reinterpret_cast<T*>(addr) = value;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 std::string Hex(uintptr_t value);
 bool CaptureSnapshot(uintptr_t plugin, Snapshot& s);
 std::string FormatSnapshot(uintptr_t plugin, const Snapshot& s);

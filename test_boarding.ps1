@@ -267,18 +267,18 @@ function Send-GameKey {
     [void]$SI::KeyScan($hwnd, $Scan, $HoldMs)
 }
 
-Wait-GameSeconds "Intro" 15
+Wait-GameSeconds "Intro" 18
 Stop-IfGameCrashed "click skip"
 Write-Host "  Focus + Click (skip)"; $SI::Click($hwnd)
 
-Wait-GameSeconds "Wait" 5
+Wait-GameSeconds "Wait" 4
 Send-GameKey 0x1C "ENTER (CONTINUE)"
-Wait-GameSeconds "Recover prompt" 2
+Wait-GameSeconds "Recover prompt" 1
 Send-GameKey 0x1E "A (RECOVER YES)"
-Wait-GameSeconds "Recover confirm delay" 2
+Wait-GameSeconds "Recover confirm delay" 1
 Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
 
-Wait-GameSeconds "Load" 2
+Wait-GameSeconds "Load" 4
 Send-GameKey 0x21 "F (BOARD)"
 
 Wait-GameSeconds "Ride" 4
