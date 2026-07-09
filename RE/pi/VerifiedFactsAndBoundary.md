@@ -1,4 +1,4 @@
-# 已验证事实和当前边界
+# 已确认事实
 
 ## 三个上车方向
 
@@ -8,31 +8,19 @@
 | 左前方 | 1 | 长时间上车动画 |
 | 右前方 | 2 | 长时间上车动画 |
 
-## v0.11.0 当前方案
+`rideKind` 在 `OnEnter` 中由 `sub_140157460` 根据玩家相对于车辆的角度设置（0xF98F7C）。
+它直接影响动作参数包络中的标量值（`rideOn+0x3950`），该值被动画图用于剪辑选择。
 
-在 `RideOnState_OnEnter` 钩子中：
+## 已确认边界
 
-1. 调用原始 OnEnter（设置参数包络和动画状态）
-2. 从 RideOnState vtable slot [27] (+0xD8) 读取 `ProcessVehicleAttach` 并提前调用
-   - 使 stage 0→1，实体提前附着，座位过渡提前开始
-3. 覆写 `runtime+0x2A0`（rideKind）为 0（正前方）
-   - 使左侧/右侧上车使用正前方的瞬间上车动作
+- `rideKind` 覆写为 0 时，OnEnter 已完成动作参数写入，当前已加载的动画剪辑选择不随之改变
+- 提前调用 ProcessVehicleAttach 会改变玩家附着后的空间结果
+- 动画状态 `inner+0x2E0` 的 5→1 改写不是当前可见动画图的直接控制位
+- 相位 `inner+0x544` 的 0→1.0 改写不承担当前过渡控制
+- 状态机加速 `plugin+0x11A=2` 改变的是状态流转，不直接终止已加载剪辑
+- `seat+0x1268` 需要单独谨慎处理；任意非零写入会破坏运行时稳定性
 
-### 关键函数
+## 动画驱动机制
 
-| 地址 | 名称 | 签名 |
-|------|------|------|
-| 0x140F98D00 | `DSPlayerVehicleRideOnState_OnEnter` | `48 8B C4 48 89 58 ? 48 89 70 ? 57 41 56 41 57 48 81 EC ? ? ? ? C5 F8 29 70 ? C5 F8 29 78 ? C5 78 29 40 ? 45 33 FF` |
-| 0x140F99C60 | `DSPlayerVehicleRideOnState_Update` | `40 53 56 57 48 83 EC ? C5 F2 58 81` |
-| 0x140F9A390 | `DSPlayerVehicleRideOnState_ProcessVehicleAttach` | 从 vtable slot [27] 获取 |
-
-### 逻辑结构
-
-```
-rideOn+0x88 → plugin (RideVehicleRuntimePlugin)
-rideOn+0x190 → runtime
-rideOn+0xB0 → anim component
-runtime+0x2A0 → rideKind (approach direction)
-runtime+0x220 → seat reference (resolves via sub_1401783C0 to seat entity)
-plugin+0x11A → next state byte (2 = Drive)
-```
+上车动画由 Decima 动画图驱动，该图读取 OnEnter 写入的**动作参数包络**。
+动画图是可视脚本系统，C++ 侧无法控制其内部的剪辑选择逻辑。

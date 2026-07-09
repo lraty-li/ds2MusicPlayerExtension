@@ -7,7 +7,7 @@ after the first dismount the player character played an incorrect dismount pose,
 fell forward, and ended up away from the vehicle. Later boarding attempts then
 looked like they were continuing or reusing a dismount-side animation state.
 
-The runtime log explains the failure mode:
+The runtime log explains the observed downstream state:
 
 ```text
 AnimSetState call state=4 caller=0x140F97761
@@ -59,7 +59,7 @@ quit flow, and that the first dismount uses a side/pose selection chain after
 
 Current conclusion: any fast-boarding candidate must preserve the RideOn pose/action
 initialization that feeds the later RideOff side and pose variant chain. Skipping the
-entire RideOn OnEnter causes the observed dismount pose failure unless that setup is
+entire RideOn OnEnter changes the later dismount pose chain unless that setup is
 preserved or reproduced elsewhere.
 
 ## Animation Wrapper Trace
@@ -184,6 +184,6 @@ RideOffPoseVariant side=2 result=0 ... runtime+2A4=4
 
 `capture_boarding_visual.ps1` also completed with this candidate. The first-board
 screenshots show the original mount animation still visible at 150 ms, 500 ms,
-and 1200 ms. This confirms the new boundary preserves the required pose setup but
-does not by itself remove the long visible boarding animation.
+and 1200 ms. This confirms the new boundary preserves the required pose setup while
+the long visible boarding animation remains present.
 

@@ -139,8 +139,8 @@ entry `0x49` action push, the user observed that the boarding animation still ap
 to play in full.
 
 This supersedes the earlier "phase 1 is gone" note. The current hooks change the
-logged state transition and camera/presentation behavior, but they have not been
-visually confirmed to skip the player boarding animation.
+logged state transition and camera/presentation behavior, while the reviewed visual
+run still retained the visible boarding animation.
 
 ## Drive Entry 0x49 Candidate
 
@@ -181,6 +181,6 @@ The automated run completed board, dismount, and quit without crashing. This con
 that skipping the `0x49` action-list push does not prevent the fast path from entering
 Drive state or setting the known Drive runtime flags.
 
-The follow-up visual review showed that suppressing this action is not sufficient to
-skip the visible player boarding animation.
+The follow-up visual review showed that this action can be isolated while the
+visible player boarding animation remains present.
 

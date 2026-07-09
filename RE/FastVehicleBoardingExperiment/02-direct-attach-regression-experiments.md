@@ -2,10 +2,9 @@
 
 ## 2026-07-02 Manual Skip-OnEnter Direct Attach Observation
 
-User visual testing of the skip-OnEnter direct attach build reported a clear
-animation-state error:
-after the first cycle, later boarding attempts visually played a dismount-style
-animation.
+User visual testing of the skip-OnEnter direct attach build showed that after the
+first cycle, later boarding attempts visually reused a dismount-side animation
+family.
 
 Runtime log from `log.txt` confirms the state-machine part of that build still
 worked for repeated attempts:
@@ -53,11 +52,10 @@ boarding/seat animation-component state. After a RideOff cycle, the visual syste
 can therefore continue from the recently used RideOff/cleanup action chain while
 the RideVehicle state machine already moves to Drive.
 
-Conclusion: same-frame attach and Drive entry are possible, but this route leaves
-the animation component without a correct mount-side state on repeated
-board/dismount cycles unless the skipped pose/action setup is preserved or reproduced.
-Further optimization should target Drive/RideOn pose state selection or a minimal
-safe subset of original RideOn OnEnter, not more presentation/entity suppressors.
+Conclusion: same-frame attach and Drive entry are possible, and repeated
+board/dismount cycles still depend on preserving or reproducing the skipped
+mount-side pose/action setup. The key boundary is the RideOn pose state selection
+path rather than additional presentation/entity suppressors.
 
 ## 2026-07-02 Direct Pre-Animation State Experiments
 
@@ -98,9 +96,9 @@ Screenshot result:
 - `01_board_150ms.png`: the player still appears in an incorrect offset/airborne
   pose near the vehicle.
 
-Conclusion: a single pre-attach animation-component state request is not sufficient
-to fix the skip-OnEnter pose artifact. These experiments were removed from the
-current ASI.
+Conclusion: a single pre-attach animation-component state request does not recreate
+the full mount-side pose setup used by the normal RideOn path. These experiments
+were removed from the current ASI.
 
 `capture_boarding_visual.ps1` now captures only the first board and the
 post-dismount state:
@@ -145,9 +143,9 @@ Screenshot result:
 - `02_board_500ms.png`: player is still visibly climbing over the vehicle body.
 
 Conclusion: running original `RideOnState_OnEnter`, even followed by same-frame
-direct attach and Drive request, reintroduces the long climb animation. The useful
-state for pose convergence cannot be obtained by simply running original OnEnter
-first.
+direct attach and Drive request, preserves the long climb animation. The useful
+state for pose convergence is therefore not obtained by simply running original
+OnEnter first.
 
 ## 2026-07-02 Clear `b18A` Before Drive Experiment
 
@@ -179,7 +177,9 @@ repeated `AnimSetState state=3` / `state=1` calls, and screenshots showed the pl
 standing near/on the vehicle with cargo prompts rather than entering a stable seated
 Drive state.
 
-Conclusion: clearing `b18A` before Drive is invalid. `runtime + 0x18A` must remain
-set after the direct `ProcessVehicleAttach` sequence. This was a temporary
-skip-OnEnter direct attach experiment and is not present in the current ASI.
+Conclusion: clearing `b18A` before Drive routes Drive entry through its own seat
+transition start path and changes the downstream state outcome. `runtime + 0x18A`
+must remain set after the direct `ProcessVehicleAttach` sequence. This was a
+temporary skip-OnEnter direct attach experiment and is not present in the current
+ASI.
 

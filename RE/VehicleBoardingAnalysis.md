@@ -408,20 +408,20 @@ PluginHelper #1 的调用发生在退出驾驶时（state=Drive→RideOff），�
 **结论**：
 - ⚠️ **状态机在 PluginHelper #1 之前就已过渡到 DriveState**
 - ⚠️ **上车动画（2 秒）独立于状态机运行**
-- ⚠️ **之前的完成信号尝试（PluginHelper detour 中调 sub_140E21970(-1)）操作的是 Drive 退出的上下文，不影响上车动画**
+- ⚠️ **PluginHelper detour 中调 `sub_140E21970(-1)` 落在 Drive 退出上下文，不是上车动画的直接控制点**
 
 ---
 
 
-## 失败方案记录
+## 已确认边界
 
-| 方案 | 结果 | 原因 |
-|------|------|------|
-| 调用 OnExit (vtable[12]) | ❌ 动画照常播放 | OnExit 是清理函数，不影响动画系统 |
-| 设置 next_state=2 + 调用调度器 | ❌ 无法触发（state 已经是 2） | 状态机在动画播放前已过渡 |
-| 调用 sub_140E21970 信号完成 | ❌ 动画照常播放 | 在 OnEnter 中也调用——设置初始值非停止信号 |
-| animObj 清理 + globalFlag + sub_140E21970 | ❌ 动画照常播放 | 从 Update 路径（state=0）调用，上下文错误 |
-| PluginHelper detour 中调用 sub_140E21970(-1) | ❌ 动画照常播放 | ⚠️ sub_140F8F3E0 实为 DriveState::OnExit，该路径不与上车动画关联 |
+| 干预点 | 已确认行为边界 |
+|------|------|
+| 调用 OnExit (vtable[12]) | OnExit 是清理函数，不直接改写上车动画图 |
+| 设置 next_state=2 + 调用调度器 | 在当前观测路径中，状态机在动画播放前已过渡，调用时机晚于可见动画装载 |
+| 调用 sub_140E21970 信号完成 | `sub_140E21970` 在 OnEnter 中也被调用，其语义不是单纯“停止信号” |
+| animObj 清理 + globalFlag + sub_140E21970 | 该组合当时落在 Update/state=0 上下文，不是上车动画直接上下文 |
+| PluginHelper detour 中调用 sub_140E21970(-1) | 该 detour 落在 `DriveState::OnExit` 路径，不与上车动画直接对齐 |
 
 ---
 
@@ -523,6 +523,6 @@ sub_140F8F3E0 路径在近期测试中完全不触发，但用户视觉确认动
 - ✅ sub_140E21970 签名正确匹配
 - ✅ animObj 可读（RideOnState[20]+30040）
 - ✅ globalFlag 可读写（base+0x623E934）
-- ❌ 所有 PluginHelper 触发的完成尝试均失败
-- 🔄 sub_140F8F3E0 路径消失待查
-- 🔄 新方向：在 OnEnter 或动画播放期间直接干预
+- ✅ PluginHelper 相关完成信号目前主要落在 Drive 退出 / Update 上下文
+- 🔄 sub_140F8F3E0 路径出现条件仍需继续归因
+- 🔄 当前直接相关的上下文仍是 OnEnter 与动画播放期间

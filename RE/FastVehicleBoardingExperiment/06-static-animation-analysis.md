@@ -50,7 +50,7 @@ the first clip matching the requested type id, and writes the selected slot:
 Static conclusion: RideOn animation state `5` is a high-level request that can cause
 the animation inner object to rebuild a multi-track clip set. The skip-OnEnter path
 bypassed both the RideOn parameter setup and this track-set context, so the
-standing-on-seat failure is consistent with missing multi-track pose/clip
+standing-on-seat outcome is consistent with missing multi-track pose/clip
 initialization rather than a missing single state enum write.
 
 ## RideOn Action Parameter Block Layout
@@ -111,7 +111,7 @@ pose setup above:
 - These helpers do not write the `rideOn + 0x98` action-parameter envelope and do
   not rebuild the animation inner track slots.
 
-This explains the earlier negative result: suppressing presentation/global action
+This explains the earlier observation: suppressing presentation/global action
 requests can remove or change presentation-layer behavior, but it cannot by itself
 restore the seated pose after the skip-OnEnter path bypassed the per-state
 parameter envelope and multi-track animation setup.
@@ -128,8 +128,8 @@ identifies two different completion exits:
   `dword_143461CCC`. If the timer threshold is met, control also enters the normal
   completion path.
 - `0x140F9A0A2`: the pre-threshold early-finish branch writes
-  `plugin+0x11A = 3`. This is the path hit by the failed `runtime+0x18B` preseed
-  experiment and is not a valid Drive target.
+  `plugin+0x11A = 3`. This is the path reached by the `runtime+0x18B` preseed
+  experiment and is not the normal Drive target.
 - `0x140F9A2C7`: the normal completion path emits event data and writes
   `plugin+0x11A = 2`, which is the Drive transition target.
 

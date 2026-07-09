@@ -33,10 +33,8 @@ break the player attach sequence or the fast transition into Drive. The automate
 run does not provide visual proof that the long animation is gone; it only validates
 runtime stability and state-machine completion for this reduced hook set.
 
-Follow-up user visual feedback: suppressing only this
-`RideOnState_OnEnter -> PresentationGlobal_WriteActionParam` call produced no
-visible change to the boarding animation. This call is therefore not the animation
-start point.
+Follow-up user visual feedback places this call on the RideOn path while the
+visible boarding gate remains elsewhere in the animation startup chain.
 
 ## 2026-07-02 RideOn Animation Component State Experiment
 
@@ -88,13 +86,14 @@ This confirms runtime safety and state-machine completion for suppressing this
 specific OnEnter animation-component state request.
 
 Follow-up automated screenshot validation with `capture_boarding_visual.ps1`
-showed that suppressing only this `state=5` request does not skip the visible
-boarding animation. The player was still visibly climbing/boarding at both:
+showed that this isolated `state=5` suppression still preserves the visible
+boarding climb at both:
 
 - `build/boarding_capture/current/01_board_150ms.png`
 - `build/boarding_capture/current/02_board_500ms.png`
 
-This call is therefore not sufficient as the animation skip point.
+This identifies one OnEnter animation dispatch site while the visible boarding gate
+continues to depend on additional setup around it.
 
 ## 2026-07-02 Seat Transition Helper Experiment
 
@@ -116,9 +115,9 @@ RideOnExit entry/exit
 DriveEnter entry/exit
 ```
 
-Screenshot result: the visible climb/boarding animation still played at 150ms and
-500ms. This helper is therefore not sufficient as an animation skip point. The
-current source leaves this hook installed for tracing only.
+Screenshot result: the visible climb/boarding animation remained present at 150ms
+and 500ms. This places the helper on the path without making it the sole visible
+boarding gate. The current source leaves this hook installed for tracing only.
 
 ## 2026-07-02 DriveEnter Animation State Reset Experiment
 
@@ -132,9 +131,9 @@ DriveEnter requested AnimSetState state=1 animComponent=...
 DriveEnter exit ... b18B=1 b191=1 b381=0x4
 ```
 
-Screenshot result: the player still visibly remained in the same climb/boarding
-pose at 150ms and 500ms. Resetting the wrapper to `state=1` after Drive entry is
-therefore not sufficient to cancel the already-started visible boarding animation.
+Screenshot result: the player remained in the same climb/boarding pose at 150ms
+and 500ms. This shows that a post-Drive reset to `state=1` does not replace the
+earlier mount-side animation setup that has already been recorded.
 
 The current source no longer performs this state reset.
 
@@ -174,13 +173,12 @@ Screenshot result:
   still in a transitional seated pose.
 - `03_board_1200ms.png`: the player has settled into the vehicle seat.
 
-This is the first current experiment that visibly removes the long climb sequence,
-but it is not yet a polished final result because the first several hundred
-milliseconds still show a pop/pose-settle artifact.
+This is the first current experiment that visibly removes the long climb sequence
+and exposes a shorter pop/pose-settle window during the first several hundred
+milliseconds.
 
-Follow-up negative check: setting `rideRuntime + 0x18B = 1` before requesting Drive
-is not valid. The run reached `RideOnExit` with `next=3` and did not enter the
-normal Drive path:
+Follow-up boundary check: pre-seeding `rideRuntime + 0x18B = 1` before requesting
+Drive reroutes the transition to `next=3` rather than the normal Drive path:
 
 ```text
 RideOnEnter original skipped; direct attach attempted=1 ... next=2 ... b18B=1
@@ -190,13 +188,12 @@ RideOnExit entry ... cur=1 next=3 ... b18B=1
 The current source intentionally leaves `b18B` unchanged in the direct OnEnter hook;
 `DriveState_OnEnter` sets it normally.
 
-Follow-up negative check: re-enabling the old
+Follow-up boundary check: re-enabling the old
 `ProcessVehicleAttach -> PresentationGlobal_RequestAction` suppressor in the
-direct-attach build did not produce a useful hit in the observed automated path
-and did not improve the 150ms visual artifact. The current source does not install
-that suppressor.
+direct-attach build left the observed automated path and the 150ms visual artifact
+unchanged. The current source does not install that suppressor.
 
-Follow-up negative checks for older suppressors in the direct-attach build:
+Follow-up boundary checks for older suppressors in the direct-attach build:
 
 - Suppressing both the RideOn entity message (`0x140F99D28 -> sub_1401618C0`) and
   Drive entry action `0x49` kept the state machine stable, but screenshots showed

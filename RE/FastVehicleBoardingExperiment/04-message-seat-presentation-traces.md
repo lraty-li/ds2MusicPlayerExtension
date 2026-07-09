@@ -32,8 +32,8 @@ request and from the Drive entry `0x49` action-list push.
 
 The automated board, dismount, and quit flow completed without crashing. This
 confirmed that the experimental build suppressed the RideOn entity-message
-dispatch and still reached Drive. It does not, by itself, prove that the visible
-player boarding animation is skipped.
+dispatch and still reached Drive. The visible-animation gate remains to be
+correlated separately from this message path.
 
 2026-07-02 follow-up run with message fields logged:
 
@@ -197,8 +197,8 @@ The result supports the current model:
   shorten at least one player boarding path while preserving the player RideVehicle
   attach path.
 
-The remaining camera presentation means this experiment has not fully removed all
-boarding presentation logic.
+The remaining camera presentation shows that boarding presentation logic is still
+present on this path.
 
 ## Drive Entry Follow-Up
 

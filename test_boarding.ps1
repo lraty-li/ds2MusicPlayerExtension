@@ -175,10 +175,10 @@ function Enter-LauncherIfPresent {
     $title = $SI::GetTitle($launcherHwnd)
     if ($title -notmatch '^DEATH STRANDING 2: ON THE BEACH$') { return $Process }
 
-    Write-Host "Launcher detected, disabling launcher checkbox and clicking Play"
-    $SI::ClickRel($launcherHwnd, 0.871, 0.930)
+    Write-Host "Launcher detected, launcher clicks disabled"
+    # $SI::ClickRel($launcherHwnd, 0.871, 0.930)
     Start-Sleep -Milliseconds 250
-    $SI::ClickRel($launcherHwnd, 0.742, 0.699)
+    # $SI::ClickRel($launcherHwnd, 0.742, 0.699)
 
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep 1
@@ -268,8 +268,7 @@ function Send-GameKey {
 }
 
 Wait-GameSeconds "Intro" 18
-Stop-IfGameCrashed "click skip"
-Write-Host "  Focus + Click (skip)"; $SI::Click($hwnd)
+Send-GameKey 0x1C "ENTER (SKIP)"
 
 Wait-GameSeconds "Wait" 4
 Send-GameKey 0x1C "ENTER (CONTINUE)"
