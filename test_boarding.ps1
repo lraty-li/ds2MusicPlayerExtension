@@ -1,203 +1,20 @@
-# DS2 Boarding Test - SendInput scancode approach
-$siClassName = "SI_$([Guid]::NewGuid().ToString('N'))"
-$siSource = @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-
-public static class $siClassName {
-    const int SW_RESTORE = 9;
-    const uint INPUT_KEYBOARD = 1;
-    const uint KEYEVENTF_KEYUP = 0x0002;
-    const uint KEYEVENTF_SCANCODE = 0x0008;
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct INPUT {
-        public uint type;
-        public INPUTUNION U;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    struct INPUTUNION {
-        [FieldOffset(0)] public MOUSEINPUT mi;
-        [FieldOffset(0)] public KEYBDINPUT ki;
-        [FieldOffset(0)] public HARDWAREINPUT hi;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct MOUSEINPUT {
-        public int dx;
-        public int dy;
-        public uint mouseData;
-        public uint dwFlags;
-        public uint time;
-        public UIntPtr dwExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct KEYBDINPUT {
-        public ushort wVk;
-        public ushort wScan;
-        public uint dwFlags;
-        public uint time;
-        public UIntPtr dwExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct HARDWAREINPUT {
-        public uint uMsg;
-        public ushort wParamL;
-        public ushort wParamH;
-    }
-
-    [DllImport("user32.dll", SetLastError=true)] static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-    [DllImport("user32.dll")] static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int n);
-    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
-    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern int GetWindowText(IntPtr h, StringBuilder t, int max);
-    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
-    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
-    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lp);
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct RECT { public int left, top, right, bottom; }
-
-    public static string GetTitle(IntPtr h) {
-        var sb = new StringBuilder(256);
-        GetWindowText(h, sb, sb.Capacity);
-        return sb.ToString();
-    }
-
-    public static bool IsWindowHandle(IntPtr h) {
-        return IsWindow(h);
-    }
-
-    public static void Click(IntPtr hwnd) {
-        Focus(hwnd);
-        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
-        System.Threading.Thread.Sleep(50);
-        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
-    }
-
-    public static void ClickRel(IntPtr hwnd, double rx, double ry) {
-        Focus(hwnd);
-        RECT r; if (!GetWindowRect(hwnd, out r)) return;
-        int x = r.left + (int)((r.right - r.left) * rx);
-        int y = r.top + (int)((r.bottom - r.top) * ry);
-        SetCursorPos(x, y); System.Threading.Thread.Sleep(80);
-        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
-        System.Threading.Thread.Sleep(50);
-        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
-    }
-
-    static uint SendScan(ushort scancode, bool keyUp) {
-        INPUT[] inputs = new INPUT[1];
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].U.ki.wVk = 0;
-        inputs[0].U.ki.wScan = scancode;
-        inputs[0].U.ki.dwFlags = KEYEVENTF_SCANCODE | (keyUp ? KEYEVENTF_KEYUP : 0);
-        return SendInput(1, inputs, Marshal.SizeOf(typeof(INPUT)));
-    }
-
-    public static bool KeyScan(IntPtr hwnd, ushort scancode, int holdMs) {
-        bool focused = Focus(hwnd);
-        uint down = SendScan(scancode, false);
-        System.Threading.Thread.Sleep(holdMs);
-        uint up = SendScan(scancode, true);
-        System.Threading.Thread.Sleep(80);
-
-        bool ok = focused && down == 1 && up == 1;
-        if (!ok) {
-            Console.WriteLine("WARN key scan=0x{0:X} focused={1} down={2} up={3}", scancode, focused, down, up);
-        }
-        return ok;
-    }
-
-    public static bool Focus(IntPtr hwnd) {
-        IntPtr fg = GetForegroundWindow();
-        uint fgTid = GetWindowThreadProcessId(fg, IntPtr.Zero);
-        uint myTid = GetCurrentThreadId();
-        bool attached = false;
-        if (fgTid != 0 && fgTid != myTid) {
-            attached = AttachThreadInput(myTid, fgTid, true);
-        }
-
-        ShowWindow(hwnd, SW_RESTORE);
-        BringWindowToTop(hwnd);
-        SetForegroundWindow(hwnd);
-        System.Threading.Thread.Sleep(200);
-
-        if (attached) {
-            AttachThreadInput(myTid, fgTid, false);
-        }
-        return GetForegroundWindow() == hwnd;
-    }
-}
-"@
-Add-Type -TypeDefinition $siSource
-$SI = [type]$siClassName
+$ErrorActionPreference = "Stop"
 
 $gameDir = "F:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH"
 $logPath = Join-Path $gameDir "log.txt"
-Write-Host "=== DS2 Boarding Test (SendInput scancode) ==="
-if (Test-Path $logPath) { Clear-Content $logPath -EA SilentlyContinue }
+$inputSource = Join-Path $PSScriptRoot "tools\BoardingTestInput.cs"
+Add-Type -Path $inputSource
+Add-Type -AssemblyName System.Drawing.Common
+$SI = [BoardingTestInput]
 
+Write-Host "=== DS2 Boarding Test (event-gated SendInput) ==="
 Write-Host "Cleaning stale game processes..."
 & (Join-Path $PSScriptRoot "kill_ds2.ps1")
 Start-Sleep 2
+if (Test-Path $logPath) { Clear-Content $logPath -ErrorAction SilentlyContinue }
 
-Write-Host "Launching via Steam..."
-Start-Process "steam://rungameid/3280350"
-$p = $null
-for ($i = 0; $i -lt 60; $i++) {
-    $p = Get-Process -Name "DS2" -ErrorAction SilentlyContinue
-    if ($p -and $p.MainWindowHandle -ne 0) { break }
-    Start-Sleep 1
-}
-if (!$p -or $p.MainWindowHandle -eq 0) { Write-Host "FAIL"; exit 1 }
-Write-Host "DS2 PID: $($p.Id)"
-$hwnd = $p.MainWindowHandle
-Write-Host "DS2 hwnd: 0x$($hwnd.ToString('X')) title=`"$($SI::GetTitle($hwnd))`""
-$script:gamePid = $p.Id
-$script:gameHwnd = $hwnd
-
-function Enter-LauncherIfPresent {
-    param([System.Diagnostics.Process]$Process)
-
-    $launcherHwnd = $Process.MainWindowHandle
-    if ($launcherHwnd -eq [IntPtr]::Zero) { return $Process }
-
-    $title = $SI::GetTitle($launcherHwnd)
-    if ($title -notmatch '^DEATH STRANDING 2: ON THE BEACH$') { return $Process }
-
-    Write-Host "Launcher detected, launcher clicks disabled"
-    # $SI::ClickRel($launcherHwnd, 0.871, 0.930)
-    Start-Sleep -Milliseconds 250
-    # $SI::ClickRel($launcherHwnd, 0.742, 0.699)
-
-    for ($i = 0; $i -lt 60; $i++) {
-        Start-Sleep 1
-        $next = Get-Process -Name "DS2" -ErrorAction SilentlyContinue |
-            Where-Object { $_.MainWindowHandle -ne 0 } |
-            Select-Object -First 1
-        if ($next -and $SI::GetTitle($next.MainWindowHandle) -match 'v\d') {
-            Write-Host "Game window: 0x$($next.MainWindowHandle.ToString('X')) title=`"$($SI::GetTitle($next.MainWindowHandle))`""
-            return $next
-        }
-    }
-
-    return $Process
-}
-
-$p = Enter-LauncherIfPresent $p
-$hwnd = $p.MainWindowHandle
-$script:gamePid = $p.Id
-$script:gameHwnd = $hwnd
+$script:gamePid = 0
+$script:gameHwnd = [IntPtr]::Zero
 
 function Get-CrashReportProcesses {
     @(Get-Process -Name "crs-handler" -ErrorAction SilentlyContinue |
@@ -205,41 +22,47 @@ function Get-CrashReportProcesses {
 }
 
 function Close-CrashReportWindow {
-    param([object[]]$Reports = $(Get-CrashReportProcesses))
-
-    foreach ($report in $Reports) {
+    foreach ($report in (Get-CrashReportProcesses)) {
         Write-Host "Closing crash report window (pid $($report.Id))"
         [void]$report.CloseMainWindow()
-        Start-Sleep -Milliseconds 500
-
-        $stillRunning = Get-Process -Id $report.Id -ErrorAction SilentlyContinue
-        if ($stillRunning) {
+        Start-Sleep -Milliseconds 300
+        if (Get-Process -Id $report.Id -ErrorAction SilentlyContinue) {
             Stop-Process -Id $report.Id -Force -ErrorAction SilentlyContinue
         }
     }
 }
 
-function Stop-IfGameCrashed {
+function Stop-FailedTest {
+    param([string]$Reason)
+    Close-CrashReportWindow
+    Write-Host "FAIL: $Reason"
+    & (Join-Path $PSScriptRoot "kill_ds2.ps1")
+    exit 1
+}
+
+function Assert-GameAlive {
     param([string]$Before)
-
-    $reports = Get-CrashReportProcesses
-    if ($reports.Count -gt 0) {
-        Close-CrashReportWindow $reports
-        Write-Host "FAIL: DS2 crashed before $Before (Report Problem window opened)"
-        exit 1
+    if ((Get-CrashReportProcesses).Count -gt 0) {
+        Stop-FailedTest "DS2 crashed before $Before (Report Problem opened)"
     }
-
-    $current = Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue
-    if (!$current) {
-        Close-CrashReportWindow
-        Write-Host "FAIL: DS2 crashed/exited before $Before (pid $script:gamePid is gone)"
-        exit 1
-    }
-
-    if ($script:gameHwnd -eq [IntPtr]::Zero -or -not $SI::IsWindowHandle($script:gameHwnd)) {
-        Close-CrashReportWindow
-        Write-Host "FAIL: DS2 crashed/exited before $Before (window handle is gone)"
-        exit 1
+    $process = Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue
+    if (!$process) { Stop-FailedTest "DS2 exited before $Before" }
+    if ($script:gameHwnd -eq [IntPtr]::Zero -or
+        -not $SI::IsWindowHandle($script:gameHwnd)) {
+        for ($attempt = 1; $attempt -le 15; $attempt++) {
+            $process = Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue
+            if (!$process) { Stop-FailedTest "DS2 exited before $Before" }
+            $process.Refresh()
+            $candidateHwnd = $process.MainWindowHandle
+            if ($candidateHwnd -ne [IntPtr]::Zero -and
+                $SI::IsWindowHandle($candidateHwnd)) {
+                $script:gameHwnd = $candidateHwnd
+                Write-Host "  Rebound DS2 hwnd=0x$($candidateHwnd.ToString('X'))"
+                return
+            }
+            Start-Sleep -Milliseconds 200
+        }
+        Stop-FailedTest "DS2 had no valid window for 3s before $Before"
     }
 }
 
@@ -247,46 +70,216 @@ function Wait-GameSeconds {
     param([string]$Label, [int]$Seconds)
     Write-Host "$Label ($($Seconds)s)"
     for ($i = 0; $i -lt $Seconds; $i++) {
-        Stop-IfGameCrashed "waiting for $Label"
+        Assert-GameAlive "waiting for $Label"
         Start-Sleep 1
     }
-    Stop-IfGameCrashed "after $Label"
 }
 
-function Wait-GameMilliseconds {
-    param([string]$Label, [int]$Milliseconds)
-    Stop-IfGameCrashed "waiting for $Label"
-    Start-Sleep -Milliseconds $Milliseconds
-    Stop-IfGameCrashed "after $Label"
+function Get-LogLines {
+    if (!(Test-Path $logPath)) { return @() }
+    try { return @([System.IO.File]::ReadAllLines($logPath)) }
+    catch { return @() }
+}
+
+function Wait-LogLine {
+    param(
+        [string]$Fragment,
+        [int]$TimeoutMs,
+        [string]$Label,
+        [int]$StartLine = 0
+    )
+    $deadline = [Environment]::TickCount64 + $TimeoutMs
+    while ([Environment]::TickCount64 -lt $deadline) {
+        Assert-GameAlive $Label
+        $lines = Get-LogLines
+        for ($i = [Math]::Max(0, $StartLine); $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains($Fragment)) {
+                Write-Host "  Confirmed $Label"
+                return $true
+            }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    return $false
 }
 
 function Send-GameKey {
     param([UInt16]$Scan, [string]$Name, [int]$HoldMs = 60)
-    Stop-IfGameCrashed "sending $Name"
-    Write-Host "  Focus + $Name (SendInput scancode 0x$($Scan.ToString('X')))"
-    [void]$SI::KeyScan($hwnd, $Scan, $HoldMs)
+    Assert-GameAlive "sending $Name"
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Write-Host "  Focus + $Name attempt $attempt (scan 0x$($Scan.ToString('X')))"
+        if ($SI::KeyScan($script:gameHwnd, $Scan, $HoldMs)) { return }
+        Start-Sleep -Milliseconds 300
+    }
+    Stop-FailedTest "could not focus DS2 for $Name"
+}
+
+function Capture-GameWindow {
+    param([string]$Path)
+    $bounds = $SI::GetWindowBounds($script:gameHwnd)
+    if (!$bounds) { return $false }
+    $width = $bounds[2] - $bounds[0]
+    $height = $bounds[3] - $bounds[1]
+    if ($width -le 0 -or $height -le 0) { return $false }
+    $bitmap = [System.Drawing.Bitmap]::new($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen(
+            $bounds[0], $bounds[1], 0, 0,
+            [System.Drawing.Size]::new($width, $height),
+            [System.Drawing.CopyPixelOperation]::SourceCopy)
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+    return $true
+}
+
+Write-Host "Launching via Steam..."
+Start-Process "steam://rungameid/3280350"
+$game = $null
+for ($i = 0; $i -lt 60; $i++) {
+    $candidate = Get-Process -Name "DS2" -ErrorAction SilentlyContinue |
+        Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if ($candidate) { $game = $candidate; break }
+    Start-Sleep 1
+}
+if (!$game) { Stop-FailedTest "DS2 window did not appear" }
+
+$title = $SI::GetTitle($game.MainWindowHandle)
+if ($title -eq "DEATH STRANDING 2: ON THE BEACH") {
+    Write-Host "Launcher detected; waiting for the game window"
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep 1
+        $candidate = Get-Process -Name "DS2" -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+        if ($candidate -and $SI::GetTitle($candidate.MainWindowHandle) -match 'v\d') {
+            $game = $candidate
+            break
+        }
+    }
+}
+
+$script:gamePid = $game.Id
+$script:gameHwnd = $game.MainWindowHandle
+$title = $SI::GetTitle($script:gameHwnd)
+if ($title -notmatch 'v\d') { Stop-FailedTest "versioned game window not found" }
+Write-Host "DS2 PID: $($game.Id) hwnd=0x$($script:gameHwnd.ToString('X')) title=`"$title`""
+
+if (!(Wait-LogLine "VehicleBoard] hooks installed" 10000 "boarding hooks")) {
+    Stop-FailedTest "boarding hooks were not fully installed"
 }
 
 Wait-GameSeconds "Intro" 18
 Send-GameKey 0x1C "ENTER (SKIP)"
-
-Wait-GameSeconds "Wait" 4
+Wait-GameSeconds "Continue screen" 4
 Send-GameKey 0x1C "ENTER (CONTINUE)"
 Wait-GameSeconds "Recover prompt" 1
 Send-GameKey 0x1E "A (RECOVER YES)"
-Wait-GameSeconds "Recover confirm delay" 1
+Wait-GameSeconds "Recover confirm" 1
 Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
+Wait-GameSeconds "Initial load" 4
 
-Wait-GameSeconds "Load" 4
-Send-GameKey 0x21 "F (BOARD)"
+if (!(Wait-LogLine "FullGame animation read-only hooks installed" 30000 `
+        "fullgame animation trace")) {
+    Stop-FailedTest "fullgame animation trace was not installed before boarding"
+}
+if (!(Wait-LogLine "FullGame result-channel read-only hook installed" 15000 `
+        "fullgame result-channel trace")) {
+    Stop-FailedTest "fullgame result-channel trace was not installed before boarding"
+}
 
-Wait-GameSeconds "Ride" 4
+$boarded = $false
+for ($attempt = 1; $attempt -le 3 -and !$boarded; $attempt++) {
+    $startLine = (Get-LogLines).Count
+    Send-GameKey 0x21 "F (BOARD $attempt/3)"
+    $boarded = Wait-LogLine "ProcessAttach original stage 0->1" 3000 `
+        "RideOn stage 0->1" $startLine
+    if (!$boarded) {
+        Write-Host "  No RideOn event; waiting before retry"
+        Wait-GameSeconds "Board retry delay" 1
+    }
+}
+if (!$boarded) { Stop-FailedTest "three BOARD inputs produced no RideOn event" }
+
+if (!(Wait-LogLine "DriveEnter exit" 8000 "DriveEnter")) {
+    Stop-FailedTest "RideOn started but never reached DriveEnter"
+}
+
+$captureDir = Join-Path $PSScriptRoot "artifacts\boarding"
+[void](New-Item -ItemType Directory -Force -Path $captureDir)
+foreach ($capture in @(
+    @{ Name = "drive_0200ms.png"; Delay = 0 },
+    @{ Name = "drive_0700ms.png"; Delay = 500 },
+    @{ Name = "drive_1700ms.png"; Delay = 1000 }
+)) {
+    if ($capture.Delay -gt 0) { Start-Sleep -Milliseconds $capture.Delay }
+    $capturePath = Join-Path $captureDir $capture.Name
+    if (Capture-GameWindow $capturePath) {
+        Write-Host "  Captured $capturePath"
+    }
+}
+
+# Keep boarding and dismount visually separate. DriveEnter can occur before the
+# presentation graph has converged, especially in fast-boarding experiments.
+Wait-GameSeconds "Boarded dwell" 4
+
+$dismountStart = (Get-LogLines).Count
 Send-GameKey 0x21 "F (DISMOUNT)"
+if (!(Wait-LogLine " start=0 finishFlag=0" 8000 "seat transition finish" $dismountStart)) {
+    Stop-FailedTest "DISMOUNT produced no seat transition finish"
+}
 
-Wait-GameSeconds "Quit" 4
-Send-GameKey 0x01 "ESC"; Wait-GameSeconds "Quit menu" 2
-Send-GameKey 0x11 "W"; Wait-GameMilliseconds "Quit select" 200
-Send-GameKey 0x1C "ENTER"; Wait-GameSeconds "Quit confirm" 1
-Send-GameKey 0x1E "A"; Wait-GameMilliseconds "Quit accept" 200
-Send-GameKey 0x1C "ENTER"
-Write-Host "=== Done ==="
+Wait-GameSeconds "Post-dismount settle" 1
+[void](Capture-GameWindow (Join-Path $captureDir "dismount1_settled.png"))
+
+Send-GameKey 0x20 "D (RETURN TO VEHICLE)" 900
+Start-Sleep -Milliseconds 300
+$secondBoardStart = (Get-LogLines).Count
+Send-GameKey 0x21 "F (BOARD SECOND CYCLE)"
+if (!(Wait-LogLine "ProcessAttach original stage 0->1" 5000 `
+        "second RideOn stage 0->1" $secondBoardStart)) {
+    Stop-FailedTest "second BOARD produced no RideOn event"
+}
+if (!(Wait-LogLine "DriveEnter exit" 8000 "second DriveEnter" $secondBoardStart)) {
+    Stop-FailedTest "second RideOn never reached DriveEnter"
+}
+[void](Capture-GameWindow (Join-Path $captureDir "drive2_0200ms.png"))
+Start-Sleep -Milliseconds 500
+[void](Capture-GameWindow (Join-Path $captureDir "drive2_0700ms.png"))
+Start-Sleep -Milliseconds 1000
+[void](Capture-GameWindow (Join-Path $captureDir "drive2_1700ms.png"))
+Wait-GameSeconds "Second boarded dwell" 2
+
+$secondDismountStart = (Get-LogLines).Count
+Send-GameKey 0x21 "F (DISMOUNT SECOND CYCLE)"
+if (!(Wait-LogLine " start=0 finishFlag=0" 8000 `
+        "second seat transition finish" $secondDismountStart)) {
+    Stop-FailedTest "second DISMOUNT produced no seat transition finish"
+}
+Wait-GameSeconds "Second post-dismount settle" 1
+[void](Capture-GameWindow (Join-Path $captureDir "dismount2_settled.png"))
+
+for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
+    Write-Host "Quit sequence attempt $quitAttempt/3"
+    Send-GameKey 0x01 "ESC"
+    Wait-GameSeconds "Quit menu" 2
+    Send-GameKey 0x11 "W"
+    Start-Sleep -Milliseconds 200
+    Send-GameKey 0x1C "ENTER"
+    Wait-GameSeconds "Quit confirm" 1
+    Send-GameKey 0x1E "A"
+    Start-Sleep -Milliseconds 200
+    Send-GameKey 0x1C "ENTER"
+
+    for ($i = 0; $i -lt 7; $i++) {
+        if (!(Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue)) {
+            Write-Host "=== PASS: two board/drive/dismount cycles and quit confirmed ==="
+            exit 0
+        }
+        Start-Sleep 1
+    }
+}
+Stop-FailedTest "game did not exit after quit confirmation"

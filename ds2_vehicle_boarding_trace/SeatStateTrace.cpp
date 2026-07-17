@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SeatStateTrace.h"
 #include "JumpHook.h"
+#include "PatternScan.h"
 #include "VehicleSnapshot.h"
 
 #include <atomic>
@@ -10,8 +11,9 @@
 namespace SeatStateTrace {
 namespace {
 
-constexpr uintptr_t kImageBase = 0x140000000ull;
-constexpr uintptr_t kSeatStateRva = 0x140F9B670ull - kImageBase;
+constexpr const char* kSeatStateSignature =
+    "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? "
+    "48 8B 81 ? ? ? ? 48 8B F9 41 0F B6 F0";
 constexpr size_t kSeatStatePatchLen = 15;
 
 using SeatStateFn = uint8_t(__fastcall*)(uintptr_t rideOn, uint8_t approach, uint8_t b3B1);
@@ -43,27 +45,25 @@ uint8_t __fastcall HookSeatState(uintptr_t rideOn, uint8_t approach, uint8_t b3B
     const uintptr_t seatObject =
         g_lastRideOn.load() == rideOn ? g_lastSeatObject.load() : 0;
     SeatFields before = {};
-    SeatFields after = {};
     if (seatObject)
         CaptureSeatFields(seatObject, before);
 
-    if (seatObject) {
-        CaptureSeatFields(seatObject, after);
-        std::ostringstream oss;
-        oss << "SeatStateUpdate suppressed approach=" << static_cast<int>(approach)
-            << " b3B1=" << static_cast<int>(b3B1)
-            << " seatObject=" << VehicleSeatTrace::Hex(seatObject)
-            << " p12F8=" << VehicleSeatTrace::Hex(before.ptr12F8)
-            << "->" << VehicleSeatTrace::Hex(after.ptr12F8)
-            << " v125C=" << before.value125C << "->" << after.value125C
-            << " v1310=" << before.value1310 << "->" << after.value1310
-            << " v1314=" << before.value1314 << "->" << after.value1314
-            << " result=1";
-        g_logger->Log(oss.str());
-        return 1;
-    }
+    const uint8_t result = g_originalSeatState(rideOn, approach, b3B1);
 
-    return g_originalSeatState(rideOn, approach, b3B1);
+    std::ostringstream oss;
+    oss << "SeatStateUpdate original approach=" << static_cast<int>(approach)
+        << " b3B1=" << static_cast<int>(b3B1)
+        << " rideOn=" << VehicleSeatTrace::Hex(rideOn);
+    if (seatObject) {
+        oss << " seatObject=" << VehicleSeatTrace::Hex(seatObject)
+            << " p12F8=" << VehicleSeatTrace::Hex(before.ptr12F8)
+            << " v125C=" << before.value125C
+            << " v1310=" << before.value1310
+            << " v1314=" << before.value1314;
+    }
+    oss << " result=" << static_cast<int>(result);
+    g_logger->Log(oss.str());
+    return result;
 }
 
 } // namespace
@@ -82,7 +82,23 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
     g_module = gameModule;
     g_logger = &logger;
 
-    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kSeatStateRva;
+    uintptr_t textStart = 0;
+    size_t textSize = 0;
+    if (!PatternScan::GetSection(g_module, ".text", textStart, textSize)) {
+        logger.Log("SeatState .text unavailable");
+        return false;
+    }
+    const uintptr_t target = PatternScan::FindUnique(
+        textStart, textSize, kSeatStateSignature);
+    if (!target) {
+        logger.Log("SeatState signature not found");
+        return false;
+    }
+    {
+        std::ostringstream oss;
+        oss << "SeatState resolved at " << VehicleSeatTrace::Hex(target);
+        logger.Log(oss.str());
+    }
     void* trampoline = JumpHook::MakeTrampoline(target, kSeatStatePatchLen);
     if (!trampoline) {
         logger.Log("InstallSeatStateHook trampoline failed");

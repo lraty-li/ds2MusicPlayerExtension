@@ -4,6 +4,8 @@ This document was split because the original analysis had grown too large. The o
 
 ## Parts
 
+- [Seat-action runtime boundary (2026-07-10)](FastVehicleBoardingSeatActionRuntime.md)
+- [Current source audit (2026-07-09)](FastVehicleBoardingCurrentSourceAudit.md)
 - [00 - Overview and current source state](FastVehicleBoardingExperiment/00-overview-current-source.md)
 - [01 - OnEnter and RideOn experiments](FastVehicleBoardingExperiment/01-onenter-and-rideon-experiments.md)
 - [02 - Direct attach regression experiments](FastVehicleBoardingExperiment/02-direct-attach-regression-experiments.md)

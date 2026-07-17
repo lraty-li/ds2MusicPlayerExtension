@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SeatTransitionTrace.h"
 #include "JumpHook.h"
+#include "PatternScan.h"
 #include "VehicleSnapshot.h"
 
 #include <atomic>
@@ -10,11 +11,13 @@
 namespace SeatTransitionTrace {
 namespace {
 
-constexpr uintptr_t kImageBase = 0x140000000ull;
-constexpr uintptr_t kSeatTransitionRva = 0x141F6BDC0ull - kImageBase;
-constexpr uintptr_t kProcessAttachSeatTransitionRetRva = 0x140F9AD36ull - kImageBase;
+constexpr const char* kSeatTransitionSignature =
+    "48 89 5C 24 ? 48 89 6C 24 ? 56 57 41 56 48 83 EC ? "
+    "48 8D 99 ? ? ? ? 48 8B F9";
+constexpr const char* kProcessAttachSeatTransitionReturnSignature =
+    "48 8D 4C 24 ? 0F B6 D8 E8 ? ? ? ? 84 DB 75 ? 44 38 A7 ? ? ? ? "
+    "0F 85 ? ? ? ? 48 8B 8F ? ? ? ? E8";
 constexpr size_t kSeatTransitionPatchLen = 18;
-constexpr bool kSuppressProcessAttachStart = false;
 
 using SeatTransitionFn = uint8_t(__fastcall*)(
     uintptr_t seatController,
@@ -25,9 +28,96 @@ using SeatTransitionFn = uint8_t(__fastcall*)(
 
 std::atomic<bool> g_started{false};
 std::atomic<int> g_logBudget{80};
+std::atomic<uintptr_t> g_activeSeatController{0};
 HMODULE g_module = nullptr;
 const Logger* g_logger = nullptr;
 SeatTransitionFn g_originalSeatTransition = nullptr;
+uintptr_t g_processAttachSeatTransitionReturn = 0;
+
+uintptr_t ResolveSeatTransition()
+{
+    uintptr_t textStart = 0;
+    size_t textSize = 0;
+    if (!PatternScan::GetSection(g_module, ".text", textStart, textSize))
+        return 0;
+    return PatternScan::FindUnique(textStart, textSize, kSeatTransitionSignature);
+}
+
+uintptr_t ResolveProcessAttachSeatTransitionReturn()
+{
+    uintptr_t textStart = 0;
+    size_t textSize = 0;
+    if (!PatternScan::GetSection(g_module, ".text", textStart, textSize))
+        return 0;
+    return PatternScan::FindUnique(
+        textStart, textSize, kProcessAttachSeatTransitionReturnSignature);
+}
+
+uintptr_t ToGameRva(uintptr_t address)
+{
+    const uintptr_t base = reinterpret_cast<uintptr_t>(g_module);
+    return address >= base ? address - base : address;
+}
+
+void LogCallbackVtable(uintptr_t* callback)
+{
+    if (!callback)
+        return;
+
+    uintptr_t vtable = 0;
+    if (!VehicleSeatTrace::ReadValue(
+            reinterpret_cast<uintptr_t>(callback), vtable) || !vtable)
+        return;
+
+    uintptr_t methods[4] = {};
+    for (size_t i = 0; i < _countof(methods); ++i) {
+        VehicleSeatTrace::ReadValue(
+            vtable + i * sizeof(uintptr_t), methods[i]);
+    }
+
+    std::ostringstream oss;
+    oss << "SeatTransition callback vtableRva="
+        << VehicleSeatTrace::Hex(ToGameRva(vtable));
+    for (size_t i = 0; i < _countof(methods); ++i) {
+        oss << " method" << i << "Rva="
+            << VehicleSeatTrace::Hex(ToGameRva(methods[i]));
+    }
+    g_logger->Log(oss.str());
+}
+
+void LogControllerVtable(uintptr_t seatController)
+{
+    uintptr_t vtable = 0;
+    if (!seatController ||
+        !VehicleSeatTrace::ReadValue(seatController, vtable) || !vtable)
+        return;
+
+    uintptr_t startMethod = 0;
+    uintptr_t finishMethod = 0;
+    uintptr_t transitionDriver = 0;
+    uintptr_t driverVtable = 0;
+    uintptr_t driverUpdate = 0;
+    uintptr_t seatAction = 0;
+    VehicleSeatTrace::ReadValue(vtable + 328, startMethod);
+    VehicleSeatTrace::ReadValue(vtable + 336, finishMethod);
+    VehicleSeatTrace::ReadValue(seatController + 0x5D8, transitionDriver);
+    if (transitionDriver &&
+        VehicleSeatTrace::ReadValue(transitionDriver, driverVtable)) {
+        VehicleSeatTrace::ReadValue(driverVtable + 16, driverUpdate);
+    }
+    VehicleSeatTrace::ReadValue(seatController + 0x340, seatAction);
+
+    std::ostringstream oss;
+    oss << "SeatTransition controller vtableRva="
+        << VehicleSeatTrace::Hex(ToGameRva(vtable))
+        << " startMethodRva=" << VehicleSeatTrace::Hex(ToGameRva(startMethod))
+        << " finishMethodRva=" << VehicleSeatTrace::Hex(ToGameRva(finishMethod))
+        << " driver=" << VehicleSeatTrace::Hex(transitionDriver)
+        << " driverVtableRva=" << VehicleSeatTrace::Hex(ToGameRva(driverVtable))
+        << " driverUpdateRva=" << VehicleSeatTrace::Hex(ToGameRva(driverUpdate))
+        << " seatAction=" << VehicleSeatTrace::Hex(seatAction);
+    g_logger->Log(oss.str());
+}
 
 uint8_t __fastcall HookSeatTransition(
     uintptr_t seatController,
@@ -37,9 +127,15 @@ uint8_t __fastcall HookSeatTransition(
     uint8_t finishFlag)
 {
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-    const uintptr_t processAttachCaller =
-        reinterpret_cast<uintptr_t>(g_module) + kProcessAttachSeatTransitionRetRva;
-    const bool isProcessAttachStart = caller == processAttachCaller && start != 0;
+    const bool isProcessAttachStart =
+        caller == g_processAttachSeatTransitionReturn && start != 0;
+    if (isProcessAttachStart)
+        g_activeSeatController.store(seatController);
+    else if (!start && g_activeSeatController.load() == seatController)
+        g_activeSeatController.store(0);
+    uintptr_t targetKeyValue = 0;
+    if (targetKey)
+        VehicleSeatTrace::ReadValue(reinterpret_cast<uintptr_t>(targetKey), targetKeyValue);
 
     const int remaining = g_logBudget.fetch_sub(1);
     if (remaining > 0 || isProcessAttachStart) {
@@ -48,23 +144,34 @@ uint8_t __fastcall HookSeatTransition(
             << " caller=" << VehicleSeatTrace::Hex(caller)
             << " controller=" << VehicleSeatTrace::Hex(seatController)
             << " targetKeyPtr=" << VehicleSeatTrace::Hex(reinterpret_cast<uintptr_t>(targetKey))
-            << " targetKey=" << VehicleSeatTrace::Hex(targetKey ? *targetKey : 0)
+            << " targetKey=" << VehicleSeatTrace::Hex(targetKeyValue)
             << " start=" << static_cast<int>(start)
             << " finishFlag=" << static_cast<int>(finishFlag)
             << " callback=" << VehicleSeatTrace::Hex(reinterpret_cast<uintptr_t>(callback));
-        if (isProcessAttachStart && kSuppressProcessAttachStart)
-            oss << " suppressed-return=1";
         g_logger->Log(oss.str());
     }
+    if (isProcessAttachStart) {
+        LogCallbackVtable(callback);
+        LogControllerVtable(seatController);
+    }
 
-    if (isProcessAttachStart && kSuppressProcessAttachStart)
-        return 1;
-
-    return g_originalSeatTransition(
+    const uint8_t result = g_originalSeatTransition(
         seatController, targetKey, start, callback, finishFlag);
+    if (isProcessAttachStart) {
+        std::ostringstream oss;
+        oss << "SeatTransition ProcessAttach original result="
+            << static_cast<int>(result);
+        g_logger->Log(oss.str());
+    }
+    return result;
 }
 
 } // namespace
+
+uintptr_t ActiveSeatController()
+{
+    return g_activeSeatController.load();
+}
 
 bool TryInstall(HMODULE gameModule, const Logger& logger)
 {
@@ -74,7 +181,23 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
     g_module = gameModule;
     g_logger = &logger;
 
-    const uintptr_t target = reinterpret_cast<uintptr_t>(g_module) + kSeatTransitionRva;
+    g_processAttachSeatTransitionReturn = ResolveProcessAttachSeatTransitionReturn();
+    if (!g_processAttachSeatTransitionReturn) {
+        logger.Log("ProcessAttach SeatTransition return signature not found");
+        return false;
+    }
+
+    const uintptr_t target = ResolveSeatTransition();
+    if (!target) {
+        logger.Log("InstallSeatTransitionHook signature not found");
+        return false;
+    }
+    {
+        std::ostringstream oss;
+        oss << "SeatTransition resolved at " << VehicleSeatTrace::Hex(target);
+        logger.Log(oss.str());
+    }
+
     void* trampoline = JumpHook::MakeTrampoline(target, kSeatTransitionPatchLen);
     if (!trampoline) {
         logger.Log("InstallSeatTransitionHook trampoline failed");
