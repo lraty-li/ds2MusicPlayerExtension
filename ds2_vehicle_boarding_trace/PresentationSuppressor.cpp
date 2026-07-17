@@ -23,13 +23,26 @@ using PresentationRequestFn = void(__fastcall*)(
     uintptr_t global, uint32_t actionHash, uintptr_t a3,
     int32_t a4, uintptr_t target, uint8_t force);
 
-constexpr uint32_t kBoardPresentationHash = 0x53758BEDu;
+constexpr uint32_t kBoardingPresentationHashes[] = {
+    0x53758BEDu,
+    0x6F53F3A5u,
+    0x3897A3D5u,
+};
 
 std::atomic<bool> g_started{false};
 std::atomic<int> g_logBudget{8};
 HMODULE g_module = nullptr;
 const Logger* g_logger = nullptr;
 PresentationRequestFn g_originalRequest = nullptr;
+
+bool IsBoardingPresentationHash(uint32_t actionHash)
+{
+    for (const uint32_t hash : kBoardingPresentationHashes) {
+        if (actionHash == hash)
+            return true;
+    }
+    return false;
+}
 
 uintptr_t ResolvePresentationRequest()
 {
@@ -44,15 +57,8 @@ void __fastcall HookPresentationRequest(
     uintptr_t global, uint32_t actionHash, uintptr_t a3,
     int32_t a4, uintptr_t target, uint8_t force)
 {
-    // Suppress the boarding presentation (0x53758BED)
-    // This is the camera/visual sequence that plays during boarding.
-    // The game's normal boarding has:
-    //   approach 0 → 0x53758BED (the long boarding presentation)
-    //   approach 1 → 0x6F53F3A5
-    //   approach 2 → 0x3897A3D5
-    //
-    // By suppressing 0x53758BED, the boarding camera sequence won't play.
-    if (actionHash == kBoardPresentationHash) {
+    // Suppress the three known player boarding presentation requests.
+    if (IsBoardingPresentationHash(actionHash)) {
         if (g_logBudget.fetch_sub(1) > 0) {
             std::ostringstream oss;
             oss << "Presentation suppressed hash=0x" << std::hex << actionHash
@@ -75,6 +81,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
 
     g_module = gameModule;
     g_logger = &logger;
+    logger.Log("PresentationSuppressor v0.2.0: suppress all known player boarding presentations");
 
     const uintptr_t target = ResolvePresentationRequest();
     if (!target) {
@@ -100,7 +107,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
         return false;
     }
 
-    logger.Log("PresentationSuppressor v0.1.0 installed");
+    logger.Log("PresentationSuppressor installed");
     return true;
 }
 

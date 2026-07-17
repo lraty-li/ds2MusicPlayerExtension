@@ -97,6 +97,18 @@ uintptr_t Find(uintptr_t base, size_t size, const char* pattern)
     return 0;
 }
 
+uintptr_t FindUnique(uintptr_t base, size_t size, const char* pattern)
+{
+    const uintptr_t first = Find(base, size, pattern);
+    if (!first)
+        return 0;
+
+    const size_t consumed = static_cast<size_t>(first - base) + 1;
+    if (consumed >= size)
+        return first;
+    return Find(first + 1, size - consumed, pattern) ? 0 : first;
+}
+
 uintptr_t ResolveRip(uintptr_t instruction, uint32_t operandOffset)
 {
     const int32_t relative = *reinterpret_cast<int32_t*>(instruction + operandOffset);

@@ -1,8 +1,16 @@
 #include "pch.h"
 #include "Hooks.h"
+#include "BoardingCompletionGate.h"
+#include "CrashTrace.h"
+#include "DrivingProgressTrace.h"
+#include "FullGameAnimationTrace.h"
+#include "FullGameResultTrace.h"
 #include "HookUtils.h"
 #include "Logger.h"
 #include "RideOnEnterInterceptor.h"
+#include "RideOnUpdateTrace.h"
+#include "SeatStateTrace.h"
+#include "SeatTransitionTrace.h"
 #include <sstream>
 
 namespace {
@@ -30,7 +38,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     Logger::ResetLogFile(resetErr);
 
     HMODULE gameModule = GetModuleHandleW(nullptr);
-    g_logger.Log("VehicleBoard DIAGNOSTIC v0.5.0 start");
+    g_logger.Log("VehicleBoard ANIMATION OWNER TRACE v0.9.2 start");
 
     if (!gameModule) {
         g_logger.Log("GetModuleHandleW failed");
@@ -42,10 +50,22 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("TryGetModuleSize failed");
         return 1;
     }
+    if (!CrashTrace::Install(
+            gameModule, imageSize, reinterpret_cast<HMODULE>(moduleParam))) {
+        g_logger.Log("CrashTrace install failed");
+    }
 
-    // Only RideOnUpdateTrace (which includes cmd dispatch hook + cmd6 suppress)
-    const bool ok = RideOnEnterInterceptor::TryInstall(gameModule, g_logger);
-    g_logger.Log(ok ? "hook installed" : "hook install FAILED");
+    const bool stateFlowOk = RideOnEnterInterceptor::TryInstall(gameModule, g_logger);
+    const bool fastUpdateOk = RideOnUpdateTrace::TryInstall(gameModule, g_logger);
+    const bool completionGateOk = BoardingCompletionGate::TryInstall(gameModule, g_logger);
+    const bool drivingProgressOk = DrivingProgressTrace::TryInstall(gameModule, g_logger);
+    const bool seatStateOk = SeatStateTrace::TryInstall(gameModule, g_logger);
+    const bool seatTransitionOk = SeatTransitionTrace::TryInstall(gameModule, g_logger);
+    const bool fullGameAnimationOk = FullGameAnimationTrace::TryInstall(g_logger);
+    const bool fullGameResultOk = FullGameResultTrace::TryInstall(g_logger);
+    const bool ok = stateFlowOk && fastUpdateOk && completionGateOk && drivingProgressOk &&
+        seatStateOk && seatTransitionOk && fullGameAnimationOk && fullGameResultOk;
+    g_logger.Log(ok ? "hooks installed" : "hook install FAILED");
     return 0;
 }
 

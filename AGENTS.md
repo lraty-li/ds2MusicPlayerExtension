@@ -5,22 +5,19 @@ build.ps1 ： 构建脚本，发生代码更改时执行该脚本，只有失败
 
 读取文件用  UTF-8
 
-不要并发调用 ida mcp
-
-不准调用 survey_binary，find_regex， ，find，search_text。 不准调用任何全局查找的工具
-
-关于 ida 调用不需要问我，不需要获得许可，直接进行
-
 不准往知识文档写待定方案
 
+不要并发调用 ida mcp
+不准调用 survey_binary，find_regex， ，find，search_text。 不准调用任何全局查找的工具
+不得大批量全量保存，这样会导致ida卡死
+关于 ida 调用不需要问我，不需要获得许可，直接进行
 让用户启动游戏是非常昂贵的事情，尽可能通过 ida mcp 调查
-
-不准使用 dumpbin.exe 去读取 DS2.exe 本身， 不准以任何形式去读取 DS2.exe 本身
-
 如果有任何 ida mcp 调用超时，就说明你进行了一个非常复杂的操作，必须等到 ida mcp 响应。不得继续调用导致 ida 直到卡死
 
-没有我的允许，不得操作 git stage 命令
 
+不准使用 dumpbin.exe 去读取 DS2.exe 本身， 不准以任何形式去读取 DS2.exe 本身。不得直接调用ida exe
+
+没有我的允许，不得操作 git stage 命令
 游戏日志：
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/ds2_dll_music_resource.log>)
 [text](<f:/SteamLibrary/steamapps/common/DEATH STRANDING 2 - ON THE BEACH/log.txt>)
