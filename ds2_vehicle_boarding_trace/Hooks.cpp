@@ -8,6 +8,7 @@
 #include "GraphEventFastForward.h"
 #include "HookUtils.h"
 #include "Logger.h"
+#include "MoverRootMotionObserver.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
 
@@ -73,6 +74,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("FastBoarding graph event wrapper failed");
     if (!CutInCameraFastForward::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding CutIn wrapper failed");
+    if (!MoverRootMotionObserver::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastBoarding Mover observer failed");
 
     const bool ok = FullGameBoardingFastForward::TryInstall(g_logger);
     g_logger.Log(ok ? "hooks installed" : "hook install FAILED");

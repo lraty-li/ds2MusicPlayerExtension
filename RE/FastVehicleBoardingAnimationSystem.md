@@ -23,17 +23,23 @@ Current IDA names relevant to this note:
 
 | Address | Name | Role |
 |---|---|---|
-| `0x140F98CE0` | `DSPlayerVehicleRideOnState_OnEnter` | Initializes RideOn runtime state and per-state action/animation parameters. |
+| `0x140F98D00` | `DSPlayerVehicleRideOnState_OnEnter` | Initializes RideOn runtime state and per-state action/animation parameters. |
 | `0x140DB9A10` | `sub_140DB9A10` | Thin animation component state wrapper; forwards to inner vtable `+0x168`. |
 | `0x140DBA820` | `sub_140DBA820` | Thin animation component float setter; writes `inner+0x544`. |
 | `0x140EF6A20` | `AnimInner_SetStateAndEvaluateTracks` | Inner animation state evaluator reached through `0x140DB9A10`. |
 | `0x140EF6040` | `AnimInner_RebuildTrackSlots` | Rebuilds active track/clip slots for the inner animation object. |
 | `0x140EF5E90` | `AnimTrackSlot_SelectClipByType` | Selects a clip by type id and writes one track slot. |
-| `0x140F9A370` | `DSPlayerVehicleRideOnState_ProcessVehicleAttach` | Player RideOn attach state machine. |
-| `0x140F9B670` | `DSPlayerVehicleRideOnState_WriteApproachSeatState` | Writes approach-derived seat state to the resolved seat object. |
-| `0x140E21860` | `PresentationGlobal_RequestAction` | Submits a global presentation/action request hash. |
-| `0x140F9B070` | `RideOnState_UpdateSeatPoseRequest` | Builds RideOn seat pose request during Update when attach stage is 2. |
-| `0x1410139A0` | `RideRuntime_SetRideOnActionSlotFilters` | Applies RideOn action slot filters. |
+| `0x140F9A390` | `DSPlayerVehicleRideOnState_ProcessVehicleAttach` | Player RideOn attach state machine. |
+| `0x140F9B690` | `RideOnSeatState_ApplyApproachState` | Writes approach-derived seat state to the resolved seat object. |
+| `0x140E21880` | `DSCutInCameraRequestBroker_QueueAction` | Queues a CutIn action hash and vehicle target. |
+| `0x140F9B090` | `RideOnState_UpdateSeatPoseRequest` | Builds RideOn seat pose request during Update when attach stage is 2. |
+| `0x1410139C0` | `RideRuntime_SetRideOnActionSlotFilters` | Applies RideOn action slot filters. |
+| `0x140DB99A0` | `DSPlayerMoverAccessor_OnPreModifyAnimatedPose` | Forwards pre-modify pose processing to mover slot 49. |
+| `0x140DB99C0` | `DSPlayerMoverAccessor_OnModifyAnimatedPose` | Forwards modified pose application to mover slot 50. |
+| `0x140EC81C0` | `DSPlayerMover_OnPreModifyAnimatedPose` | Updates the pose-motion cache. |
+| `0x140EC81E0` | `DSPlayerMover_OnModifyAnimatedPose` | Applies animation-driven player movement. |
+| `0x140ED2EA0` | `DSPlayerMover_UpdatePoseMotionCache` | Builds and commits the cached pose-motion transform. |
+| `0x140ECFCD0` | `DSPlayerMover_ApplyPoseMotionTransform` | One native branch that writes the player Entity world transform. |
 
 ## RideOn OnEnter Layer
 
@@ -142,18 +148,18 @@ single hard-coded RideOn pose enum.
 The verified attach call is:
 
 ```text
-0x140F9AD80: Entity_AttachToParentAndNotify(player, resolvedSeatObject, 0)
+0x140F9AD9D: Entity_AttachToParentAndNotify(player, vehicle, 0)
 ```
 
 After attach, the function calls:
 
 ```text
-0x140F9ADA0: DSPlayerVehicleRideOnState_ClassifyBoardingApproach
-0x140F9ADBD: DSPlayerVehicleRideOnState_WriteApproachSeatState
-0x140F9AFAC: PresentationGlobal_RequestAction
+0x140F9B4C0: DSPlayerVehicleRideOnState_ClassifyBoardingApproach
+0x140F9B690: RideOnSeatState_ApplyApproachState
+0x140E21880: DSCutInCameraRequestBroker_QueueAction
 ```
 
-`DSPlayerVehicleRideOnState_WriteApproachSeatState` writes approach-derived state
+`RideOnSeatState_ApplyApproachState` writes approach-derived state
 to the resolved seat object. Main-object writes are to `seatObject+0x1314`;
 alternate object-family writes are to `seatObject+0x125C`.
 
@@ -164,25 +170,25 @@ Observed main-object values:
 - approach `0`: writes `5`
 - approach `1`: writes `6`
 
-The presentation request selects a hash based on `rideRuntime+0x2A0`, approach,
+The CutIn request selects a hash based on `rideRuntime+0x2A0`, approach,
 `rideRuntime+0x3B1`, and seat object flags. Runtime observations mapped one
 automated path to:
 
 - `ClassifyApproach result=0`
 - `kind=1`
 - `b3B1=0`
-- presentation request `0x53758BED`
+- CutIn action request `0x53758BED`
 
 Manual three-angle observations recorded request hashes:
 
-| ClassifyApproach | Presentation request |
+| ClassifyApproach | CutIn action request |
 |---:|---:|
 | `0` | `0x53758BED` |
 | `1` | `0x6F53F3A5` |
 | `2` | `0x3897A3D5` |
 
-This presentation layer is separate from the `rideOn+0x98` parameter envelope and
-from the inner track rebuild. Suppressing a presentation request does not reproduce
+This CutIn layer is separate from the `rideOn+0x98` parameter envelope and
+from the inner track rebuild. Suppressing a CutIn request does not reproduce
 the missing pose setup from a skipped `OnEnter`.
 
 ## Update-Side Pose And Filter Layer
@@ -193,8 +199,8 @@ the missing pose setup from a skipped `OnEnter`.
 Before the vanilla normal completion write, the Update function calls:
 
 ```text
-0x140F99DF0: RideOnState_UpdateSeatPoseRequest
-0x140F99DFE: RideRuntime_SetRideOnActionSlotFilters
+0x140F99E10: RideOnState_UpdateSeatPoseRequest
+0x140F99E1E: RideRuntime_SetRideOnActionSlotFilters
 ```
 
 `RideOnState_UpdateSeatPoseRequest` resolves the current seat/action object and
@@ -231,11 +237,47 @@ The player fast-boarding intervention must preserve these verified setup layers:
 5. `RideOnState_UpdateSeatPoseRequest` after attach stage `2`.
 6. `RideRuntime_SetRideOnActionSlotFilters` after attach stage `2`.
 
-The long visible boarding presentation is not isolated to one confirmed primitive
-yet. Verified negative evidence shows that treating it as only `AnimSetState(5)`,
-only `MountableComponent_StartMount`, or only a global presentation request loses
-important setup or fails to remove all visible presentation.
+Later 2026-07-18 analysis closed the two independent long-running presentation
+layers:
 
-The strongest current architectural boundary remains: preserve OnEnter and the
-stage-2 Update pose/filter pass, then use the normal Drive transition semantics
-rather than skipping the whole RideOn state.
+- the visible player boarding descriptor is evaluated by the fullgame ActionGraph
+  evaluator and reaches the RideOn `0xED` event through normal result evaluation;
+- the camera presentation is a `DSCutInCamera` action with its own
+  elapsed/duration, finished flag, CameraMode removal, and Deactivate cleanup.
+
+The current verified boundary is therefore more specific: preserve OnEnter,
+ProcessVehicleAttach, the stage-2 seat pose/filter pass, and the original
+ActionGraph result construction; accelerate the active descriptor through its
+normal evaluator; let the native RideOn completion block enter Drive; wait for the
+native modified-pose submission; then finish CutIn through its original playback
+and Deactivate lifecycle.
+
+## Modified-pose submission and world basis
+
+The logical ABI of both `DSPlayerMoverAccessor` pose slots is:
+
+```cpp
+void Method(
+    DSPlayerMoverAccessor* self,
+    float frameDelta,
+    AnimatedPoseWrapper* wrapper);
+```
+
+`MsgPreModifyAnimatedPose` reaches accessor slot 0 and mover slot 49. This path
+updates the cached pose-motion transform but did not change the player Entity
+basis in the verified boarding run.
+
+`MsgModifyAnimatedPose` reaches accessor slot 1 and mover slot 50. Runtime
+before/after sampling proves that the player Entity world basis changes inside
+this original call. Static analysis confirms that mover slot 50 submits the
+animation-driven player transform before it returns.
+
+For the verified direct-front boarding action, the descriptor end left the player
+with `M33≈0.5708`. Drive Enter itself preserved that basis. The next Drive-frame
+slot 1 call changed it to `M33≈0.9998`, establishing the native driving pose before
+the CutIn camera handoff.
+
+`DSCutInCamera_Deactivate` for flags `0x40A14A0C` reads this current world basis
+from `DSPlayerEntity+0x100` and uses it to calculate the ordinary-camera handoff.
+This verified consumer explains why the player-pose submission and camera
+Deactivate order are part of the same fast-boarding correctness boundary.

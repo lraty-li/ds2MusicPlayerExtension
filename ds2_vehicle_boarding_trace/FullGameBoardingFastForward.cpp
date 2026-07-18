@@ -39,7 +39,7 @@ constexpr uint32_t kPrimaryCallOffset = 0x34;
 constexpr uint32_t kSecondaryCallOffset = 0x47;
 constexpr uint32_t kApproachCallOffset = 0x29;
 constexpr uint32_t kIndirectCallSize = 6;
-constexpr float kFastTimeScale = 512.0f;
+constexpr float kFastTimeScale = 64.0f;
 
 using EvaluateDescriptorFn = void(__fastcall*)(
     uintptr_t output, uintptr_t descriptor, uint8_t mode,
@@ -52,7 +52,9 @@ std::array<uintptr_t, 4> g_boardingReturns{};
 EvaluateDescriptorFn g_original = nullptr;
 SRWLOCK g_leafLock = SRWLOCK_INIT;
 uint32_t g_leafSession = 0;
-uint32_t g_leafMask = 0;
+uint32_t g_activeLeaf = 0;
+uintptr_t g_activeDescriptor = 0;
+bool g_leafCompleted = false;
 
 struct ResultState {
     uintptr_t single = 0;
@@ -94,20 +96,41 @@ uint32_t LeafMask(uintptr_t caller)
     return 0;
 }
 
-bool MarkLeafForSession(uint32_t leaf)
+bool ClaimLeafForSession(
+    uint32_t leaf, uintptr_t descriptor, uint32_t& claimedSession)
 {
     const uint32_t session = FastBoardingSession::CurrentSessionId();
-    if (!session)
+    if (!session || !descriptor)
         return false;
     AcquireSRWLockExclusive(&g_leafLock);
     if (g_leafSession != session) {
         g_leafSession = session;
-        g_leafMask = 0;
+        g_activeLeaf = 0;
+        g_activeDescriptor = 0;
+        g_leafCompleted = false;
     }
-    const bool first = !(g_leafMask & leaf);
-    g_leafMask |= leaf;
+    if (!g_activeDescriptor) {
+        g_activeLeaf = leaf;
+        g_activeDescriptor = descriptor;
+    }
+    const bool claimed = !g_leafCompleted &&
+        g_activeLeaf == leaf && g_activeDescriptor == descriptor;
+    if (claimed)
+        claimedSession = session;
     ReleaseSRWLockExclusive(&g_leafLock);
-    return first;
+    return claimed;
+}
+
+bool CompleteLeafForSession(
+    uint32_t session, uint32_t leaf, uintptr_t descriptor)
+{
+    AcquireSRWLockExclusive(&g_leafLock);
+    const bool matched = !g_leafCompleted && g_leafSession == session &&
+        g_activeLeaf == leaf && g_activeDescriptor == descriptor;
+    if (matched)
+        g_leafCompleted = true;
+    ReleaseSRWLockExclusive(&g_leafLock);
+    return matched;
 }
 
 void __fastcall HookEvaluateDescriptor(
@@ -116,9 +139,10 @@ void __fastcall HookEvaluateDescriptor(
 {
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     const uint32_t leaf = LeafMask(caller);
+    uint32_t claimedSession = 0;
     const bool eligible = leaf && mode == 0 && timeScale == 1.0f &&
         evaluatePose == 1 && FastBoardingSession::CanFastForwardAnimation() &&
-        MarkLeafForSession(leaf);
+        ClaimLeafForSession(leaf, descriptor, claimedSession);
     const float effectiveScale = eligible ? kFastTimeScale : timeScale;
     g_original(output, descriptor, mode, effectiveScale, evaluatePose);
     if (!eligible)
@@ -129,7 +153,9 @@ void __fastcall HookEvaluateDescriptor(
         IsFastResultComplete(result);
     std::ostringstream oss;
     oss << "FastBoarding descriptor evaluated"
+        << " session=" << claimedSession
         << " leaf=" << leaf
+        << " descriptor=" << VehicleSeatTrace::Hex(descriptor)
         << " callerRva=" << VehicleSeatTrace::Hex(
             caller - reinterpret_cast<uintptr_t>(g_fullGame))
         << " scale=" << timeScale << "->" << effectiveScale
@@ -140,8 +166,10 @@ void __fastcall HookEvaluateDescriptor(
         << " end=" << static_cast<uint32_t>(result.reachedEnd)
         << " complete=" << static_cast<uint32_t>(complete);
     g_logger->Log(oss.str());
-    if (complete)
+    if (complete && CompleteLeafForSession(
+            claimedSession, leaf, descriptor)) {
         FastBoardingSession::ConfirmAnimationFastForwarded();
+    }
 }
 
 bool IsExecutable(uintptr_t address)

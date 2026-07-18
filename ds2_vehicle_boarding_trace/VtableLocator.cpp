@@ -140,8 +140,10 @@ bool FindUniqueByRtti(
     uint32_t slotIndex, Match& match)
 {
     match = {};
-    if (!module || !typeName || !*typeName || slotIndex > kMaximumSlotIndex)
+    if (!module || !typeName || !*typeName ||
+        slotIndex > kMaximumSlotIndex) {
         return false;
+    }
 
     uintptr_t textStart = 0;
     size_t textSize = 0;

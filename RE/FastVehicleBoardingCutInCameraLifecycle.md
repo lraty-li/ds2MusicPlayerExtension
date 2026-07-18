@@ -94,6 +94,8 @@ variant index 写为 `-1`。
 
 | 偏移 | 已验证含义 |
 |---|---|
+| `+0x08` | 玩家相机上下文；Deactivate 镜头交接分支读取其方向状态 |
+| `+0x18` | `DSPlayerEntity`，不是 action resource 或 selected variant |
 | `+0x38` | 请求/期望 action hash |
 | `+0x3C` | 当前 active action hash |
 | `+0x40` | 合并后的当前 action flags |
@@ -203,6 +205,26 @@ CutIn elapsed/duration 完成
 并标记已注销，再释放 vector backing storage、清 count/data。slot 3 在返回 false 前
 调用一次，slot 5 再幂等调用一次。
 
+### 驾驶镜头 handoff 使用玩家当前 world basis
+
+正前方运行的当前 action flags 为 `0x40A14A0C`。定点反汇编确认该值命中
+`0x200000` 分支且不命中 bit 0，因此本次 Deactivate 不使用激活时保存的
+initial yaw/pitch 路径。
+
+`0x140E24FD2` 所在分支执行以下原生语义：
+
+1. 从 `this+0x18` 取得 `DSPlayerEntity`；
+2. 读取 `DSPlayerEntity+0x100` 当前 world basis；
+3. 把该 3x3 方向矩阵转换为四元数；
+4. 与 `this+0x08` 玩家相机上下文中的方向四元数组合；
+5. 求出驾驶相机 handoff yaw/pitch，并提交给普通相机过渡状态。
+
+`this+0x18` 曾被误读为 selected variant。`DSCutInCamera_Update` 的实际赋值明确表明
+action resource 位于 `this+0x50`、selected variant 位于 `this+0x58`；同类函数还会
+通过 `this+0x18` 访问玩家实体字段，因此该旧解释已被排除。
+
+这条分支使 CutIn 结束时的玩家朝向成为镜头交接输入。它不是只负责释放资源的尾声。
+
 ## Shutdown 与析构边界
 
 `DSCutInCamera_Shutdown` 会撤销全局 camera 位、释放 broker target、使 broker active
@@ -259,13 +281,40 @@ CutIn 自身完成：
 实体挂接、RideOn 状态完成、ActionGraph `0xED` 与 CutInCamera 播放完成是相互独立的
 生命周期层。
 
-## 2026-07-18 功能验证
+## 2026-07-18 功能验证与顺序修正
 
-当前 Mod 通过 RTTI/COL offset 0 包装 `DSCutInCamera` slot 9 和 slot 5。左前方自动
-测试中，slot 9 的重复原生更新把 elapsed 从 `0.00834168` 推进到 `3.25327`，原函数
-在 duration `3.25325` 处自行设置 finished。下一帧 CameraMode 调用原 slot 5；返回后
-验证 active/finished、variant、hash、flags 与 switch pending 均已清理。
+当前 Mod 通过 RTTI/COL offset 0 包装 `DSCutInCamera` slot 9 和 slot 5。早期功能版的
+顺序是先结束 CutIn，再放行 RideOn 事件并进入 Drive。左前和右前镜头可正常交接，
+但正前方稳定出现垂直看地。
 
-只有 Deactivate 后的下一 tick 才放行 RideOn `0xED`。运行顺序为 CutIn finished、
-Deactivate clean、Graph event 186、Drive Enter；最早自动截图已经恢复车辆后方驾驶
-镜头，原生下车与退出完整通过。
+只读姿态观测确认，正前方上车 descriptor 末端把玩家 world basis 推到明显倾斜状态，
+其 `M33` 约为 `0.5708`。Drive Enter 本身不修改该矩阵；Drive 后第一次
+`DSPlayerMoverAccessor` slot 1 仍提交旧姿态，下一次原生 slot 1 才将其恢复为
+`M33≈0.9998` 的驾驶姿态。
+
+旧顺序让 Deactivate 的 `0x200000` handoff 分支读取倾斜 basis，因此错误来自原生
+镜头交接输入时机，不是相机对象残留或清理失败。
+
+修正后的原生顺序为：
+
+```text
+上车 descriptor 正常到达末端
+  -> ActionGraph event 186 在 RideOn Update 内放行
+  -> 原生 RideOn 公共完成块
+  -> Drive Enter
+  -> DSPlayerMoverAccessor slot 1 提交驾驶姿态
+  -> 重复原 DSCutInCamera slot 9，原函数设置 finished
+  -> DSCutInCamera slot 3 返回 false
+  -> CameraMode 调用原 slot 5 Deactivate
+  -> Deactivate 用已恢复的 world basis 计算 handoff
+  -> 释放 target/observer/runtime entries
+```
+
+正前方运行使用 action hash `0x3897A3D5`、variant `0`。原 slot 9 共执行 380 次更新，
+把 elapsed 从 `0.0875876` 推进到 `3.25744`，在 duration `3.25325` 处由原函数设置
+finished。随后原 Deactivate 返回，active/finished、variant、hash、flags 与
+switch pending 均已清理。
+
+自动测试在 `200ms`、`700ms`、`1700ms` 捕获的画面均为车辆后方、与车头同向的
+驾驶镜头；上车、Drive、原生下车和退出完整通过。实现没有写相机角、玩家变换或
+handoff 字段。

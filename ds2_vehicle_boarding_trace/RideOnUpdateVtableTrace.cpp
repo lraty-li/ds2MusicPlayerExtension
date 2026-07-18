@@ -129,6 +129,10 @@ void __fastcall HookUpdate(uintptr_t rideOn, float delta, float a3)
         FastBoardingSession::EnterRideOnUpdate(rideOn);
     g_original(rideOn, delta, a3);
     FastBoardingSession::LeaveRideOnUpdate(previousUpdateScope);
+    if (FastBoardingSession::ObserveRideOnUpdateComplete(rideOn)) {
+        g_logger->Log(
+            "FastBoarding native RideOn completion update returned");
+    }
     VehicleSeatTrace::Snapshot after = {};
     const bool haveAfter = VehicleSeatTrace::CaptureSnapshot(plugin, after);
     const bool changed = haveBefore && haveAfter && StateChanged(before, after);
