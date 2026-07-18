@@ -1,8 +1,14 @@
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\BoardingCompletionGate.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\BoardingCompletionGate.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\BoardingClipSuppressor.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\BoardingClipSuppressor.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\CrashTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\CrashTrace.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\CutInCameraFastForward.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\CutInCameraFastForward.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\DrivingProgressTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\DrivingProgressTrace.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\DriveVtableTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\DriveVtableTrace.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\DescriptorNeighborhoodTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\DescriptorNeighborhoodTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\FullGameDescriptorMode.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\FullGameDescriptorMode.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\FullGameBoardingFastForward.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\FullGameBoardingFastForward.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\FastBoardingSession.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\FastBoardingSession.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\GraphEventFastForward.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\GraphEventFastForward.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\FullGameAnimationTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\FullGameAnimationTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\FullGameResultTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\FullGameResultTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\dllmain.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\dllmain.obj
@@ -18,5 +24,8 @@ E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\SeatActionProgressTra
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\SeatStateTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\SeatStateTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\SeatTransitionTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\SeatTransitionTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\RideOnUpdateTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\RideOnUpdateTrace.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\RideOnVtableDiscovery.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\RideOnVtableDiscovery.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\RideOnUpdateVtableTrace.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\RideOnUpdateVtableTrace.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\VehicleSnapshot.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\VehicleSnapshot.obj
+E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\VtableLocator.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\VtableLocator.obj
 E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\pch.cpp;E:\dev\code\game\DS2MusicPlayer\ds2_vehicle_boarding_trace\ds2_vehi.B2C3D4E5\x64\Release\pch.obj

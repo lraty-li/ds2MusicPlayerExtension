@@ -1,17 +1,15 @@
 #include "pch.h"
 #include "Hooks.h"
-#include "BoardingCompletionGate.h"
 #include "CrashTrace.h"
-#include "DrivingProgressTrace.h"
-#include "FullGameAnimationTrace.h"
-#include "FullGameResultTrace.h"
+#include "CutInCameraFastForward.h"
+#include "DriveVtableTrace.h"
+#include "FastBoardingSession.h"
+#include "FullGameBoardingFastForward.h"
+#include "GraphEventFastForward.h"
 #include "HookUtils.h"
 #include "Logger.h"
-#include "RideOnEnterInterceptor.h"
-#include "RideOnUpdateTrace.h"
-#include "SeatStateTrace.h"
-#include "SeatTransitionTrace.h"
-#include <sstream>
+#include "RideOnVtableDiscovery.h"
+#include "RideOnUpdateVtableTrace.h"
 
 namespace {
 constexpr wchar_t kExpectedModuleName[] = L"DS2.exe";
@@ -38,7 +36,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     Logger::ResetLogFile(resetErr);
 
     HMODULE gameModule = GetModuleHandleW(nullptr);
-    g_logger.Log("VehicleBoard ANIMATION OWNER TRACE v0.9.2 start");
+    g_logger.Log("VehicleBoard FAST BOARDING MOD v2.0.0 start");
 
     if (!gameModule) {
         g_logger.Log("GetModuleHandleW failed");
@@ -55,16 +53,28 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("CrashTrace install failed");
     }
 
-    const bool stateFlowOk = RideOnEnterInterceptor::TryInstall(gameModule, g_logger);
-    const bool fastUpdateOk = RideOnUpdateTrace::TryInstall(gameModule, g_logger);
-    const bool completionGateOk = BoardingCompletionGate::TryInstall(gameModule, g_logger);
-    const bool drivingProgressOk = DrivingProgressTrace::TryInstall(gameModule, g_logger);
-    const bool seatStateOk = SeatStateTrace::TryInstall(gameModule, g_logger);
-    const bool seatTransitionOk = SeatTransitionTrace::TryInstall(gameModule, g_logger);
-    const bool fullGameAnimationOk = FullGameAnimationTrace::TryInstall(g_logger);
-    const bool fullGameResultOk = FullGameResultTrace::TryInstall(g_logger);
-    const bool ok = stateFlowOk && fastUpdateOk && completionGateOk && drivingProgressOk &&
-        seatStateOk && seatTransitionOk && fullGameAnimationOk && fullGameResultOk;
+    const bool rideOnInstalled =
+        RideOnVtableDiscovery::TryInstall(gameModule, g_logger);
+    if (!rideOnInstalled)
+        g_logger.Log("RideOn vtable observer failed");
+    const bool driveInstalled =
+        DriveVtableTrace::TryInstall(gameModule, g_logger);
+    if (!driveInstalled)
+        g_logger.Log("Drive vtable observer failed");
+    const bool updateInstalled =
+        RideOnUpdateVtableTrace::TryInstall(gameModule, g_logger);
+    if (!updateInstalled)
+        g_logger.Log("RideOn Update vtable observer failed");
+    if (rideOnInstalled && driveInstalled && updateInstalled) {
+        FastBoardingSession::ReportComponentReady(
+            FastBoardingSession::kScopeComponent);
+    }
+    if (!GraphEventFastForward::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastBoarding graph event wrapper failed");
+    if (!CutInCameraFastForward::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastBoarding CutIn wrapper failed");
+
+    const bool ok = FullGameBoardingFastForward::TryInstall(g_logger);
     g_logger.Log(ok ? "hooks installed" : "hook install FAILED");
     return 0;
 }

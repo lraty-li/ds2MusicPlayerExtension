@@ -64,15 +64,21 @@ RTTI 注册函数明确给出类型名 `SkeletonAnimationEventTag` 和 `UUIDRef_
 
 真分支到公共完成块之间没有 `runtime + 0x18B` 的前置检查。因此，返回真可以复用完整原生状态转移，而不是像直接写 `next=2` 那样绕过 Update 的通知、任务和清理逻辑。
 
-## 实验边界与当前构建
+## 历史事件门控实验
 
 历史事件门控实验曾在参数 ID 为 `0xED`、活动 RideOn 快照满足
 `current=1,next=1,stage=2` 时，把原生假结果提升为真。该实验只用于确认原生完成块的
 控制流语义，不再是当前实现。
 
-三方向现场对照已经证明该门控不会缩短可见动画。当前
-`BoardingCompletionGate` 为只读模式：调用原函数并原样返回 `nativeResult`，只记录首次
-原生完成事件。2026-07-10 自动化基线重新得到约 `3.587s` 的原生完成时间。
+三方向现场对照已经证明单独门控不会缩短可见动画。2026-07-10 的
+`BoardingCompletionGate` 只读基线调用原函数并原样返回 `nativeResult`，得到约
+`3.587s` 的原生完成时间。
+
+2026-07-18 当前功能构建改为包装 `GraphAnimationManager` primary vtable slot 28。
+它只在 RideOn Update TLS 范围、同一玩家 manager、内部事件 ID `186`、context 0、
+合法 stage 2 且 `b18B=1` 时协调结果。角色 descriptor 完成后若 CutIn 尚未经过原生
+slot 5 Deactivate，真实事件也暂不放行；Deactivate 清理后的后续查询才进入原生公共
+完成块。最终自动测试在 RideOn elapsed 约 `0.063s` 进入 Drive。
 
 ### 三方向现场验证
 
@@ -196,6 +202,11 @@ PASS: board, drive, dismount, and quit confirmed
 | `3700ms` | 已进入后方驾驶镜头 |
 
 结合三方向原版对照，可验证的结论仅是历史实验把逻辑 Drive 提前到约 `25ms`；不能把
-`2200ms` 的单组截图解释成动画缩短。当前证据把可见动作所有权继续限定在玩家
-action/animation graph 一侧：`0xED`、presentation、座椅 finalizer 和
-`DSPlayerVehicleDriving` 回调均已被运行时证据排除。
+`2200ms` 的单组截图解释成动画缩短。`0xED`、座椅 finalizer 和
+`DSPlayerVehicleDriving` callback 都不是长动画时间轴的单独所有者。
+
+旧记录中的 `presentation request` 已被重新闭合为 `DSCutInCamera` 请求队列。它会
+选择独立的 CutIn action variant，并以自身 elapsed/duration 判定完成；它不消费
+ActionGraph `0xED`。因此强制 `0xED` 只能推进 RideOn 正常完成块，不能据此结束
+已经激活的 CutInCamera。完整相机退出由 CutIn finished、CameraMode 模块切换和
+`DSCutInCamera_Deactivate` 共同完成。
