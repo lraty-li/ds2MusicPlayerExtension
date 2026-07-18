@@ -6,8 +6,8 @@
 分析与 `test_boarding.ps1` 自动化运行结果。所有新增 hook 均为只读观测，目标由
 唯一字节模式解析，没有使用固定 RVA 构建 hook，也没有修改寄存器、汇编或代码字节。
 
-初始运行分析的测试路径固定为车辆左前方；2026-07-18 又增加了右前方运行验证和
-三类 approach 选择树的定点静态分析。
+初始运行分析的测试路径固定为车辆左前方；2026-07-18 又增加了右前方、正前方运行
+验证和三类 approach 选择树的定点静态分析。
 
 ## 活跃图入口
 
@@ -190,9 +190,26 @@ duration=3.01968 sync=0.0166834 end=0
 duration=0.00589782 sync=0.00589782 end=1 complete=1
 ```
 
-随后 CutIn 原生结束、Deactivate 清理、内部事件 186 放行，Drive Enter 发生在
-RideOn elapsed `0.0792459s`。根 `test_boarding.ps1` 完成上车、Drive、原生下车、
-退出与正常 DLL 卸载，没有 CrashTrace。
+这是较早的 `timeScale=512` 运行。该版本随后先结束 CutIn、再放行内部事件 186，
+Drive Enter 发生在 RideOn elapsed `0.0792459s`。根 `test_boarding.ps1` 完成上车、
+Drive、原生下车、退出与正常 DLL 卸载，没有 CrashTrace。
+
+正前方运行由用户固定测试位置后，实际命中：
+
+```text
+leaf=8 callerRva=0x3607C1A
+actionHash=0x3897A3D5 variant=0
+```
+
+这把正前方与 approach 2 composite 候选 C 直接对位。当前多帧 evaluator wrapper 使用
+`timeScale=64`，原函数在数个正常求值帧后给出：
+
+```text
+duration=0.0550029 sync=0.0550029 end=1 complete=1
+```
+
+该结果保留正常非空 single、sync state 和附加姿态通道；wrapper 没有直接写
+`reachedEnd`、sync frame 或结果对象。
 
 `resultSingle` 每帧由不同的临时地址承载，但对象中的第一个指针和第二个稳定引用
 保持不变。其余采样字段主要表现为权重/变换值变化，没有观察到简单的线性累计
@@ -317,12 +334,19 @@ Drive、下车与退出均通过，但三张窗口截图显示：约 `0.2s` 角�
 ## 2026-07-18 evaluator timeScale 实现
 
 当前功能构建不再 hook `ActionGraphResult_PropagateSyncFrame`。它在两个唯一模式解析并
-校验出的同一 evaluator 可写函数指针槽安装五参数 C++ wrapper，只对主上车 leaf 的
-首次有效求值把第 4 参数从 `1.0` 改为 `512.0`，第 5 参数原样透传。
+校验出的同一 evaluator 可写函数指针槽安装五参数 C++ wrapper。四个 approach leaf
+调用点必须各自唯一，且都必须解析到同一槽；另一个 `+0x3478` 动态表调用点只用于
+交叉校验，不作为活动 leaf。
 
-原 evaluator 运行结果为 `duration=0.00694053`、`syncDuration=0.00694053`、
-`reachedEnd=1`，并保留正常结果与引用通道。配合正常 CutIn Deactivate 和 RideOn
-完成协调后，自动测试在约 `0.063s` 进入 Drive；最早截图已是驾驶镜头。
+wrapper 将同一会话第一次实际命中的 `(leaf, descriptor)` 绑定为活动结果，并在每次
+合法求值时把第 4 参数从 `1.0` 改为 `64.0`，第 5 参数原样透传。它持续调用原函数，
+直到原结果满足 `reachedEnd` 或 `syncDuration >= duration`，而不是只修改首帧后就认为
+descriptor 已完成。
+
+正前方原 evaluator 最终结果为 `duration=0.0550029`、
+`syncDuration=0.0550029`、`reachedEnd=1`。RideOn 随后通过原生 event 186 完成并进入
+Drive；Drive 后的玩家动画姿态提交完成后，CutIn 才走原生 finished、CameraMode
+Deactivate 和驾驶镜头 handoff。自动测试最早 `200ms` 截图已是正常车辆后方镜头。
 
 后续按 Drive 结果链重新定位并结合原生时序确认，`6.45645s` 完整结果在
 `Drive Enter` 后立即开始，属于 Drive descriptor，不是 RideOff。旧的 RideOff

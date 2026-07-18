@@ -76,9 +76,16 @@ RTTI 注册函数明确给出类型名 `SkeletonAnimationEventTag` 和 `UUIDRef_
 
 2026-07-18 当前功能构建改为包装 `GraphAnimationManager` primary vtable slot 28。
 它只在 RideOn Update TLS 范围、同一玩家 manager、内部事件 ID `186`、context 0、
-合法 stage 2 且 `b18B=1` 时协调结果。角色 descriptor 完成后若 CutIn 尚未经过原生
-slot 5 Deactivate，真实事件也暂不放行；Deactivate 清理后的后续查询才进入原生公共
-完成块。最终自动测试在 RideOn elapsed 约 `0.063s` 进入 Drive。
+合法 stage 2 且 `b18B=1` 时协调结果。角色 descriptor 已由原 evaluator 正常求值到
+末端、原生事件已经出现后，wrapper 在同一次 RideOn Update 内放行事件；原函数进入
+公共完成块并请求 `next=2`。正前方自动测试在 RideOn elapsed 约 `0.100s` 进入 Drive。
+
+当前顺序不再让 Graph 事件等待 CutIn Deactivate。运行时和静态分析已证明，正前方
+CutIn 的 Deactivate 会读取玩家当时的 world basis 计算驾驶镜头 handoff；若先结束
+CutIn，读取到的是上车动作留下的倾斜 basis。当前实现先让 RideOn 正常进入 Drive，
+等待原生 `DSPlayerMoverAccessor` ModifyAnimatedPose 提交驾驶姿态，再推进 CutIn 到
+finished 并由 CameraMode 调用原生 Deactivate。Graph 事件仍只负责 RideOn 状态完成，
+没有被当作 CutIn 完成条件。
 
 ### 三方向现场验证
 

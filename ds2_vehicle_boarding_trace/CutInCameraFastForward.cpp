@@ -41,10 +41,12 @@ struct PlaybackState {
     uintptr_t variant = 0;
     uint32_t actionHash = 0;
     uint32_t flags = 0;
+    int32_t variantIndex = -1;
     float elapsed = 0.0f;
     float duration = 0.0f;
     uint8_t active = 0;
     uint8_t finished = 0;
+    uint8_t firstPostUpdatePending = 0;
     uint8_t controllerActive = 0;
     uint8_t switchPending = 0;
 };
@@ -53,11 +55,14 @@ bool ReadState(uintptr_t camera, PlaybackState& state)
 {
     return VehicleSeatTrace::ReadValue(camera + 0x3C, state.actionHash) &&
         VehicleSeatTrace::ReadValue(camera + 0x40, state.flags) &&
+        VehicleSeatTrace::ReadValue(camera + 0x44, state.variantIndex) &&
         VehicleSeatTrace::ReadValue(camera + 0x58, state.variant) &&
         VehicleSeatTrace::ReadValue(camera + 0x190, state.elapsed) &&
         VehicleSeatTrace::ReadValue(camera + 0x194, state.duration) &&
         VehicleSeatTrace::ReadValue(camera + 0x250, state.active) &&
         VehicleSeatTrace::ReadValue(camera + 0x251, state.finished) &&
+        VehicleSeatTrace::ReadValue(
+            camera + 0x252, state.firstPostUpdatePending) &&
         VehicleSeatTrace::ReadValue(camera + 0x257, state.controllerActive) &&
         VehicleSeatTrace::ReadValue(camera + 0x258, state.switchPending);
 }
@@ -80,6 +85,22 @@ bool CanFastForward(const PlaybackState& state)
         state.duration > state.elapsed && state.duration < 30.0f;
 }
 
+void LogProgress(
+    const PlaybackState& before, const PlaybackState& state,
+    uint32_t calls)
+{
+    std::ostringstream oss;
+    oss << "FastBoarding CutIn playback advanced"
+        << " hash=0x" << std::hex << state.actionHash << std::dec
+        << " flags=0x" << std::hex << state.flags << std::dec
+        << " variant=" << state.variantIndex
+        << " calls=" << calls
+        << " elapsed=" << before.elapsed << "->" << state.elapsed
+        << " duration=" << state.duration
+        << " finished=" << static_cast<uint32_t>(state.finished);
+    g_logger->Log(oss.str());
+}
+
 void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
 {
     PlaybackState before = {};
@@ -89,6 +110,8 @@ void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
     PlaybackState state = {};
     if (!haveBefore || !ReadState(camera, state) ||
         !FastBoardingSession::ShouldFastForwardCutIn(camera) ||
+        before.firstPostUpdatePending ||
+        state.firstPostUpdatePending ||
         !CanFastForward(state) || state.variant != before.variant ||
         state.actionHash != before.actionHash ||
         state.elapsed <= before.elapsed) {
@@ -131,15 +154,7 @@ void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
             break;
         }
     }
-
-    std::ostringstream oss;
-    oss << "FastBoarding CutIn playback advanced"
-        << " hash=0x" << std::hex << state.actionHash << std::dec
-        << " calls=" << extraCalls + 1
-        << " elapsed=" << before.elapsed << "->" << state.elapsed
-        << " duration=" << state.duration
-        << " finished=" << static_cast<uint32_t>(state.finished);
-    g_logger->Log(oss.str());
+    LogProgress(before, state, extraCalls + 1);
 }
 
 void __fastcall HookDeactivate(uintptr_t camera)
@@ -152,16 +167,17 @@ void __fastcall HookDeactivate(uintptr_t camera)
     g_originalDeactivate(camera);
     if (!relevant)
         return;
-
     PlaybackState after = {};
     const bool clean = ReadState(camera, after) && !after.active &&
         !after.finished && !after.variant &&
         after.actionHash == UINT32_MAX &&
         !after.flags && !after.switchPending;
-    g_logger->Log(std::string("FastBoarding CutIn Deactivate clean=") +
-        (clean ? "1" : "0"));
-    if (clean)
-        FastBoardingSession::ConfirmCutInFastForwarded(camera);
+    std::ostringstream oss;
+    oss << "FastBoarding CutIn Deactivate clean=" << (clean ? 1 : 0)
+        << " hash=0x" << std::hex << before.actionHash
+        << " flags=0x" << before.flags << std::dec
+        << " variant=" << before.variantIndex;
+    g_logger->Log(oss.str());
 }
 
 } // namespace

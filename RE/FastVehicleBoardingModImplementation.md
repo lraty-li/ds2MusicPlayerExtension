@@ -2,43 +2,58 @@
 
 日期：2026-07-18
 
-## 结果
+## 当前结果
 
-`ds2_vehicle_boarding_trace` 当前构建已经实现玩家快速上车。左前方和右前方自动
-测试中：
+`ds2_vehicle_boarding_trace` 已实现保留原生状态语义的快速上车：
 
-- 保留原生 RideOn OnEnter、实体挂接、seat transition 与 stage 0→1→2；
-- 上车角色 descriptor 由原 evaluator 在首个活动帧直接求值到末端；
-- `DSCutInCamera` 由原 slot 9 自己设置 finished；
-- 下一帧由 CameraMode 调用原 slot 5 `Deactivate`，完成 target、observer 和 runtime
-  entry 清理；
-- CutIn 清理后的后续 RideOn Update 才放行 `0xED`，进入原生公共完成块；
-- `Drive Enter` 在 RideOn elapsed 约 `0.063s`（左前）和 `0.079s`（右前）时完成；
-- 最早画面已经是车辆后方驾驶镜头，没有车侧攀爬或残留 CutIn；
-- 原生下车与退出流程保持正常。
+- 原生 `RideOn OnEnter`、seat transition、玩家实体挂接和 stage `0 -> 1 -> 2`
+  全部照常执行；
+- 活动的 fullgame 上车 descriptor 由原 evaluator 以 `timeScale=64` 多帧推进到
+  正常末端；
+- 原生 ActionGraph 完成事件进入 RideOn 公共完成块，正常请求 `RideOn -> Drive`；
+- Drive 进入后，等待 `DSPlayerMoverAccessor::OnModifyAnimatedPose` 把玩家 world basis
+  提交为驾驶姿态；
+- 随后才重复调用原生 `DSCutInCamera` playback，让原函数设置 finished；
+- CameraMode 再调用原生 `DSCutInCamera_Deactivate`，完成镜头交接并释放所有 CutIn
+  副作用；
+- 原生下车、菜单退出和 DLL 卸载保持正常。
 
-实现没有修改寄存器、可执行代码字节或固定 RVA。所有类级入口通过 RTTI/COL 定位。
-fullgame 安装器要求五个模式分别唯一，并校验四个活动 leaf 和一个独立交叉检查调用
-全部解析到同一可写 evaluator 指针槽；任一检查失败都会停止安装。
+正前方自动测试的 `200ms`、`700ms`、`1700ms` 截图均显示车辆后方、与车头同向的
+驾驶镜头。旧版本中正前方上车后垂直看地的问题不再出现。
 
-## 会话边界
+实现没有修改寄存器、可执行代码字节或使用固定 RVA 构造 hook 目标。DS2 类函数入口
+通过唯一模式或精确 RTTI/COL 定位；fullgame 调用点通过唯一模式定位并交叉校验到同一
+可写 evaluator 函数指针槽。任一必需组件定位失败时，required-component mask 不成立，
+功能 wrapper 只调用原函数。
 
-`FastBoardingSession` 由 RideOn vtable wrapper 建立：
+## 必需组件与会话边界
 
-1. slot 11 原生 OnEnter 返回后记录 RideOn、plugin、玩家 ActionParams 和
+当前 required-component mask 包含五层：
+
+1. RideOn Enter、ProcessVehicleAttach、Update 与 Drive Enter 的状态范围；
+2. `GraphAnimationManager` bool-event 查询；
+3. `DSCutInCamera` playback / Deactivate；
+4. fullgame descriptor evaluator；
+5. `DSPlayerMoverAccessor` 的 ModifyAnimatedPose 提交点。
+
+`FastBoardingSession` 的运行边界为：
+
+1. RideOn vtable slot 11 原生 OnEnter 返回后，记录 RideOn、plugin、玩家实体和
    `GraphAnimationManager`；
-2. slot 27 原生 `ProcessVehicleAttach` 返回后，只在
+2. slot 27 原生 ProcessVehicleAttach 返回后，只在
    `current=1,next=1,stage=2,b189=1,b18A=1,b191=1` 时进入 ready；
-3. RideOn Update slot 14 用线程局部范围限定 Graph bool-event wrapper；
-4. Graph 完成前再次验证 `current=1,next=1,stage=2,b18B=1`；
-5. Drive Enter 只接受同一 plugin 的状态边界。
+3. RideOn Update slot 14 用线程局部范围限定事件查询；
+4. 事件放行前再次验证同一 manager、stage 2 和 `b18B=1`；
+5. Drive Enter 只接受同一 plugin 的状态边界；
+6. ModifyAnimatedPose 只接受当前 RideOn 对应玩家，并在原 slot 返回后读取已经提交的
+   world basis；
+7. CutIn 实例和 action hash 必须与同一有界会话匹配。
 
-角色 descriptor、CutIn 实例/action hash 和 Graph 事件都绑定在同一个有界会话内。
-任一必需组件定位失败时，required-component mask 不成立，功能 wrapper 只透传原函数。
+会话窗口为 5 秒。超出窗口或快照不一致时，不再执行加速路径。
 
-## 角色动画的正常 C++ 介入点
+## 角色 descriptor 加速
 
-fullgame 间接 evaluator 的完整原型为：
+fullgame 间接 evaluator 的已验证原型为：
 
 ```cpp
 void EvaluateDescriptor(
@@ -49,122 +64,134 @@ void EvaluateDescriptor(
     bool evaluateExtraChannels);
 ```
 
-主上车调用原生参数为 `(output, descriptor, 0, 1.0, true)`。DS2 evaluator 核心
-确认第 4 参数是时间缩放：它缩放 descriptor 采样区间，并把输出 duration 写成
-`descriptorDuration / timeScale`；第 5 参数控制额外姿态/结果通道，必须原样透传。
+上车 leaf 的原生参数为 `(output, descriptor, 0, 1.0, true)`。DS2 evaluator 核心会
+按第 4 参数缩放 descriptor 采样区间，并把输出 duration 写成
+`descriptorDuration / timeScale`；第 5 参数控制附加结果通道，必须原样透传。
 
-生成图以 `[r14+0x507CC]` 的 `0.0/1.0/2.0` 值选择三个 approach 结果。当前构建
-白名单中的四个 leaf 是：
+当前白名单包含生成图选择树中的四个 evaluator 返回点：
 
-| approach | side/组合 | evaluator call | return RVA |
-|---:|---|---:|---:|
-| `0` | side `0` | `0x183607111` | `0x3607117` |
-| `1` | side `0` | `0x183607B62` | `0x3607B68` |
-| `2` | composite 候选 A | `0x18360794C` | `0x3607952` |
-| `2` | composite 候选 C | `0x183607C14` | `0x3607C1A` |
+| approach | 生成图分支 | return RVA |
+|---:|---|---:|
+| `0` | 主分支 | `0x3607117` |
+| `1` | side 0 | `0x3607B68` |
+| `2` | composite 候选 A | `0x3607952` |
+| `2` | composite 候选 C | `0x3607C1A` |
 
-功能 wrapper 只在 RideOn 仍为 `current=1,next=1,stage=2` 时，对每个实际命中的
-白名单 leaf 首次求值把 `timeScale` 从 `1.0` 改为 `512.0`。approach 2 的两个
-候选仍交给原生 composite 选择器决定最终结果。原 evaluator 继续负责 count、items、
-single、引用所有权、sync 和结束标志；实现不构造空结果，也不写内部播放头。
+wrapper 不把一次求值强行伪造成完成。它把同一会话第一次实际命中的 leaf 与 descriptor
+绑定，并在后续帧继续传入 `timeScale=64`，直到原 evaluator 自己产生合法的
+`reachedEnd` 或 `syncDuration >= duration`。这样保留 count、items、single、引用所有权、
+sync 和姿态通道的正常构造。
 
-左前方与右前方最终测试日志分别为：
+正前方运行直接确认：
 
 ```text
-scale=1->512 mode=0 pose=1
-duration=0.00694053 sync=0.00694053 end=1 complete=1
-
-leaf=4 callerRva=0x3607B68 scale=1->512 mode=0 pose=1
-duration=0.00589782 sync=0.00589782 end=1 complete=1
+leaf=8 callerRva=0x3607C1A scale=1->64 mode=0 pose=1
+duration=0.0550029 sync=0.0550029 end=1 complete=1
 ```
 
-这取代了旧的 `ActionGraphResult_PropagateSyncFrame` JumpHook。静态分析还确认，对同一
-Result 自传播虽然内存安全，但因 input/output frame 相同会直接返回，语义上不能加速。
+因此当前正前方路径使用 approach 2 composite 候选 C。该次 CutIn action hash 为
+`0x3897A3D5`，selected variant index 为 `0`。
 
-## CutIn 的正常完成与退栈
+## RideOn 完成与 Drive 边界
+
+`GraphAnimationManager` primary vtable slot 28 查询内部 bool event。RideOn 外部参数
+`0xED` 映射到内部事件 ID `186`，context 为 0。
+
+wrapper 只协调原生查询结果，不写 RideOn 的 next-state 字段。角色 descriptor 已完成、
+原生事件已经出现且 `b18B=1` 后，事件 `186` 在原 RideOn Update 内返回 true；原函数
+随即执行公共完成块并请求 `next=2`。Update 返回后记录该边界，Drive Enter 再由原生
+状态机调用。
+
+正前方验证时序为：
+
+```text
+descriptor complete                 RideOn elapsed≈0.083s
+event 186 released                  RideOn elapsed≈0.100s
+RideOn completion Update returned
+Drive Enter                         RideOn elapsed≈0.100s
+```
+
+Drive Enter 返回后的快照为 `b18B=1,b191=1,b381=0x4`。
+
+## 玩家姿态提交与正前方镜头根因
+
+`DSPlayerState` 的 animated-pose 消息链已静态闭合：
+
+```text
+MsgPreModifyAnimatedPose
+  -> DSPlayerMoverAccessor slot 0
+  -> DSPlayerMover slot 49
+  -> 更新 pose-motion 缓存
+
+MsgModifyAnimatedPose
+  -> DSPlayerMoverAccessor slot 1
+  -> DSPlayerMover slot 50
+  -> 在原调用返回前提交玩家 Entity world transform
+```
+
+两个 accessor 槽的逻辑 ABI 均为
+`void(self, float frameDelta, AnimatedPoseWrapper* wrapper)`。当前 Mod 只包装精确 RTTI
+定位的 slot 1，并始终先调用原函数。
+
+正前方运行中，上车 descriptor 末端把玩家 world basis 推到明显倾斜状态；其第三行
+末元素约为 `0.5708`。Drive Enter 本身没有立即改变该矩阵。Drive 后第一次 slot 1
+仍提交旧的倾斜姿态，下一次 slot 1 才把矩阵恢复到近驾驶姿态：
+
+```text
+before M33=0.570845
+after  M33=0.999797
+```
+
+`DSCutInCamera_Deactivate` 对本次 flags `0x40A14A0C` 命中 `0x200000` 分支且不命中
+bit 0。该分支直接读取 `DSPlayerEntity+0x100` 的当前 world basis，把它与玩家相机
+上下文方向组合后计算驾驶镜头 handoff yaw/pitch。
+
+旧顺序在 world basis 仍倾斜时就完成 CutIn，原生 Deactivate 因而把倾斜姿态带进驾驶
+镜头交接，表现为正前方上车后垂直看地。当前顺序先进入 Drive，等待原生 slot 1 提交
+近驾驶姿态，再结束 CutIn；没有直接写玩家变换、相机角或 handoff 字段。
+
+## CutIn 正常结束
 
 `DSCutInCamera` 通过精确 RTTI、primary COL offset 0 和 vtable slot 9 定位。slot 9
-原型为 `void(self, float frameDeltaSeconds)`。普通 CutIn 的主 elapsed 使用相机上下文
-内部 delta，而不是传入的 float；因此实现没有伪造参数或写 finished 字段。
+原型为 `void(self, float frameDeltaSeconds)`。wrapper 先正常调用一次，并只在以下条件
+全部成立时重复调用原 slot：
 
-wrapper 先正常调用一次，再在以下条件成立时重复调用原 slot 9：
-
-- 当前 RideOn 会话 ready；
-- action hash 属于已静态闭合的十六个上车请求 hash；
+- 同一 RideOn 会话已经完成原生 completion Update 并进入 Drive；
+- Drive 后的玩家姿态已经由 ModifyAnimatedPose 原生调用提交；
+- action hash 属于静态闭合的十六个上车请求 hash；
 - active、未 finished、variant 稳定；
-- 没有末帧保持或 variant-advance flags；
-- 每次原调用后 elapsed 严格前进，hash、variant、duration 均不变；
+- 首帧 handshake 已结束，没有末帧保持或 variant-advance flags；
+- elapsed、duration 和每次推进量均为有限值，elapsed 严格前进；
 - 更新次数受硬上限约束。
 
-左前方测试中，原 slot 9 被调用 389 次，原函数将：
+正前方运行中，原 slot 9 共执行 380 次更新，把 elapsed 从 `0.0875876` 推进到
+`3.25744`；原生 duration 为 `3.25325`，最终由原函数设置 `finished=1`。
 
-```text
-elapsed 0.00834168 -> 3.25327
-duration 3.25325
-finished=1
-```
+下一帧 `DSCutInCamera_Update` 返回 false，CameraMode 调用原 slot 5
+`DSCutInCamera_Deactivate`。返回后的验证确认 active/finished、variant、hash、flags 和
+switch-pending 均已清理。静态分析确认 Deactivate 同时释放 broker vehicle target、
+related entity observers、runtime entries，并把控制权交给下一可用 CameraModule。
 
-最终右前方测试使用 action hash `0x6F53F3A5`，原 slot 9 共调用 170 次，把
-`elapsed=0.0125125` 推进到 `2.84868`；原生 duration 为 `2.83617`，最终同样由
-原函数设置 `finished=1`。
+## 运行验证边界
 
-实现不在这里放行 RideOn。下一帧 CameraMode 的 slot 3 返回 false 后，原生调用
-slot 5 `DSCutInCamera_Deactivate`。wrapper 在原 Deactivate 返回后验证：
+用户已逐方向确认左前、右前和正前三种路径都能直接进入座位。左前与右前在此前版本
+中已经得到与车头同向的驾驶镜头；正前方曾稳定复现垂直看地，并由上述顺序修复。
 
-- active/finished 均清零；
-- selected variant 清空；
-- current hash 恢复为无效值；
-- flags 与 switch pending 清零。
-
-IDA 同时确认原 slot 5 已释放 broker vehicle target、related observers，并清空
-runtime entries。只有这个清理点的下一 tick 才把 CutIn 层标记为完成。
-
-## RideOn 原生完成
-
-`GraphAnimationManager` 通过 primary RTTI/COL offset 0 定位，slot 28 原型为：
-
-```cpp
-bool QueryBoolEvent(
-    GraphAnimationManager* manager,
-    uint32_t mappedEventId,
-    int32_t contextIndex);
-```
-
-RideOn 的外部 `0xED` 映射为内部 ID `186`，context 固定为 0。wrapper 只在同一玩家
-manager、RideOn Update TLS 范围和合法 stage 2 快照中协调该查询。若角色 descriptor
-已完成但 CutIn 尚未 Deactivate，原生 true 会被暂存；CutIn 清理后的后续查询返回
-true，原 RideOn Update 随即执行完整公共完成块并请求 `next=2`。
-
-左前方最终日志顺序为：
-
-```text
-descriptor complete                         elapsed≈0.029s
-CutIn slot9 finished
-mount-arrival b18B 0->1                    elapsed≈0.029s
-CutIn Deactivate clean=1
-Graph internal event 186 released
-Drive Enter                                elapsed≈0.063s
-```
-
-Drive Enter 返回后 `b18B=1,b191=1,b381=0x4`。
-
-右前方最终运行保持相同顺序，`Drive Enter` 时 RideOn elapsed 为 `0.0792459s`，
-返回后同样为 `b18B=1,b191=1,b381=0x4`。
-
-## 自动化验证
-
-代码变化后使用 `ds2_vehicle_boarding_trace/build.ps1` 构建，最终结果为 0 warning、
-0 error。根目录 `test_boarding.ps1` 在左前方和右前方存档位置均完整通过；右前方
-功能改动后连续三轮通过：
+移除 AroundCamera、逐帧 basis 和 pose-channel 诊断后的生产构建，使用根目录
+`test_boarding.ps1` 完整通过：
 
 ```text
 PASS: fast boarding, Drive, dismount, and quit confirmed
 ```
 
-最终截图 `drive_0200ms.png`、`drive_0700ms.png`、`drive_1700ms.png` 均显示车辆后方
-驾驶镜头与驾驶位角色，没有原上车攀爬序列；`dismount1_settled.png` 显示玩家正常
-站在车辆旁。日志以正常 `DLL_PROCESS_DETACH` 结束，没有 CrashTrace。
+自动截图 `drive_0200ms.png`、`drive_0700ms.png`、`drive_1700ms.png` 均为正常车辆
+后方驾驶镜头；`dismount1_settled.png` 显示正常下车。该轮没有 CrashTrace，并以正常
+`DLL_PROCESS_DETACH` 结束。
 
-当前版本已运行验证左前方 approach 0 与右前方 approach 1。正前方 approach 2 的
-双候选选择树、唯一模式和同一 evaluator 槽属于静态验证事实，但本轮没有把正前方
-改动后的游戏行为记作运行验证结果。
+生产日志中的关键相对顺序为：Drive Enter 后约 `10ms` 出现
+`post-Drive player pose committed`，约 `6ms` 后 CutIn 原生更新到 `finished=1`，再约
+`9ms` 后原生 Deactivate 验证 `clean=1`。因此修复不依赖已移除的诊断 observer。
+
+第一次同一修复二进制的退出菜单自动输入曾未成功命中，随后完全相同二进制重跑通过；
+该次非复现失败发生在上车、Drive、镜头交接和下车均已成功之后，没有崩溃记录，属于
+菜单输入自动化抖动，不能归因于 Mod 生命周期。
