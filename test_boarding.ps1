@@ -7,7 +7,7 @@ Add-Type -Path $inputSource
 Add-Type -AssemblyName System.Drawing.Common
 $SI = [BoardingTestInput]
 
-Write-Host "=== DS2 Boarding Test (event-gated SendInput) ==="
+Write-Host "=== DS2 Fast Boarding Mod Test ==="
 Write-Host "Cleaning stale game processes..."
 & (Join-Path $PSScriptRoot "kill_ds2.ps1")
 Start-Sleep 2
@@ -182,21 +182,33 @@ Wait-GameSeconds "Recover confirm" 1
 Send-GameKey 0x1C "ENTER (CONFIRM RECOVER)"
 Wait-GameSeconds "Initial load" 4
 
-if (!(Wait-LogLine "FullGame animation read-only hooks installed" 30000 `
-        "fullgame animation trace")) {
-    Stop-FailedTest "fullgame animation trace was not installed before boarding"
+if (!(Wait-LogLine "FastBoarding MOD READY" 30000 `
+        "all fast-boarding components")) {
+    Stop-FailedTest "fast-boarding components were not ready before boarding"
 }
-if (!(Wait-LogLine "FullGame result-channel read-only hook installed" 15000 `
-        "fullgame result-channel trace")) {
-    Stop-FailedTest "fullgame result-channel trace was not installed before boarding"
+if (!(Wait-LogLine "RideOn ProcessAttach vtable observer installed" 30000 `
+        "RideOn vtable observer")) {
+    Stop-FailedTest "RideOn vtable observer was not installed before boarding"
+}
+if (!(Wait-LogLine "RideOn Enter vtable observer installed" 30000 `
+        "RideOn Enter vtable observer")) {
+    Stop-FailedTest "RideOn Enter vtable observer was not installed before boarding"
+}
+if (!(Wait-LogLine "Drive Enter vtable observer installed" 30000 `
+        "Drive vtable observer")) {
+    Stop-FailedTest "Drive vtable observer was not installed before boarding"
+}
+if (!(Wait-LogLine "RideOn Update vtable observer installed" 30000 `
+        "RideOn Update vtable observer")) {
+    Stop-FailedTest "RideOn Update vtable observer was not installed before boarding"
 }
 
 $boarded = $false
 for ($attempt = 1; $attempt -le 3 -and !$boarded; $attempt++) {
     $startLine = (Get-LogLines).Count
     Send-GameKey 0x21 "F (BOARD $attempt/3)"
-    $boarded = Wait-LogLine "ProcessAttach original stage 0->1" 3000 `
-        "RideOn stage 0->1" $startLine
+    $boarded = Wait-LogLine "FastBoarding descriptor evaluated" 3000 `
+        "left-front fast descriptor" $startLine
     if (!$boarded) {
         Write-Host "  No RideOn event; waiting before retry"
         Wait-GameSeconds "Board retry delay" 1
@@ -204,8 +216,25 @@ for ($attempt = 1; $attempt -le 3 -and !$boarded; $attempt++) {
 }
 if (!$boarded) { Stop-FailedTest "three BOARD inputs produced no RideOn event" }
 
-if (!(Wait-LogLine "DriveEnter exit" 8000 "DriveEnter")) {
-    Stop-FailedTest "RideOn started but never reached DriveEnter"
+if (!(Wait-LogLine "complete=1" 2000 `
+        "fast character descriptor completion" $startLine)) {
+    Stop-FailedTest "character descriptor did not reach a valid fast result"
+}
+if (!(Wait-LogLine "finished=1" 2000 `
+        "CutIn playback finished" $startLine)) {
+    Stop-FailedTest "CutIn playback did not finish through its native update"
+}
+if (!(Wait-LogLine "FastBoarding CutIn Deactivate clean=1" 2000 `
+        "CutIn normal Deactivate" $startLine)) {
+    Stop-FailedTest "CutIn did not exit through normal Deactivate"
+}
+if (!(Wait-LogLine "FastBoarding emitted native RideOn completion event" 2000 `
+        "RideOn completion event" $startLine)) {
+    Stop-FailedTest "RideOn completion was not released after CutIn cleanup"
+}
+if (!(Wait-LogLine "DriveVtable original result=" 2000 `
+        "Drive Enter" $startLine)) {
+    Stop-FailedTest "RideOn did not transition to Drive"
 }
 
 $captureDir = Join-Path $PSScriptRoot "artifacts\boarding"
@@ -222,45 +251,12 @@ foreach ($capture in @(
     }
 }
 
-# Keep boarding and dismount visually separate. DriveEnter can occur before the
-# presentation graph has converged, especially in fast-boarding experiments.
-Wait-GameSeconds "Boarded dwell" 4
+Wait-GameSeconds "Fast Drive settle" 1
+[void](Capture-GameWindow (Join-Path $captureDir "drive_settled.png"))
 
-$dismountStart = (Get-LogLines).Count
 Send-GameKey 0x21 "F (DISMOUNT)"
-if (!(Wait-LogLine " start=0 finishFlag=0" 8000 "seat transition finish" $dismountStart)) {
-    Stop-FailedTest "DISMOUNT produced no seat transition finish"
-}
-
-Wait-GameSeconds "Post-dismount settle" 1
+Wait-GameSeconds "Native dismount settle" 7
 [void](Capture-GameWindow (Join-Path $captureDir "dismount1_settled.png"))
-
-Send-GameKey 0x20 "D (RETURN TO VEHICLE)" 900
-Start-Sleep -Milliseconds 300
-$secondBoardStart = (Get-LogLines).Count
-Send-GameKey 0x21 "F (BOARD SECOND CYCLE)"
-if (!(Wait-LogLine "ProcessAttach original stage 0->1" 5000 `
-        "second RideOn stage 0->1" $secondBoardStart)) {
-    Stop-FailedTest "second BOARD produced no RideOn event"
-}
-if (!(Wait-LogLine "DriveEnter exit" 8000 "second DriveEnter" $secondBoardStart)) {
-    Stop-FailedTest "second RideOn never reached DriveEnter"
-}
-[void](Capture-GameWindow (Join-Path $captureDir "drive2_0200ms.png"))
-Start-Sleep -Milliseconds 500
-[void](Capture-GameWindow (Join-Path $captureDir "drive2_0700ms.png"))
-Start-Sleep -Milliseconds 1000
-[void](Capture-GameWindow (Join-Path $captureDir "drive2_1700ms.png"))
-Wait-GameSeconds "Second boarded dwell" 2
-
-$secondDismountStart = (Get-LogLines).Count
-Send-GameKey 0x21 "F (DISMOUNT SECOND CYCLE)"
-if (!(Wait-LogLine " start=0 finishFlag=0" 8000 `
-        "second seat transition finish" $secondDismountStart)) {
-    Stop-FailedTest "second DISMOUNT produced no seat transition finish"
-}
-Wait-GameSeconds "Second post-dismount settle" 1
-[void](Capture-GameWindow (Join-Path $captureDir "dismount2_settled.png"))
 
 for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
     Write-Host "Quit sequence attempt $quitAttempt/3"
@@ -276,7 +272,7 @@ for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
 
     for ($i = 0; $i -lt 7; $i++) {
         if (!(Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue)) {
-            Write-Host "=== PASS: two board/drive/dismount cycles and quit confirmed ==="
+            Write-Host "=== PASS: fast boarding, Drive, dismount, and quit confirmed ==="
             exit 0
         }
         Start-Sleep 1

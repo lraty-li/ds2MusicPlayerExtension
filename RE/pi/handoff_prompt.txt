@@ -1,0 +1,481 @@
+【操作交接提示词，不属于知识结论文档】
+
+你正在继续开发：
+
+E:\dev\code\game\DS2MusicPlayer
+
+请先完整读取根目录 AGENTS.md，并严格使用中文交流。
+
+目标
+====
+
+制作“玩家上车时直接进入座位，不播放冗长实时演算上车动画、镜头动画或保留原等待时间”的 DS2 Mod。
+
+用户已经观察到：旧实验能让玩家很快出现在座位上，但镜头动画和原等待时间仍继续。因此只完成实体挂接、强制 RideOn→Drive 或跳过位移都不够。
+
+当前阶段先完整恢复玩家上车时角色动画、DSCutInCamera、RideOn 状态及其完成条件，寻找正常的 C++ 语义介入点。
+
+强制约束
+========
+
+1. 中文交流。
+2. 不得执行 git stage。
+3. 任意代码文件不得超过 300 行。
+4. 读取文件使用 UTF-8。
+5. 代码变化后必须先运行 ds2_vehicle_boarding_trace\build.ps1。只有失败时才自行构建获取详细错误。
+6. 游戏测试必须运行根目录 test_boarding.ps1，不要要求用户手工启动、关闭或操作游戏。
+8. 知识文档只能写已验证事实，不写待定方案。本文件是操作交接提示词，不是知识结论文档。
+9. ds2_vehicle_boarding_trace 是探索代码，旧代码不是成功方案。
+11. 禁止运行时修改寄存器、改可执行字节、手写汇编、字节补丁。
+12. 不得使用固定 RVA／模块偏移构造 hook 目标。
+13. hook 目标必须通过唯一模式或 RTTI 定位；匹配失败时安全停止安装。
+14. 可使用正常 C++ wrapper、vtable 或可写函数指针槽替换，但在找到合理介入点前只能只读观测。
+15. 测试若崩溃，不得只回退；必须分析崩溃原因和正确推进方式。
+16. IDA MCP 不得并发调用。
+17. 禁止 IDA 工具：survey_binary、find_regex、find、search_text，以及任何全局查找工具。也避免 find_bytes。
+18. 可以使用定点 decompile、disasm、xrefs、scoped py_eval、scoped insn_query。
+19. 若 IDA 调用超时，必须等待原调用响应，不得继续堆叠调用。
+20. 不得读取 DS2.exe 文件本身，不得使用 dumpbin，不得直接启动 ida.exe；只能通过已打开的 IDA MCP 数据库分析。
+21. 数值进制转换必须使用 int_convert MCP，不要自行转换。
+22. 用户要求使用子代理进行详细分析，但多个代理不得同时调用 IDA。
+23. 另有“禁用击倒慢动作”需求，目前尚未处理；当前优先完成上车链。
+
+当前 IDA
+========
+
+- fullgame.dll：端口 13337
+- DS2.exe：端口 13338
+- 最后选中的是 DS2.exe（13338）
+
+已读 archive 方法资料
+====================
+
+- archive/notes/graphDoundInstance.txt
+  - MSVC RTTI、COL、vfptr[-1]、多继承 COL offset、真实 this 校正。
+- archive/notes/ResourceTypeDescriptorFieldTable.md
+  - Decima 资源反射与 MSVC RTTI 是两套体系。
+
+不要修改 archive。
+
+一、已验证的 NPC／人类货物直接入座链
+===================================
+
+EDSBaggageSlotType：
+
+- CatapultTray = 34
+- PassengerSeat = 35
+- PlaceForBackpack = 36
+
+调用链：
+
+sub_141193F30(slot, baggage, true)
+  -> sub_141193FA0
+  -> sub_141191E30
+
+sub_141191E30 在 ownerType 为 5 或 6、slotType == 35 时建立 296 字节 placement group：
+
+sub_1411856E0(group)
+sub_1411857D0(group, 24, slot, &unk_144368830)
+group+288 设置 bit 0x20
+sub_141185B30(group, baggage)
+
+其中 unk_144368830 = 0x18，模式／容量为 24。
+
+sub_141185B30：
+
+- baggage+152 = slot
+- baggage+160 = placement group
+- 更新 baggage 状态
+- 调用 sub_141231760
+
+sub_141231760：
+
+- 发出 MsgDsBaggageEvent，hash 0x697B90E5
+- baggage+156 设为 true
+
+该消息只处理碰撞类别 99，不负责实体挂接。
+
+真正挂接发生于：
+
+sub_1411C7CC0 / dirty queue sub_1411CE500
+  -> sub_1411B2230
+
+sub_1411B2230：
+
+- 解析 baggage 子实体
+- 解析 PassengerSeat 所属车辆父实体
+- ownerType 5/6 使用 mode=1
+- 调用 Entity_AttachToParentAndNotify(child, parent, mode)
+- 发出内部事件和 MsgEntityTeleported
+
+Entity_AttachToParentAndNotify = 0x140130900，核心为 0x1401303E0。它只执行实体父子关系／空间注册，没有 ActionGraph 上车动画。
+
+已确认逻辑：
+
+PassengerSeat 分配
+  -> mode 24 placement group
+  -> dirty/full refresh
+  -> Entity_AttachToParentAndNotify
+  -> MsgParentChanged + MsgEntityTeleported
+
+这是一条“货物槽位分配后直接建立实体父子关系”的链，不是一段可复用的人类上车动画。
+
+尚未静态闭合 AliveHuman 的上游 PassengerSeat 选择器。不要把 DSPlayerCatchBaggageWork 当作该选择器；它主要处理槽位 4–7、10–12、16、21、22，fallback 36，只检查了 35 的占用。
+
+二、已验证的玩家 RideOn 状态链
+=============================
+
+关键函数：
+
+- 0x140F98D00：DSPlayerVehicleRideOnState_OnEnter
+- 0x140F999B0：RideOn OnExit，尚未正式重命名
+- 0x140F99C60：RideOn Update
+- 0x140F9A390：DSPlayerVehicleRideOnState_ProcessVehicleAttach
+- 0x140F8EB60：Drive Enter，尚未正式重命名
+- 0x140F9B4C0：ClassifyBoardingApproach
+- 0x140F9B690：RideOnSeatState_ApplyApproachState
+
+RideOn vtable 0x14325B6F0：
+
+- slot 11：Enter
+- slot 12：Exit
+- slot 14：Update
+- slot 27：ProcessVehicleAttach
+
+ProcessVehicleAttach 的三阶段状态在 rideOn+0x198：
+
+stage 0：
+
+- 解析车辆
+- 启动 seat transition
+- Entity_AttachToParentAndNotify(player, vehicle, 0)
+- 分类上车方向
+- 写 approach-specific seat state
+- 选择 presentation/action hash
+- 调用 sub_140E21880
+- stage=1
+
+stage 1：
+
+- 下一次调用设置 runtime+0x189=1
+- runtime+0x381 bit 2
+- stage=2
+
+stage 2：
+
+- owner+0x7378 bit 0x01000000 触发 mount-arrival helper
+- runtime+0x18B=1
+- 原生左前方测试发生在 RideOn elapsed 3.24492 秒
+
+RideOn Update：
+
+- 累加 elapsed
+- 更新座位 pose/filter
+- 0x140F99FEC 调用 ActionParams_QueryBoolEventByParamId(actionParams, 0xED)
+- true 后进入原生完成尾声，最终 plugin+0x11A=2，进入 Drive
+- false 时继续等待运行时标志／计时条件
+
+原生左前方时间线：
+
+- stage 0→1→2：约 17 ms
+- 3.24492 s：mount arrival，runtime+0x18B=1
+- 3.55355 s：上车 descriptor 到达末端
+- 3.58276 s：RideOn next=2，Drive Enter
+
+实体挂接、mount arrival、角色演算完成和 Drive 状态进入是不同层次。
+
+三、0xED ActionGraph 事件链
+========================
+
+- rideOn+0x98 是 DSPlayerEntity。
+- DSPlayerEntity vtable = 0x143233158。
+- slot 20 = 0x140DBB9A0，映射 external ActionParam ID。
+- DSPlayerEntity+0x8A8 指向 GraphAnimationManager。
+- GraphAnimationManager vtable = 0x143128308。
+- slot 28 = 0x140226EE0，查询 bool event。
+- ActionParams_QueryBoolEventByParamId = 0x140DBEA20。
+
+0xED 是动画时间区间跨过 SkeletonAnimationEventTag 后产生的 bool event，不是简单的 reached-end 字段。
+
+强制 0xED 或直接把状态写成 Drive，只会推进玩家 RideOn 逻辑，不能保证停止已经启动的 CutIn Camera／presentation action。
+
+四、fullgame.dll 已确认的实时动画图
+================================
+
+生成函数：0x183605C47。
+
+核心 evaluator：
+
+- fullgame IAT 槽运行时指向 DS2 thunk 0x14219D390
+- 核心 0x14219A7F0
+
+result 布局：
+
+- +0x08 sync state
+- +0x40 single result
+- +0x48 duration
+- +0x4C syncDuration
+- +0x50 override
+
+sync state：
+
+- +0x08 frame
+- +0x0C explicit-range mode
+- +0x0D 另一个 flag
+- +0x0E reached-end flag
+- +0x10/+0x18 时间区间
+
+原生左前方活动分支：
+
+- outer table stride 0xB8
+- key at +0x30
+- key = 0x0BC4A758
+- activity gate r14+0x507BB
+- descriptor [rbp+0x2730]
+- evaluator call 0x183607111
+- mode=0
+- duration=3.55355
+- 357 次求值
+- sync 约 0.00834 → 3.54938
+
+Drive 结果链：
+
+outer 0x4404D873
+  -> nested 0x37C2D311
+  -> sub_18367451C
+  -> sub_183677E7C
+  -> inner 0x3F6D4972
+  -> evaluator call 0x183678AFC
+  -> return RVA 0x3678B02
+
+Drive descriptor：
+
+- mode=1
+- duration=6.45645
+- 在 Drive Enter 后立即开始
+- 它不是 RideOff；旧文档关于 RideOff 的判断已被推翻
+
+0x183609DC1 处另一套动态表也静态比较 0x0BC4A758，并使用 descriptor [rbp+0x3478]，但这是不同表参数。
+
+唯一模式运行时观测确认，原生左前方测试期间：
+
+- 0x183609E08 evaluator 调用次数为 0
+- 该分支没有被选择
+- 不能把它称为活动上车 pose 的第二层副本
+
+已向 fullgame IDB 添加注释：
+
+- 0x183609DC1
+- 0x183609E08
+- 0x183607137
+- 0x183678AFC
+
+五、最重要的新证据：上车镜头属于 DSCutInCamera 链
+=================================================
+
+RideOn ProcessVehicleAttach 在 0x140F9AFCC 调用：
+
+sub_140E21880(
+    qword_14623EA08,
+    selectedActionHash,
+    rideKind,
+    8,
+    vehicleTarget,
+    false)
+
+sub_140E21880：
+
+- 在全局对象锁内写 pending action
+- hash 位于 global+0xE8
+- pending byte 位于 global+0x1E
+- flags/mode 位于 global+0xF0
+- target 引用位于 global+0xC8
+
+消费者为 sub_140E229C0。
+
+RTTI/vtable 证据：
+
+- DSCutInCamera vtable = 0x143245018
+- vtable slot 3（0x143245030）= sub_140E229C0
+
+因此 sub_140E229C0 可以高可信识别为 DSCutInCamera_Update。
+
+DSCutInCamera vtable：
+
+- slot 0：0x140E228B0
+- slot 1：0x1400A10E0
+- slot 2：0x140E22920
+- slot 3：0x140E229C0
+- slot 4：0x140E248B0
+- slot 5：0x140E24E00
+- slot 6：0x140E277B0
+- slot 7：0x1400A10E0
+- slot 8：0x1400A10E0
+- slot 9：0x140E25700
+- slot 10：0x140E27570
+- slot 11：0x14011E880
+
+sub_140E229C0：
+
+- 从 qword_14623EA08+30 取 pending request
+- 读取 action hash、flags、variant ID
+- 清除 pending 状态
+- 在玩家 action resource 列表中按 hash 找资源
+- 更新 CutInCamera 当前 action/resource/variant 字段
+- 调用 sub_140E22F30 选择实际动作变体
+
+sub_140E22F30 的反编译给出决定性证据：
+
+- 构造 DSCameraBroadPhaseCollisionFilter
+- 构造 cutincam::MyHitFilter
+- 使用 pending target entity
+- 执行摄像机 broad-phase collision 检查
+- 在 action resource 的多个变体间选择
+- 返回实际 cut-in action variant
+
+当前已验证模型：
+
+RideOn ProcessVehicleAttach
+  -> 设置玩家 ActionGraph 参数
+  -> 选择上车 action hash
+  -> sub_140E21880 排队 CutIn action
+  -> DSCutInCamera_Update
+  -> 根据车辆 target 和相机碰撞选择 cut-in variant
+  -> CutIn action 参与镜头演出和玩家动作
+  -> 动画 event 0xED 到达后 RideOn 结束
+  -> Drive Enter
+
+这解释了为何玩家已经坐进车内仍保留镜头与等待：空间挂接和 RideOn 状态提前完成，并不会正常结束 DSCutInCamera 当前 action。
+
+六、ProcessVehicleAttach 的 action hash
+====================================
+
+0x140F9AE48 至 0x140F9AFA7 根据以下数据选择 hash：
+
+- runtime+0x2A0：ride kind
+- ClassifyBoardingApproach 返回值，保存在 EBX
+- runtime+0x3B1：side/context bool
+- vehicle/context+0x498
+- vehicle/context+0x494 的掩码状态
+
+静态分支中的 hash：
+
+- 0x75B4F600
+- 0x3897A3D5
+- 0x3DFD6EFC
+- 0x01DB16B4
+- 0x6F53F3A5
+- 0x53758BED
+- 0x11A19E23
+- 0x4665CE53
+- 0x7A43B61B
+- 0x5A9F4628
+- 0x0D5B1658
+- 0x317D6E10
+- 0x1AC30DFF
+- 0x5D599AE0
+- 0x0A9DCA90
+- 0x36BBB2D8
+
+尚未用新的运行时日志确认脚本左前方测试实际选择哪个 hash。不要沿用 PresentationSuppressor.cpp 只列出的三个 hash；那是旧探索且不完整。
+
+七、当前探索插件与最新改动
+========================
+
+Hooks.cpp 当前启用安全只读版本：
+
+- RideOn vtable observer
+- Drive vtable observer
+- RideOn Update vtable observer
+- fullgame evaluator 可写函数指针槽 wrapper
+- CrashTrace
+
+未启用旧 JumpHook 功能实验。
+
+最新代码改动：
+
+1. ds2_vehicle_boarding_trace/FullGameDescriptorMode.cpp
+   - 增加第二套 0x0BC4A758 分支的独立唯一模式
+   - 校验两个调用点解析到同一个 evaluator 指针槽
+   - 记录第二调用点
+   - 将同线程、同一毫秒的 descriptor 调用纳入汇总
+2. ds2_vehicle_boarding_trace/DescriptorNeighborhoodTrace.cpp
+   - 允许记录 single=0 或 frame=0 的结果
+
+行数：
+
+- FullGameDescriptorMode.cpp：约 280 行
+- DescriptorNeighborhoodTrace.cpp：155 行
+
+同毫秒窗口的最新汇总有 28 个条目，绝大部分是同线程调度的其他图对象，噪声较大。关键条目仍是：
+
+- 主上车 caller RVA 0x3607117
+- Drive caller RVA 0x3678B02
+- 第二套 0x3609E0E 没有出现
+
+不要把其余 caller 仅凭 duration 归因于镜头。
+
+两次代码改动均已完成：
+
+- build.ps1 成功，0 warning，0 error
+- test_boarding.ps1 PASS
+- 左前方原生上车、Drive、下车、退出全部完成
+- 没有 CrashTrace
+- 最新测试约在 23:49，日志正常 DLL_PROCESS_DETACH
+
+八、继续工作时的当前任务
+======================
+
+先恢复 DSCutInCamera 的完整生命周期，找到正常结束／切换当前 cut-in action 的 C++ 语义接口，不要立即实现功能 hook。
+
+顺序反编译并确认 DSCutInCamera vtable 函数：
+
+- 0x140E228B0
+- 0x140E22920
+- 0x140E248B0
+- 0x140E24E00
+- 0x140E277B0
+- 0x140E25700
+- 0x140E27570
+
+需要闭合：
+
+1. 初始化、Reset、OnExit、停止当前 action 的函数。
+2. 当前 action hash/resource/variant、完成标志和播放时间字段。
+3. CutInCamera 如何判定 action 已完成。
+4. 它是否消费同一个 0xED event，或有独立 camera-finished 条件。
+5. 原生 RideOn OnExit 是否调用 CutInCamera 的停止／切换接口。
+6. 是否存在正常的“结束当前 action／切回驾驶镜头”API。
+7. 当前 action 完成后如何释放 vehicle target 引用。
+8. 相机控制权何时返还普通驾驶 camera。
+
+经过行为确认后改善 IDB 可读性，优先考虑：
+
+- 0x140E229C0：DSCutInCamera_Update
+- 0x140E22F30：按实际行为命名为 CutIn action variant 解析／选择函数
+- 0x140E21880：按实际行为命名为 CutIn action request 排队函数
+- 0x140F999B0：DSPlayerVehicleRideOnState_OnExit
+- 0x140F8EB60：DSPlayerVehicleDriveState_OnEnter
+
+同步修正参数类型、局部变量名并添加证据性注释。使用 RTTI/COL 验证完整对象和多继承 this。
+
+如果需要确认左前方 action hash，只能增加只读观测；目标必须由模式或 RTTI 定位，不得恢复 JumpHook。
+
+九、文档边界
+============
+
+RE/NPCCargoVehicleMountAnalysis.md 当前混有部分旧判断，后续只能按已验证证据修正。
+
+玩家实时演算链的知识文档也只能记录已闭合事实，不得写候选 hook、待验证方向或工作计划。
+
+十、当前结论边界
+================
+
+已经可以肯定：
+
+- NPC／人类货物瞬移入座是 PassengerSeat placement + entity attachment。
+- 玩家上车不是同一套流程。
+- 玩家在 ProcessVehicleAttach 很早就已经挂到车辆父实体。
+- 冗长等待包含多个独立层：seat transition、mount arrival、fullgame 角色 descriptor、ActionGraph 0xED、DSCutInCamera cut-in action、RideOn→Drive。
+- 仅传送玩家或仅写 Drive 状态无法正常结束 CutIn Camera。
+- 合理介入点最终必须同时保证：玩家实体正常挂接并坐定、ActionGraph 进入合法 seated/Drive 结果、RideOn 正常退出、DSCutInCamera 正常结束并释放 target、驾驶镜头与输入正常恢复。

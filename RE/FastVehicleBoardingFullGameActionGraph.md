@@ -148,9 +148,10 @@ r14+0x50CC8 -> descriptor [rbp+0x2730] -> duration 3.55355
 duration、syncDuration 全部为零。当前路径中不存在一个已经求值完成、可以直接
 替换长结果的相邻短动画或坐姿候选。
 
-`qword_1884D1FF8` 的第 4 参数在该子图中来自全局常量 `0x3F800000`，即 `1.0`，
-不是累计播放时间。该入口按 descriptor 生成本帧完整结果，而播放进度保存在更深
-的引擎/descriptor 状态中。
+`qword_1884D1FF8` 的完整 ABI 有五个参数。第 4 参数在该子图中来自全局常量
+`0x3F800000`，即 `1.0`；DS2 核心反编译确认它是 descriptor `timeScale`，会缩放
+采样区间，并把输出 duration 写为资源 duration 除以 timeScale。第 5 参数是 bool，
+控制额外姿态/结果通道求值；生成代码固定传入 `1`。
 
 长结果所在分支读取一个动态表：表首为条目数，`+0x8` 为条目数组，单条大小
 `0xB8`，条目 `+0x30` 为哈希。当前结果只在条目哈希 `0x0BC4A758` 且活动标志
@@ -238,21 +239,22 @@ Drive、下车与退出均通过，但三张窗口截图显示：约 `0.2s` 角�
 `0.025s`。因此第三参数只影响 descriptor 的同步/求值模式，不是“立即完成”或
 “选择坐姿”的开关。该模式不作为实现方案保留。
 
-## 2026-07-11 descriptor 零权重实验
+## 2026-07-11 descriptor 零 timeScale 实验
 
 只对同一个上车 descriptor 把第四参数从 `1.0` 改为 `0.0`。状态机、下车和退出
 流程仍通过，但 evaluator 输出的 duration 不再有效，截图中角色在约 `0.7s` 后
 消失，驾驶位保持为空；这表示上车 pose 层被降为无贡献，并没有显露一个已坐定的
-底层 pose。零权重不是传送，也不作为实现保留。
+底层 pose。后续核心反编译确认该参数是 timeScale，不是权重；零值会破坏原生时长
+计算，因此该实验不构成有效的“无动画”语义。
 
 同期日志确认 `PlayerActionGraph_Subgraph_590480706_Evaluate` 内有一条连续同步帧
 传播链，四个 caller 依次把前一个输出作为下一个输入。第一处 caller 的输入区间为
 单帧 `0.00834168s`，后三处只继续传播。因此如果第三参数是时间比例，应该只在
 第一处放大一次，不能在四处重复相乘。
 
-## 2026-07-11 首帧同步终点实现
+## 2026-07-11 首帧同步终点实验
 
-当前可工作的介入点是 `ActionGraphResult_PropagateSyncFrame`，但不是全局改速：
+该历史实验使用 `ActionGraphResult_PropagateSyncFrame`，但不是全局改速：
 
 1. 先用 `0x0BC4A758` 上车分支及其四层局部传播 call site 的完整唯一签名定位；
 2. 只在玩家原始 OnEnter、attach stage 2、seat pose/filter 和原生 bit24 门均完成后启用；
@@ -271,8 +273,20 @@ Drive、下车与退出均通过，但三张窗口截图显示：约 `0.2s` 角�
   稳定坐定。
 
 同一次 `test_boarding.ps1` 运行完整通过 Drive、四秒车内停留、首次下车和退出，
-没有 CrashTrace。四层全部放大与只放大首层在画面上相同；成品保留首帧门，避免
-在五秒功能窗口内反复放大。
+没有 CrashTrace。四层全部放大与只放大首层在画面上相同；该实验当时只保留首帧门，
+避免在五秒功能窗口内反复放大。该历史实验没有闭合独立的 `DSCutInCamera`
+生命周期，因此当时不能视为最终快速上车实现。
 
-此前记录的 `6.45645s` 完整结果在快速 Drive 测试中直到脚本发送下车输入后才
-出现，因此它属于 RideOff 图，不是可以提前复用的 seated/Drive 候选。
+## 2026-07-18 evaluator timeScale 实现
+
+当前功能构建不再 hook `ActionGraphResult_PropagateSyncFrame`。它在两个唯一模式解析并
+校验出的同一 evaluator 可写函数指针槽安装五参数 C++ wrapper，只对主上车 leaf 的
+首次有效求值把第 4 参数从 `1.0` 改为 `512.0`，第 5 参数原样透传。
+
+原 evaluator 运行结果为 `duration=0.00694053`、`syncDuration=0.00694053`、
+`reachedEnd=1`，并保留正常结果与引用通道。配合正常 CutIn Deactivate 和 RideOn
+完成协调后，自动测试在约 `0.063s` 进入 Drive；最早截图已是驾驶镜头。
+
+后续按 Drive 结果链重新定位并结合原生时序确认，`6.45645s` 完整结果在
+`Drive Enter` 后立即开始，属于 Drive descriptor，不是 RideOff。旧的 RideOff
+归因已被推翻。

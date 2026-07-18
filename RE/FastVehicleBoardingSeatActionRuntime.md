@@ -13,7 +13,7 @@
 没有使用全局查找，没有读取 `DS2.exe` 文件本身，没有改寄存器、角色 Transform
 或游戏指令字节来改变上车行为。本轮 Hook 全部调用原函数。
 
-## 当前只读观测构建
+## 2026-07-10 只读观测构建（历史基线）
 
 当前 `Hooks.cpp` 不再安装以下实验性抑制器：
 
@@ -177,13 +177,13 @@ PASS: board, drive, dismount, and quit confirmed
 
 修复后的 `test_boarding.ps1` 完整通过。
 
-## 当前合理介入边界
+## 已验证的 mount-side / RideOn 完成链
 
 人类货物路径仍然只在 `Entity_AttachToParentAndNotify` 与玩家 RideOn 汇合。
 `MountableComponent_StartMount` 不包含玩家的 OnEnter 参数包络、seat pose request、
 action-slot filters 与首次下车所需状态，不能作为玩家快速上车入口。
 
-当前最接近原生语义的介入边界进一步收缩为：
+当前已闭合的 mount-side / RideOn 完成链为：
 
 ```text
 type-6 seat action / action graph 产生 owner bit24
@@ -196,9 +196,12 @@ type-6 seat action / action graph 产生 owner bit24
 
 2026-07-10 的新增只读跟踪进一步排除了 `DSPlayerVehicleDriving` callback：其 update
 在 `owner+0x7378 bit24` 已触发、`runtime+0x18B` 已变为 `1` 后才开始，且可见的
-`callback+0x14` 从首次命中即为 `1`。因此真实的长动画生产边界位于这个 callback
-之前的玩家 action/animation graph；presentation、完成事件和座椅 callback 都不是
-该时间轴的拥有者。
+`callback+0x14` 从首次命中即为 `1`。它不是此前约三秒可见演出的时间轴所有者。
+
+这条链只闭合玩家 mount-side 与 RideOn 状态，不包含独立的 `DSCutInCamera` 生命周期。
+原先称为 presentation 的请求实际会启动 CutIn action；CutIn 以自己的
+elapsed/duration 完成，并由 CameraMode 调用 `DSCutInCamera_Deactivate` 释放 target、
+撤销相机副作用。进入 Drive 不等于 CutIn 已结束。
 
 ## IDA 数据库维护
 
