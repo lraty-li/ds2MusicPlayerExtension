@@ -18,14 +18,14 @@ uintptr_t EnterRideOnUpdate(uintptr_t rideOn);
 void LeaveRideOnUpdate(uintptr_t previousRideOn);
 bool MatchesGraphEvent(uintptr_t manager, uint32_t eventId);
 bool CompletionLayersReady(bool nativeResult);
-bool ShouldFastForwardAnimation();
+bool CanFastForwardAnimation();
 bool ShouldFastForwardCutIn(uintptr_t cutInCamera);
 bool IsActiveCutInSession(uintptr_t cutInCamera, uint32_t actionHash);
 bool MarkGraphEventForced();
-bool MarkAnimationFastForwarded();
 bool MarkCutInFastForwarded(uintptr_t cutInCamera, uint32_t actionHash);
 void ConfirmAnimationFastForwarded();
 void ConfirmCutInFastForwarded(uintptr_t cutInCamera);
+uint32_t CurrentSessionId();
 uintptr_t ActiveRideOn();
 
 } // namespace FastBoardingSession
