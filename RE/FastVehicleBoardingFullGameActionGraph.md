@@ -6,7 +6,8 @@
 分析与 `test_boarding.ps1` 自动化运行结果。所有新增 hook 均为只读观测，目标由
 唯一字节模式解析，没有使用固定 RVA 构建 hook，也没有修改寄存器、汇编或代码字节。
 
-测试路径固定为车辆左前方上车。
+初始运行分析的测试路径固定为车辆左前方；2026-07-18 又增加了右前方运行验证和
+三类 approach 选择树的定点静态分析。
 
 ## 活跃图入口
 
@@ -156,6 +157,42 @@ duration、syncDuration 全部为零。当前路径中不存在一个已经求�
 长结果所在分支读取一个动态表：表首为条目数，`+0x8` 为条目数组，单条大小
 `0xB8`，条目 `+0x30` 为哈希。当前结果只在条目哈希 `0x0BC4A758` 且活动标志
 有效时生成。这是高层图状态分支，不是动画时长字段本身。
+
+## 三类 approach 的结果选择树
+
+DS2 `DSPlayerVehicleRideOnState_ProcessVehicleAttach` 把 approach class 转为 float，
+写入玩家 `+0x3890` 的三值结构。fullgame 生成图中的 `[r14+0x507CC]` 随后以
+`0.0/1.0/2.0` 进入三候选选择器；定点反汇编闭合出的 side 0 路径为：
+
+| approach | 生成图结果 | descriptor evaluator |
+|---:|---|---:|
+| `0` | `var_4D0` | `0x183607111`，return RVA `0x3607117` |
+| `1` | `var_4C8` | `0x183607B62`，return RVA `0x3607B68` |
+| `2` | `var_568` composite 候选 A | `0x18360794C`，return RVA `0x3607952` |
+| `2` | `var_568` composite 候选 C | `0x183607C14`，return RVA `0x3607C1A` |
+
+approach 2 的两个 evaluator 结果在 `0x18360844F` 进入原生
+`SelectNearestOfTwoAndRetain`，不是可以静态删掉其中一项的重复调用。四个调用点和
+另一个独立动态表调用点均静态引用同一 evaluator 指针槽 `0x1884D1FF8`。
+`0x183609E08` 使用 descriptor pack `+0x3478`，属于另一套动态表，不是第三个
+approach leaf。
+
+右前方运行由用户固定测试存档位置后，日志把 action hash `0x6F53F3A5`、
+approach 1 与 return RVA `0x3607B68` 对位。原生求值结果为：
+
+```text
+duration=3.01968 sync=0.0166834 end=0
+```
+
+同一 leaf 使用 `timeScale=512` 后为：
+
+```text
+duration=0.00589782 sync=0.00589782 end=1 complete=1
+```
+
+随后 CutIn 原生结束、Deactivate 清理、内部事件 186 放行，Drive Enter 发生在
+RideOn elapsed `0.0792459s`。根 `test_boarding.ps1` 完成上车、Drive、原生下车、
+退出与正常 DLL 卸载，没有 CrashTrace。
 
 `resultSingle` 每帧由不同的临时地址承载，但对象中的第一个指针和第二个稳定引用
 保持不变。其余采样字段主要表现为权重/变换值变化，没有观察到简单的线性累计

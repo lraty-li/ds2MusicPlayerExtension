@@ -4,7 +4,8 @@
 
 ## 结果
 
-`ds2_vehicle_boarding_trace` 当前构建已经实现玩家快速上车。左前方自动测试中：
+`ds2_vehicle_boarding_trace` 当前构建已经实现玩家快速上车。左前方和右前方自动
+测试中：
 
 - 保留原生 RideOn OnEnter、实体挂接、seat transition 与 stage 0→1→2；
 - 上车角色 descriptor 由原 evaluator 在首个活动帧直接求值到末端；
@@ -12,12 +13,13 @@
 - 下一帧由 CameraMode 调用原 slot 5 `Deactivate`，完成 target、observer 和 runtime
   entry 清理；
 - CutIn 清理后的后续 RideOn Update 才放行 `0xED`，进入原生公共完成块；
-- `Drive Enter` 在 RideOn elapsed 约 `0.063s` 时完成；
+- `Drive Enter` 在 RideOn elapsed 约 `0.063s`（左前）和 `0.079s`（右前）时完成；
 - 最早画面已经是车辆后方驾驶镜头，没有车侧攀爬或残留 CutIn；
 - 原生下车与退出流程保持正常。
 
-实现没有修改寄存器、可执行代码字节或固定 RVA。所有类级入口通过 RTTI/COL 定位，
-fullgame 入口通过两个唯一模式解析并校验为同一可写 evaluator 指针槽。
+实现没有修改寄存器、可执行代码字节或固定 RVA。所有类级入口通过 RTTI/COL 定位。
+fullgame 安装器要求五个模式分别唯一，并校验四个活动 leaf 和一个独立交叉检查调用
+全部解析到同一可写 evaluator 指针槽；任一检查失败都会停止安装。
 
 ## 会话边界
 
@@ -51,15 +53,29 @@ void EvaluateDescriptor(
 确认第 4 参数是时间缩放：它缩放 descriptor 采样区间，并把输出 duration 写成
 `descriptorDuration / timeScale`；第 5 参数控制额外姿态/结果通道，必须原样透传。
 
-功能 wrapper 只在唯一的 `0x0BC4A758` 活动上车 leaf、当前 RideOn ready、首次求值时
-把 `timeScale` 从 `1.0` 改为 `512.0`。原 evaluator 仍负责 count、items、single、
-引用所有权、sync 和结束标志，不构造空结果，也不写内部播放头。
+生成图以 `[r14+0x507CC]` 的 `0.0/1.0/2.0` 值选择三个 approach 结果。当前构建
+白名单中的四个 leaf 是：
 
-最终测试日志：
+| approach | side/组合 | evaluator call | return RVA |
+|---:|---|---:|---:|
+| `0` | side `0` | `0x183607111` | `0x3607117` |
+| `1` | side `0` | `0x183607B62` | `0x3607B68` |
+| `2` | composite 候选 A | `0x18360794C` | `0x3607952` |
+| `2` | composite 候选 C | `0x183607C14` | `0x3607C1A` |
+
+功能 wrapper 只在 RideOn 仍为 `current=1,next=1,stage=2` 时，对每个实际命中的
+白名单 leaf 首次求值把 `timeScale` 从 `1.0` 改为 `512.0`。approach 2 的两个
+候选仍交给原生 composite 选择器决定最终结果。原 evaluator 继续负责 count、items、
+single、引用所有权、sync 和结束标志；实现不构造空结果，也不写内部播放头。
+
+左前方与右前方最终测试日志分别为：
 
 ```text
 scale=1->512 mode=0 pose=1
 duration=0.00694053 sync=0.00694053 end=1 complete=1
+
+leaf=4 callerRva=0x3607B68 scale=1->512 mode=0 pose=1
+duration=0.00589782 sync=0.00589782 end=1 complete=1
 ```
 
 这取代了旧的 `ActionGraphResult_PropagateSyncFrame` JumpHook。静态分析还确认，对同一
@@ -80,13 +96,17 @@ wrapper 先正常调用一次，再在以下条件成立时重复调用原 slot 
 - 每次原调用后 elapsed 严格前进，hash、variant、duration 均不变；
 - 更新次数受硬上限约束。
 
-最终左前方测试中，原 slot 9 被调用 389 次，原函数将：
+左前方测试中，原 slot 9 被调用 389 次，原函数将：
 
 ```text
 elapsed 0.00834168 -> 3.25327
 duration 3.25325
 finished=1
 ```
+
+最终右前方测试使用 action hash `0x6F53F3A5`，原 slot 9 共调用 170 次，把
+`elapsed=0.0125125` 推进到 `2.84868`；原生 duration 为 `2.83617`，最终同样由
+原函数设置 `finished=1`。
 
 实现不在这里放行 RideOn。下一帧 CameraMode 的 slot 3 返回 false 后，原生调用
 slot 5 `DSCutInCamera_Deactivate`。wrapper 在原 Deactivate 返回后验证：
@@ -115,7 +135,7 @@ manager、RideOn Update TLS 范围和合法 stage 2 快照中协调该查询。�
 已完成但 CutIn 尚未 Deactivate，原生 true 会被暂存；CutIn 清理后的后续查询返回
 true，原 RideOn Update 随即执行完整公共完成块并请求 `next=2`。
 
-最终日志顺序为：
+左前方最终日志顺序为：
 
 ```text
 descriptor complete                         elapsed≈0.029s
@@ -128,10 +148,14 @@ Drive Enter                                elapsed≈0.063s
 
 Drive Enter 返回后 `b18B=1,b191=1,b381=0x4`。
 
+右前方最终运行保持相同顺序，`Drive Enter` 时 RideOn elapsed 为 `0.0792459s`，
+返回后同样为 `b18B=1,b191=1,b381=0x4`。
+
 ## 自动化验证
 
 代码变化后使用 `ds2_vehicle_boarding_trace/build.ps1` 构建，最终结果为 0 warning、
-0 error。根目录 `test_boarding.ps1` 连续两轮均完整通过：
+0 error。根目录 `test_boarding.ps1` 在左前方和右前方存档位置均完整通过；右前方
+功能改动后连续三轮通过：
 
 ```text
 PASS: fast boarding, Drive, dismount, and quit confirmed
@@ -141,5 +165,6 @@ PASS: fast boarding, Drive, dismount, and quit confirmed
 驾驶镜头与驾驶位角色，没有原上车攀爬序列；`dismount1_settled.png` 显示玩家正常
 站在车辆旁。日志以正常 `DLL_PROCESS_DETACH` 结束，没有 CrashTrace。
 
-本轮运行验证范围是当前游戏版本的左前方上车路径；文档不把未运行的其他车辆与
-approach 组合记作已验证结果。
+当前版本已运行验证左前方 approach 0 与右前方 approach 1。正前方 approach 2 的
+双候选选择树、唯一模式和同一 evaluator 槽属于静态验证事实，但本轮没有把正前方
+改动后的游戏行为记作运行验证结果。

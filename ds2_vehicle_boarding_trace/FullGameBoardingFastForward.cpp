@@ -5,6 +5,7 @@
 #include "PatternScan.h"
 #include "VehicleSnapshot.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <sstream>
@@ -22,8 +23,21 @@ constexpr const char* kSecondaryCallSignature =
     "0F 84 ? ? ? ? 48 8B 84 24 ? ? ? ? 48 8B 8C 24 ? ? ? ? "
     "4C 8D 2C 08 49 83 C5 38 48 8B 95 78 34 00 00 C6 44 24 20 01 "
     "4C 89 E9 45 31 C0 41 0F 28 D9 FF 15 ? ? ? ?";
+constexpr const char* kApproach2CandidateASignature =
+    "41 80 BE E1 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 20 27 00 00 "
+    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
+    "FF 15 ? ? ? ?";
+constexpr const char* kApproach1Side0Signature =
+    "41 80 BE BA 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 18 27 00 00 "
+    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
+    "FF 15 ? ? ? ?";
+constexpr const char* kApproach2CandidateCSignature =
+    "41 80 BE E2 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 B8 26 00 00 "
+    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
+    "FF 15 ? ? ? ?";
 constexpr uint32_t kPrimaryCallOffset = 0x34;
 constexpr uint32_t kSecondaryCallOffset = 0x47;
+constexpr uint32_t kApproachCallOffset = 0x29;
 constexpr uint32_t kIndirectCallSize = 6;
 constexpr float kFastTimeScale = 512.0f;
 
@@ -34,8 +48,11 @@ using EvaluateDescriptorFn = void(__fastcall*)(
 std::atomic<bool> g_started{false};
 HMODULE g_fullGame = nullptr;
 const Logger* g_logger = nullptr;
-uintptr_t g_boardingReturn = 0;
+std::array<uintptr_t, 4> g_boardingReturns{};
 EvaluateDescriptorFn g_original = nullptr;
+SRWLOCK g_leafLock = SRWLOCK_INIT;
+uint32_t g_leafSession = 0;
+uint32_t g_leafMask = 0;
 
 struct ResultState {
     uintptr_t single = 0;
@@ -68,14 +85,40 @@ bool IsFastResultComplete(const ResultState& result)
         (result.reachedEnd || result.syncDuration >= result.duration);
 }
 
+uint32_t LeafMask(uintptr_t caller)
+{
+    for (uint32_t index = 0; index < g_boardingReturns.size(); ++index) {
+        if (caller == g_boardingReturns[index])
+            return 1u << index;
+    }
+    return 0;
+}
+
+bool MarkLeafForSession(uint32_t leaf)
+{
+    const uint32_t session = FastBoardingSession::CurrentSessionId();
+    if (!session)
+        return false;
+    AcquireSRWLockExclusive(&g_leafLock);
+    if (g_leafSession != session) {
+        g_leafSession = session;
+        g_leafMask = 0;
+    }
+    const bool first = !(g_leafMask & leaf);
+    g_leafMask |= leaf;
+    ReleaseSRWLockExclusive(&g_leafLock);
+    return first;
+}
+
 void __fastcall HookEvaluateDescriptor(
     uintptr_t output, uintptr_t descriptor, uint8_t mode,
     float timeScale, uint8_t evaluatePose)
 {
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-    const bool eligible = caller == g_boardingReturn &&
-        FastBoardingSession::ShouldFastForwardAnimation() &&
-        FastBoardingSession::MarkAnimationFastForwarded();
+    const uint32_t leaf = LeafMask(caller);
+    const bool eligible = leaf && mode == 0 && timeScale == 1.0f &&
+        evaluatePose == 1 && FastBoardingSession::CanFastForwardAnimation() &&
+        MarkLeafForSession(leaf);
     const float effectiveScale = eligible ? kFastTimeScale : timeScale;
     g_original(output, descriptor, mode, effectiveScale, evaluatePose);
     if (!eligible)
@@ -86,6 +129,9 @@ void __fastcall HookEvaluateDescriptor(
         IsFastResultComplete(result);
     std::ostringstream oss;
     oss << "FastBoarding descriptor evaluated"
+        << " leaf=" << leaf
+        << " callerRva=" << VehicleSeatTrace::Hex(
+            caller - reinterpret_cast<uintptr_t>(g_fullGame))
         << " scale=" << timeScale << "->" << effectiveScale
         << " mode=" << static_cast<uint32_t>(mode)
         << " pose=" << static_cast<uint32_t>(evaluatePose)
@@ -129,7 +175,15 @@ bool InstallWhenLoaded()
         textStart, textSize, kBoardingCallSignature);
     const uintptr_t secondary = PatternScan::FindUnique(
         textStart, textSize, kSecondaryCallSignature);
-    if (!primary || !secondary)
+    const std::array<uintptr_t, 3> approachBranches = {
+        PatternScan::FindUnique(
+            textStart, textSize, kApproach2CandidateASignature),
+        PatternScan::FindUnique(
+            textStart, textSize, kApproach1Side0Signature),
+        PatternScan::FindUnique(
+            textStart, textSize, kApproach2CandidateCSignature)};
+    if (!primary || !secondary || !approachBranches[0] ||
+        !approachBranches[1] || !approachBranches[2])
         return false;
 
     const uintptr_t call = primary + kPrimaryCallOffset;
@@ -137,13 +191,21 @@ bool InstallWhenLoaded()
     const uintptr_t slotAddress = PatternScan::ResolveRip(call, 2);
     if (PatternScan::ResolveRip(secondaryCall, 2) != slotAddress)
         return false;
+    g_boardingReturns[0] = call + kIndirectCallSize;
+    for (uint32_t index = 0; index < approachBranches.size(); ++index) {
+        const uintptr_t approachCall =
+            approachBranches[index] + kApproachCallOffset;
+        if (PatternScan::ResolveRip(approachCall, 2) != slotAddress)
+            return false;
+        g_boardingReturns[index + 1] =
+            approachCall + kIndirectCallSize;
+    }
 
     auto* slot = reinterpret_cast<void* volatile*>(slotAddress);
     void* original = *slot;
     if (!original || !IsExecutable(reinterpret_cast<uintptr_t>(original)))
         return false;
 
-    g_boardingReturn = call + kIndirectCallSize;
     g_original = reinterpret_cast<EvaluateDescriptorFn>(original);
     void* replaced = InterlockedCompareExchangePointer(
         slot, reinterpret_cast<void*>(&HookEvaluateDescriptor), original);
@@ -153,7 +215,7 @@ bool InstallWhenLoaded()
     FastBoardingSession::ReportComponentReady(
         FastBoardingSession::kAnimationComponent);
     g_logger->Log("FastBoarding fullgame evaluator wrapper installed slot=" +
-        VehicleSeatTrace::Hex(slotAddress));
+        VehicleSeatTrace::Hex(slotAddress) + " leaves=4");
     if (FastBoardingSession::AllComponentsReady())
         g_logger->Log("FastBoarding MOD READY");
     return true;

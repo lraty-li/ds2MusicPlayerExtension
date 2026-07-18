@@ -15,6 +15,7 @@ constexpr uint32_t kRequiredComponents = kScopeComponent | kGraphComponent |
     kCutInComponent | kAnimationComponent;
 
 std::atomic<uint32_t> g_components{0};
+std::atomic<uint32_t> g_sessionId{0};
 std::atomic<uintptr_t> g_rideOn{0};
 std::atomic<uintptr_t> g_plugin{0};
 std::atomic<uintptr_t> g_graphManager{0};
@@ -23,7 +24,6 @@ std::atomic<bool> g_ready{false};
 std::atomic<bool> g_driveEntered{false};
 std::atomic<bool> g_graphForced{false};
 std::atomic<bool> g_nativeCompletionSeen{false};
-std::atomic<bool> g_animationAttempted{false};
 std::atomic<bool> g_animationCompleted{false};
 std::atomic<bool> g_cutInAttempted{false};
 std::atomic<bool> g_cutInCompleted{false};
@@ -83,7 +83,6 @@ void Begin(uintptr_t rideOn)
     g_driveEntered.store(false, std::memory_order_relaxed);
     g_graphForced.store(false, std::memory_order_relaxed);
     g_nativeCompletionSeen.store(false, std::memory_order_relaxed);
-    g_animationAttempted.store(false, std::memory_order_relaxed);
     g_animationCompleted.store(false, std::memory_order_relaxed);
     g_cutInAttempted.store(false, std::memory_order_relaxed);
     g_cutInCompleted.store(false, std::memory_order_relaxed);
@@ -110,6 +109,7 @@ void Begin(uintptr_t rideOn)
     g_deadline.store(
         GetTickCount64() + kSessionWindowMs, std::memory_order_relaxed);
     g_rideOn.store(rideOn, std::memory_order_release);
+    g_sessionId.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void ObserveProcessAttach(uintptr_t rideOn)
@@ -177,10 +177,15 @@ bool CompletionLayersReady(bool nativeResult)
         !g_graphForced.load(std::memory_order_relaxed);
 }
 
-bool ShouldFastForwardAnimation()
+bool CanFastForwardAnimation()
 {
-    return IsReadyRideOn() &&
-        !g_animationAttempted.load(std::memory_order_relaxed);
+    if (!AllComponentsReady() ||
+        !g_ready.load(std::memory_order_acquire) || !InWindow()) {
+        return false;
+    }
+    VehicleSeatTrace::Snapshot snapshot = {};
+    return ReadLiveSnapshot(snapshot) && snapshot.current == 1 &&
+        snapshot.next == 1 && snapshot.stage == 2;
 }
 
 bool ShouldFastForwardCutIn(uintptr_t cutInCamera)
@@ -200,11 +205,6 @@ bool IsActiveCutInSession(uintptr_t cutInCamera, uint32_t actionHash)
 bool MarkGraphEventForced()
 {
     return !g_graphForced.exchange(true, std::memory_order_acq_rel);
-}
-
-bool MarkAnimationFastForwarded()
-{
-    return !g_animationAttempted.exchange(true, std::memory_order_acq_rel);
 }
 
 bool MarkCutInFastForwarded(uintptr_t cutInCamera, uint32_t actionHash)
@@ -228,6 +228,11 @@ void ConfirmCutInFastForwarded(uintptr_t cutInCamera)
             GetTickCount64(), std::memory_order_release);
         g_cutInCompleted.store(true, std::memory_order_release);
     }
+}
+
+uint32_t CurrentSessionId()
+{
+    return g_sessionId.load(std::memory_order_acquire);
 }
 
 uintptr_t ActiveRideOn()
