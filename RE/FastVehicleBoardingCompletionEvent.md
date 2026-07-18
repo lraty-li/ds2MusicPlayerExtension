@@ -9,13 +9,20 @@
 3. RideOn Update 查询外部参数 `0xED`。
 4. 查询为真时进入原生完成块，并请求 `RideOn -> Drive`。
 
-左前方上车的只读基线中，原生 `0xED` 在约 `3.583s` 才变为真。实验门控只改变该查询的函数返回语义，使原生完成块在约 `0.025s` 被执行；没有写游戏对象字段，也没有修改运行时寄存器。
+左前方上车的历史只读基线中，原生 `0xED` 在约 `3.583s` 才变为真。早期实验门控
+只改变该查询的返回语义，使原生完成块在约 `0.025s` 被执行。三方向现场对照已经证明，
+这个实验只提前逻辑 Drive，不会缩短可见动画，因此它不是当前快速上车实现。
 
-逐帧画面只能说明角色在各采样时刻所处的姿态，缺少同时间点原版对照，不能据此推导动画被缩短。随后针对左侧、右侧和正前方的现场对照确认：三种上车动画的播放时长均未改变，正前方只有镜头略有变化。因此完成事件门控只提前逻辑 Drive 和相机状态，不控制可见上车动画，不是快速上车实现。
+2026-07-18 当前实现先让活动玩家 descriptor 由原 evaluator 以缩放时间正常求值到末端，
+再在同一次 RideOn Update 中让原生事件进入公共完成块。正前方最终测试在 RideOn
+elapsed 约 `0.104s` 进入 Drive。车辆机械座椅是另一条独立状态机：正前方 truck
+pending `3/4` 已在消费前从完成的基线状态安全取消，不由 `0xED` 完成。
 
 ## 调查方法
 
-- 运行时验证统一使用 `test_boarding.ps1`，自动执行启动、左前方上车、下车和退出。
+- 运行时验证统一使用 `test_boarding.ps1`，自动执行启动、当前测试位置上车、下车和退出；
+  本轮运行时 approach `2` 直接确认当前位置为正前方，控制台的 `left-front` 文案只是
+  脚本沿用的静态标签。
 - 静态分析只使用已知地址的反编译、限定地址范围的指令查询和定向交叉引用。
 - hook 入口全部使用唯一模式匹配，不使用版本相关的固定 RVA。
 - IDA 数据库同步补充函数名、参数类型和关键控制流注释。
@@ -89,7 +96,8 @@ finished 并由 CameraMode 调用原生 Deactivate。Graph 事件仍只负责 Ri
 
 ### 三方向现场验证
 
-同一运行中的四次上车记录覆盖了 `approach=0`、`approach=1` 和 `approach=2`。三类记录具有相同的关键行为：
+以下内容是历史“只强制完成事件”实验的三方向验证。同一运行中的四次上车记录覆盖了
+`approach=0`、`approach=1` 和 `approach=2`。三类记录具有相同的关键行为：
 
 ```text
 SeatTransition callback vtable = DSPlayerVehicleDriving
@@ -104,6 +112,10 @@ DriveEnter exit elapsed = 0.025..0.029s
 - 从正前方上车：镜头略有变化，动画时长无变化。
 
 这将 `0xED` 的作用限定为三方向共享的 RideOn 逻辑完成通知。`ClassifyBoardingApproach` 的分流会改变 seat state，但强制同一个完成通知不会推进三个动作各自的可见时间轴。
+
+当前生产实现不再只强制该通知：玩家 descriptor 已先由原 evaluator 到达合法末端，
+事件 wrapper 只协调已经出现的原生事件；CutIn 由自身 playback 到达 finished；
+`DSVehicleTruck` 机械状态则在自己的 request 消费边界处理。三层完成条件互不替代。
 
 ## 窗口消失与崩溃判定纠正
 
@@ -173,7 +185,7 @@ native 0xED / DriveEnter                   elapsed=3.58693
 `callback+0x28 == 0` 时执行；随后把 callback `+0x08..+0x27` 的输出复制到 seat action。
 这条静态门控与运行时首次命中时间一致。
 
-## 运行证据
+## 历史事件门控运行证据
 
 2026-07-10 历史事件门控实验的通过日志：
 
@@ -217,3 +229,29 @@ PASS: board, drive, dismount, and quit confirmed
 ActionGraph `0xED`。因此强制 `0xED` 只能推进 RideOn 正常完成块，不能据此结束
 已经激活的 CutInCamera。完整相机退出由 CutIn finished、CameraMode 模块切换和
 `DSCutInCamera_Deactivate` 共同完成。
+
+## 当前正前方运行证据
+
+最终功能构建的关键顺序为：
+
+```text
+Truck pending 3 cancelled at current 0 / controller playback state 2
+player descriptor complete at duration 0.0550029
+native internal event 186 released
+RideOn completion Update returned
+Drive Enter at RideOn elapsed 0.0959293（不同已验证运行约为 0.096..0.104s）
+CutIn playback finished
+CutIn Deactivate clean=1
+native dismount consumes Truck state 7
+DLL_PROCESS_DETACH
+```
+
+同一轮 `test_boarding.ps1` 完整 PASS，没有 CrashTrace。同步录屏没有出现驾驶座下降的
+中间帧。卡车机械状态的对象布局、RTTI、请求消费和 OnExit 回位链记录在
+[FastVehicleBoardingTruckMechanicalAnimation.md](FastVehicleBoardingTruckMechanicalAnimation.md)。
+
+全组件失效保护加入后的首次运行没有出现 wrapper 主动放行事件的日志，但 RideOn Update
+已经通过另一条原生条件写出 `next=2`，随后 Drive、pose、CutIn finished 和 Deactivate
+全部完成。脚本因只接受固定事件日志而报断言失败。相同二进制重跑出现事件日志并完整
+PASS；两轮均无 CrashTrace。这限定的是测试日志断言的调度敏感性，不改变 `0xED` 及
+原生公共完成块的语义结论。

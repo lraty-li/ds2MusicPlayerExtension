@@ -11,6 +11,7 @@
 #include "MoverRootMotionObserver.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
+#include "TruckSeatTransitionObserver.h"
 
 namespace {
 constexpr wchar_t kExpectedModuleName[] = L"DS2.exe";
@@ -53,6 +54,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
             gameModule, imageSize, reinterpret_cast<HMODULE>(moduleParam))) {
         g_logger.Log("CrashTrace install failed");
     }
+    if (!TruckSeatTransitionObserver::TryInstall(gameModule, g_logger))
+        g_logger.Log("DSVehicleTruck seat observer failed");
 
     const bool rideOnInstalled =
         RideOnVtableDiscovery::TryInstall(gameModule, g_logger);

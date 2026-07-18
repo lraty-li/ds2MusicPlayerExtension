@@ -6,8 +6,10 @@
 
 `ds2_vehicle_boarding_trace` 已实现保留原生状态语义的快速上车：
 
-- 原生 `RideOn OnEnter`、seat transition、玩家实体挂接和 stage `0 -> 1 -> 2`
+- 原生 `RideOn OnEnter`、玩家侧 seat transition、实体挂接和 stage `0 -> 1 -> 2`
   全部照常执行；
+- 正前方 `DSVehicleTruck` 机械上车状态 `3/4` 在车辆消费前经过 RTTI、会话、
+  current 和 controller playback 完成态联合验证后取消，驾驶座保持原生基线状态 `0`；
 - 活动的 fullgame 上车 descriptor 由原 evaluator 以 `timeScale=64` 多帧推进到
   正常末端；
 - 原生 ActionGraph 完成事件进入 RideOn 公共完成块，正常请求 `RideOn -> Drive`；
@@ -18,8 +20,9 @@
   副作用；
 - 原生下车、菜单退出和 DLL 卸载保持正常。
 
-正前方自动测试的 `200ms`、`700ms`、`1700ms` 截图均显示车辆后方、与车头同向的
-驾驶镜头。旧版本中正前方上车后垂直看地的问题不再出现。
+正前方自动测试的三张 post-completion 截图均显示车辆后方、与车头同向的驾驶镜头。
+旧版本中正前方上车后垂直看地的问题不再出现。同步录屏还确认玩家从车旁直接进入
+保持升起基线的驾驶座，没有再出现短促的座椅下降/回升中间姿态。
 
 实现没有修改寄存器、可执行代码字节或使用固定 RVA 构造 hook 目标。DS2 类函数入口
 通过唯一模式或精确 RTTI/COL 定位；fullgame 调用点通过唯一模式定位并交叉校验到同一
@@ -28,28 +31,68 @@
 
 ## 必需组件与会话边界
 
-当前 required-component mask 包含五层：
+当前 required-component mask 包含六层：
 
 1. RideOn Enter、ProcessVehicleAttach、Update 与 Drive Enter 的状态范围；
 2. `GraphAnimationManager` bool-event 查询；
 3. `DSCutInCamera` playback / Deactivate；
 4. fullgame descriptor evaluator；
-5. `DSPlayerMoverAccessor` 的 ModifyAnimatedPose 提交点。
+5. `DSPlayerMoverAccessor` 的 ModifyAnimatedPose 提交点；
+6. `DSVehicleTruck` RTTI、机械动画请求门控和 slot 34/35 消费前兜底。
 
 `FastBoardingSession` 的运行边界为：
 
 1. RideOn vtable slot 11 原生 OnEnter 返回后，记录 RideOn、plugin、玩家实体和
    `GraphAnimationManager`；
-2. slot 27 原生 ProcessVehicleAttach 返回后，只在
-   `current=1,next=1,stage=2,b189=1,b18A=1,b191=1` 时进入 ready；
-3. RideOn Update slot 14 用线程局部范围限定事件查询；
-4. 事件放行前再次验证同一 manager、stage 2 和 `b18B=1`；
-5. Drive Enter 只接受同一 plugin 的状态边界；
-6. ModifyAnimatedPose 只接受当前 RideOn 对应玩家，并在原 slot 返回后读取已经提交的
+2. slot 27 原生 ProcessVehicleAttach 返回后，先验证当前车辆；若为
+   `DSVehicleTruck` 正前方路径，只在机械状态 `3/4` 已从基线完成态安全取消后继续；
+3. 只在 `current=1,next=1,stage=2,b189=1,b18A=1,b191=1` 时进入 ready；
+4. RideOn Update slot 14 用线程局部范围限定事件查询；
+5. 事件放行前再次验证同一 manager、stage 2 和 `b18B=1`；
+6. Drive Enter 只接受同一 plugin 的状态边界；
+7. ModifyAnimatedPose 只接受当前 RideOn 对应玩家，并在原 slot 返回后读取已经提交的
    world basis；
-7. CutIn 实例和 action hash 必须与同一有界会话匹配。
+8. CutIn 实例和 action hash 必须与同一有界会话匹配。
 
 会话窗口为 5 秒。超出窗口或快照不一致时，不再执行加速路径。
+
+## DSVehicleTruck 机械上车动画门控
+
+正前方上车的升降驾驶座属于车辆自己的动画状态机，不属于玩家 descriptor 或
+`DSCutInCamera`。`RideOnSeatState_ApplyApproachState` 对 `DSVehicleTruck` 的唯一车辆
+副作用是把 `truck+0x1314 requestedAnimationState` 写成 `3` 或 `4`。状态 `3..6`
+已由 truck vtable slot 36 确认为车辆侧上车动画状态组。
+
+`truck+0x12F8` 的真实类型是 `DSSimpleAnimationComponent`；其 primary vtable
+slot 13 为 `PlayState`，`controller+0x50` 是当前 `AnimationPlayback*`。truck
+slot 34/35 消费请求时调用 `PlayState(request)`、写 current 并清空 request，然后继续
+执行完整车辆更新。
+
+只读正前方基线实际观察到：
+
+```text
+current=0 request=3 playbackState=2
+  -> current=3 request=-1 playbackState=1
+约 0.100s 后 RideOn OnExit 请求 0
+  -> current=0 request=-1
+```
+
+这解释了此前“玩家已在座位上，但座椅短促下降又回升”的视觉结果。当前 wrapper 在
+原 ProcessVehicleAttach 返回后、车辆消费者运行前，只对同一快速上车会话且满足
+`current=0`、request 为 `3/4`、controller playback state 为完成值 `2` 的完整
+`DSVehicleTruck`，以原子 compare-exchange 把 request 清为 `-1`。slot 34/35 的 RTTI
+wrapper 在消费线程提供同条件兜底。
+
+最终运行中日志只出现一次：
+
+```text
+FastBoarding TruckSeat front request suppressed
+session=1 current=0 request=3 playbackState=2
+```
+
+上车到 Drive 期间没有出现 current `3/4`；自动下车仍正常消费状态 `7`。完整对象布局、
+控制器 RTTI、原生回位链和排除项见
+[FastVehicleBoardingTruckMechanicalAnimation.md](FastVehicleBoardingTruckMechanicalAnimation.md)。
 
 ## 角色 descriptor 加速
 
@@ -164,8 +207,9 @@ bit 0。该分支直接读取 `DSPlayerEntity+0x100` 的当前 world basis，把
 - elapsed、duration 和每次推进量均为有限值，elapsed 严格前进；
 - 更新次数受硬上限约束。
 
-正前方运行中，原 slot 9 共执行 380 次更新，把 elapsed 从 `0.0875876` 推进到
-`3.25744`；原生 duration 为 `3.25325`，最终由原函数设置 `finished=1`。
+最终全组件门控后的正前方 PASS 运行中，原 slot 9 共执行 255 次更新，把 elapsed 从
+`0.0750751` 推进到 `3.26576`；原生 duration 为 `3.25325`，最终由原函数设置
+`finished=1`。更新次数会随本帧 delta 和起始 elapsed 改变，不是固定常量。
 
 下一帧 `DSCutInCamera_Update` 返回 false，CameraMode 调用原 slot 5
 `DSCutInCamera_Deactivate`。返回后的验证确认 active/finished、variant、hash、flags 和
@@ -185,13 +229,25 @@ PASS: fast boarding, Drive, dismount, and quit confirmed
 ```
 
 自动截图 `drive_0200ms.png`、`drive_0700ms.png`、`drive_1700ms.png` 均为正常车辆
-后方驾驶镜头；`dismount1_settled.png` 显示正常下车。该轮没有 CrashTrace，并以正常
+后方驾驶镜头；这些是脚本沿用的文件名，不表示它们都从上车按键时刻按名称精确计时，
+其中第一张是在所有完成日志已经确认后以 `Delay=0` 捕获。同步录屏覆盖上车按键附近的
+逐帧画面，确认驾驶座没有降低。该轮没有 CrashTrace，并以正常
 `DLL_PROCESS_DETACH` 结束。
 
-生产日志中的关键相对顺序为：Drive Enter 后约 `10ms` 出现
-`post-Drive player pose committed`，约 `6ms` 后 CutIn 原生更新到 `finished=1`，再约
-`9ms` 后原生 Deactivate 验证 `clean=1`。因此修复不依赖已移除的诊断 observer。
+最终 PASS 日志中 Drive Enter 与 `post-Drive player pose committed` 位于同一日志毫秒，
+约 `4ms` 后 CutIn 原生更新到 `finished=1`，再约 `9ms` 后原生 Deactivate 验证
+`clean=1`。因此修复不依赖已移除的姿态诊断 observer。
+
+加入“六个必需组件全部 ready”失效保护后，第一次测试命中了 RideOn 的另一条原生完成
+条件：日志已经显示 `next=1 -> 2`、Drive、pose、CutIn finished 和 Deactivate，但脚本
+只等待 wrapper 主动放行事件的固定日志，因而在功能已完成后报断言失败并按自身逻辑
+清理进程。完全相同二进制重跑时出现预期事件日志并完整 PASS；两轮都没有 CrashTrace。
+因此该次非复现失败属于测试对特定完成分支日志的调度敏感性，不是 Mod 状态失败。
 
 第一次同一修复二进制的退出菜单自动输入曾未成功命中，随后完全相同二进制重跑通过；
 该次非复现失败发生在上车、Drive、镜头交接和下车均已成功之后，没有崩溃记录，属于
 菜单输入自动化抖动，不能归因于 Mod 生命周期。
+
+当前测试脚本控制台仍沿用 `left-front` descriptor 文案；本轮运行时实际命中
+`approach=2`、leaf `8`、caller RVA `0x3607C1A` 和 action hash `0x3897A3D5`，因此
+知识结论按正前方路径记录，不按控制台静态标签归类。

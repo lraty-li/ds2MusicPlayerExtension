@@ -13,6 +13,12 @@
 没有使用全局查找，没有读取 `DS2.exe` 文件本身，没有改寄存器、角色 Transform
 或游戏指令字节来改变上车行为。本轮 Hook 全部调用原函数。
 
+> 当前状态（2026-07-18）：本文主体记录 2026-07-10 的历史只读/事件门控阶段，
+> 其中“当前活跃观测面”仅指当时的 `v0.9.1`，不是现行生产构建。现行构建使用
+> RideOn/Drive/Graph/CutIn/Mover/DSVehicleTruck 的 vtable 或可写函数指针槽 wrapper，
+> 不安装本文列出的 JumpHook 探索入口。卡车机械座椅的当前闭合链见
+> [FastVehicleBoardingTruckMechanicalAnimation.md](FastVehicleBoardingTruckMechanicalAnimation.md)。
+
 ## 2026-07-10 只读观测构建（历史基线）
 
 当前 `Hooks.cpp` 不再安装以下实验性抑制器：

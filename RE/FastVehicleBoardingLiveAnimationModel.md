@@ -123,10 +123,16 @@ mean the visible boarding transition has completed.
 `DSPlayerVehicleRideOnState_ProcessVehicleAttach` still has three meaningful
 phases:
 
-1. stage `0` starts the seat transition path and moves toward attach readiness,
-2. stage `1` attaches the player entity to the resolved seat object and writes
-   approach/presentation state,
-3. stage `2` waits for a later live-action condition before marking completion.
+1. stage `0` starts the player-side seat transition, attaches the player Entity
+   to the vehicle parent, writes the approach-specific vehicle animation request,
+   and queues the CutIn action;
+2. stage `1` sets the next set of RideOn runtime flags and advances to stage `2`;
+3. stage `2` waits for the later mount-arrival/live-action conditions.
+
+For `DSVehicleTruck`, the approach-specific write is now typed as
+`truck+0x1314 requestedAnimationState`. Direct-front requests `3/4` are a
+vehicle-owned mechanical boarding-animation layer, separate from the player
+live-action descriptor described in this document.
 
 The late completion marker is:
 

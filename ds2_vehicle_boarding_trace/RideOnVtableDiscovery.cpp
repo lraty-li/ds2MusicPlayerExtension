@@ -2,6 +2,7 @@
 #include "RideOnVtableDiscovery.h"
 
 #include "FastBoardingSession.h"
+#include "TruckSeatTransitionObserver.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
@@ -77,7 +78,10 @@ void __fastcall HookProcessAttach(uintptr_t rideOn)
         VehicleSeatTrace::ReadValue(owner + 0x7378, flagsBefore);
 
     g_original(rideOn);
-    FastBoardingSession::ObserveProcessAttach(rideOn);
+    const bool vehicleAnimationReady =
+        TruckSeatTransitionObserver::PrepareProcessAttach(rideOn);
+    FastBoardingSession::ObserveProcessAttach(
+        rideOn, vehicleAnimationReady);
 
     uint32_t flagsAfter = 0;
     VehicleSeatTrace::Snapshot after = {};

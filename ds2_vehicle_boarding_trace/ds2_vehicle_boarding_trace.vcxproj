@@ -141,6 +141,7 @@
     <ClInclude Include="SeatActionProgressTrace.h" />
     <ClInclude Include="SeatStateTrace.h" />
     <ClInclude Include="SeatTransitionTrace.h" />
+    <ClInclude Include="TruckSeatTransitionObserver.h" />
     <ClInclude Include="RideOnUpdateTrace.h" />
     <ClInclude Include="RideOnVtableDiscovery.h" />
     <ClInclude Include="RideOnUpdateVtableTrace.h" />
@@ -174,6 +175,7 @@
     <ClCompile Include="SeatActionProgressTrace.cpp" />
     <ClCompile Include="SeatStateTrace.cpp" />
     <ClCompile Include="SeatTransitionTrace.cpp" />
+    <ClCompile Include="TruckSeatTransitionObserver.cpp" />
     <ClCompile Include="RideOnUpdateTrace.cpp" />
     <ClCompile Include="RideOnVtableDiscovery.cpp" />
     <ClCompile Include="RideOnUpdateVtableTrace.cpp" />

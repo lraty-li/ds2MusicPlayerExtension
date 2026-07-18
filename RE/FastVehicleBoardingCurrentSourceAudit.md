@@ -3,6 +3,11 @@
 > 2026-07-10：当前源码已切换为只读 seat-action 基线，本文的“当前实现”章节不再
 > 代表工作区最新状态。最新证据见
 > [FastVehicleBoardingSeatActionRuntime.md](FastVehicleBoardingSeatActionRuntime.md)。
+>
+> 2026-07-18：本文现仅作为 2026-07-09 源码历史审计保留。现行生产实现与完整验证见
+> [FastVehicleBoardingModImplementation.md](FastVehicleBoardingModImplementation.md)；
+> `DSVehicleTruck` 机械座椅链见
+> [FastVehicleBoardingTruckMechanicalAnimation.md](FastVehicleBoardingTruckMechanicalAnimation.md)。
 
 日期：2026-07-09
 
