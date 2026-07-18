@@ -14,7 +14,8 @@ namespace {
 constexpr uint32_t kBoardingCompleteEvent = 186;
 constexpr uint64_t kSessionWindowMs = 5000;
 constexpr uint32_t kRequiredComponents = kScopeComponent | kGraphComponent |
-    kCutInComponent | kAnimationComponent | kPoseComponent;
+    kCutInComponent | kAnimationComponent | kPoseComponent |
+    kTruckSeatComponent;
 
 std::atomic<uint32_t> g_components{0};
 std::atomic<uint32_t> g_sessionId{0};
@@ -115,9 +116,10 @@ void Begin(uintptr_t rideOn)
     g_sessionId.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void ObserveProcessAttach(uintptr_t rideOn)
+void ObserveProcessAttach(uintptr_t rideOn, bool vehicleAnimationReady)
 {
-    if (rideOn != g_rideOn.load(std::memory_order_acquire) || !InWindow())
+    if (!vehicleAnimationReady ||
+        rideOn != g_rideOn.load(std::memory_order_acquire) || !InWindow())
         return;
     VehicleSeatTrace::Snapshot snapshot = {};
     if (ReadLiveSnapshot(snapshot) && snapshot.current == 1 &&

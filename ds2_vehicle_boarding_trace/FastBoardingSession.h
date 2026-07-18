@@ -9,11 +9,12 @@ constexpr uint32_t kGraphComponent = 1u << 1;
 constexpr uint32_t kCutInComponent = 1u << 2;
 constexpr uint32_t kAnimationComponent = 1u << 3;
 constexpr uint32_t kPoseComponent = 1u << 4;
+constexpr uint32_t kTruckSeatComponent = 1u << 5;
 
 void ReportComponentReady(uint32_t component);
 bool AllComponentsReady();
 void Begin(uintptr_t rideOn);
-void ObserveProcessAttach(uintptr_t rideOn);
+void ObserveProcessAttach(uintptr_t rideOn, bool vehicleAnimationReady);
 void ObserveDriveEnter(uintptr_t driveState);
 bool ObservePostDrivePoseApplied(uintptr_t player);
 uintptr_t EnterRideOnUpdate(uintptr_t rideOn);

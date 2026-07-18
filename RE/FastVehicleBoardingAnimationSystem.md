@@ -30,7 +30,12 @@ Current IDA names relevant to this note:
 | `0x140EF6040` | `AnimInner_RebuildTrackSlots` | Rebuilds active track/clip slots for the inner animation object. |
 | `0x140EF5E90` | `AnimTrackSlot_SelectClipByType` | Selects a clip by type id and writes one track slot. |
 | `0x140F9A390` | `DSPlayerVehicleRideOnState_ProcessVehicleAttach` | Player RideOn attach state machine. |
-| `0x140F9B690` | `RideOnSeatState_ApplyApproachState` | Writes approach-derived seat state to the resolved seat object. |
+| `0x140F9B690` | `RideOnSeatState_ApplyApproachState` | Writes `DSVehicleTruck::requestedAnimationState` directly for the truck family. |
+| `0x141F92770` | `DSVehicleTruck_ConsumeAnimationRequestAndUpdate` | Consumes the requested vehicle animation state, then performs the full vehicle update. |
+| `0x141F92800` | `DSVehicleTruck_ConsumeAnimationRequestAndUpdatePoseBuffers` | Alternate request consumer followed by pose-buffer update. |
+| `0x14036F900` | `DSSimpleAnimationComponent_PlayState` | Selects the truck controller state through primary vtable slot 13. |
+| `0x14036DEF0` | `DSSimpleAnimationComponent_Update` | Advances the controller playback from the update-context delta. |
+| `0x141011600` | `RequestTruckPostRideOnAnimationState` | Requests truck state 0 or 11 from RideOn OnExit according to the current state group. |
 | `0x140E21880` | `DSCutInCameraRequestBroker_QueueAction` | Queues a CutIn action hash and vehicle target. |
 | `0x140F9B090` | `RideOnState_UpdateSeatPoseRequest` | Builds RideOn seat pose request during Update when attach stage is 2. |
 | `0x1410139C0` | `RideRuntime_SetRideOnActionSlotFilters` | Applies RideOn action slot filters. |
@@ -159,16 +164,46 @@ After attach, the function calls:
 0x140E21880: DSCutInCameraRequestBroker_QueueAction
 ```
 
-`RideOnSeatState_ApplyApproachState` writes approach-derived state
-to the resolved seat object. Main-object writes are to `seatObject+0x1314`;
-alternate object-family writes are to `seatObject+0x125C`.
+`RideOnSeatState_ApplyApproachState` resolves two RTTI families. The first is
+`DSVehicleTruck`; its write to `truck+0x1314` is now typed as
+`requestedAnimationState`. The second family is `DSVehicleMotorbike` and uses a
+different field at `+0x125C`.
 
-Observed main-object values:
+Verified truck request values:
 
-- approach `2`: writes `3` or `4`, depending on `vehicle/runtime+0x3B1` and vehicle
-  byte `+0x3B1` related checks
+- approach `2`: writes `3` or `4`, depending on the resolved context byte `+0x3B1`
 - approach `0`: writes `5`
 - approach `1`: writes `6`
+
+The truck branch has no setter call, message emission, or second truck-side
+write. Truck vtable slot 36 returns true only for current state `3..6`, which
+identifies this range as the vehicle-side boarding-animation group.
+
+Truck vtable slots 34 and 35 consume a nonnegative request by calling
+`DSSimpleAnimationComponent::PlayState`, copying request to current, and clearing
+request to `-1`. Both functions continue through the native truck update whether
+or not a request was consumed.
+
+The controller at `truck+0x12F8` is a `DSSimpleAnimationComponent` with primary
+COL offset 0. `controller+0x50` is its active `AnimationPlayback*`. A direct-front
+runtime trace observed the following independent vehicle timeline:
+
+```text
+current 0, request 3, controller playback state 2
+  -> current 3, request -1, controller playback state 1
+RideOn OnExit requests state 0 at about 0.100 s
+  -> current 0, request -1, controller playback state 2
+```
+
+`RequestTruckPostRideOnAnimationState`, called by RideOn OnExit, is the verified
+source of the state-0 request. This truck controller timeline is distinct from
+the player descriptor and the CutIn action.
+
+The current production run validates the full truck type, session, baseline
+current state, request `3/4`, and completed controller playback state before
+atomically cancelling the pending request. The request consumer wrappers provide
+a second check on the truck update thread. The final direct-front trace never
+entered current state `3/4`; native dismount still consumed state `7`.
 
 The CutIn request selects a hash based on `rideRuntime+0x2A0`, approach,
 `rideRuntime+0x3B1`, and seat object flags. Runtime observations mapped one
@@ -244,6 +279,14 @@ layers:
   evaluator and reaches the RideOn `0xED` event through normal result evaluation;
 - the camera presentation is a `DSCutInCamera` action with its own
   elapsed/duration, finished flag, CameraMode removal, and Deactivate cleanup.
+
+The same analysis also closed a third, vehicle-owned presentation layer:
+
+- `DSVehicleTruck` states `3..6` are mechanical boarding-animation states driven
+  by `DSSimpleAnimationComponent`, not by the player ActionGraph. Direct-front
+  states `3/4` are now prevented from starting only after the truck is verified
+  to be in completed baseline state 0. This removes the lift-seat motion while
+  leaving the six player setup layers above intact.
 
 The current verified boundary is therefore more specific: preserve OnEnter,
 ProcessVehicleAttach, the stage-2 seat pose/filter pass, and the original
