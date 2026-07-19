@@ -1,4 +1,0 @@
-﻿upstream=richgel999/bc7enc_rdo
-commit=dbe416d28a5530b4e8cc45b14bf034dc6b96bbde
-ispc=E:\dev\code\game\DS2MusicPlayer\build\bc7e\bc7enc_rdo\ispc.exe
-sha256=E9D518664801B6AF45CD2B3B5B67BC4BC0747B6976C79797BFFCAFDE9EB9D77D

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<PluginInfo Platform="Windows" BasePlatform="Windows">
-	<PluginLibs>
-		<PluginLib LibName="System" LibId="11403271" Type="AudioDevice"/>
-		<PluginLib LibName="No Output" LibId="11862023" Type="AudioDevice"/>
-		<PluginLib LibName="DS2 DLL Music Resource" LibId="16870002" Type="Source" DLL="ds2_dll_music_resource" StaticLib="ds2_dll_music_resourceSource"/>
-	</PluginLibs>
-	<FileHash>{F0A39956-BC04-DA53-0561-C518A508916D}</FileHash>
-</PluginInfo>
