@@ -4,23 +4,20 @@ param(
     [string]$OutputDir = "",
     [string]$PackageVersion = "",
     [switch]$SkipBuild,
-    [switch]$SkipAsiLoaderDownload,
-    [switch]$AllowMissingBc7e
+    [switch]$SkipAsiLoaderDownload
 )
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $repoRoot = $PSScriptRoot
-$packageName = "DS2MusicPlayer"
+$packageName = "DS2VehicleBoardingFastForward"
 $buildRoot = Join-Path $repoRoot "build\package"
 $stageRoot = Join-Path $buildRoot "stage"
 $gameRoot = Join-Path $stageRoot $packageName
 $scriptsDir = Join-Path $gameRoot "scripts"
-$extensionDir = Join-Path $stageRoot "browser-extension"
 $cacheDir = Join-Path $buildRoot "cache"
-$binDir = Join-Path $buildRoot "bin"
-$bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
+$asiProjectDir = Join-Path $repoRoot "ds2_vehicle_boarding_trace"
 $asiLoaderUrl =
     "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/version-x64.zip"
 
@@ -65,15 +62,16 @@ function Find-MSBuild {
     throw "MSBuild.exe not found"
 }
 
-function Invoke-Build([string]$Solution, [string]$ProjectOutDir) {
+function Invoke-Build([string]$ProjectDir) {
     $msbuild = Find-MSBuild
-    New-Item -ItemType Directory -Path $ProjectOutDir -Force | Out-Null
-    $properties = "Configuration=$Configuration;Platform=$Platform;OutDir=$ProjectOutDir\"
-    & $msbuild $Solution `
+    $vcxproj = Join-Path $ProjectDir "ds2_vehicle_boarding_trace.vcxproj"
+    $properties = "Configuration=$Configuration;Platform=$Platform"
+    & $msbuild $vcxproj `
         "/p:$properties" `
+        /t:Rebuild `
         /m /nologo /v:q
     if ($LASTEXITCODE -ne 0) {
-        throw "Build failed: $Solution"
+        throw "Build failed: $vcxproj"
     }
 }
 
@@ -85,53 +83,11 @@ function Copy-RequiredFile([string]$Source, [string]$Destination) {
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
 }
 
-function Assert-Bc7eDll([string]$Path) {
-    if (-not (Test-Path $Path)) {
-        if ($AllowMissingBc7e) {
-            Write-Host "BC7E_DLL_NOT_FOUND fallback encoder will be used"
-            return $false
-        }
-        throw "Missing BC7E DLL. Run tools\build-bc7e.ps1 first."
-    }
-    & (Join-Path $repoRoot "tools\verify-bc7e.ps1") -DllPath $Path
-    if ($LASTEXITCODE -ne 0) {
-        throw "BC7E DLL verification failed: $Path"
-    }
-    return $true
-}
-
-function Copy-BrowserExtension {
-    $source = Join-Path $repoRoot "tab-audio-recorder-mvp"
-    $files = @(
-        "manifest.json",
-        "service_worker.js",
-        "background_chromium_host.js",
-        "media_control.js",
-        "metadata_transfer.js",
-        "jacket_transfer.js",
-        "page_control.js",
-        "adapters\youtube.js",
-        "adapters\netease.js",
-        "adapters\media_session_hook.js",
-        "offscreen.html",
-        "offscreen_chromium_capture.js",
-        "offscreen_audio_graph.js",
-        "stream_socket.js",
-        "offscreen.js",
-        "pcm-worklet.js",
-        "README.md"
-    )
-    New-Item -ItemType Directory -Path $extensionDir -Force | Out-Null
-    foreach ($file in $files) {
-        Copy-RequiredFile (Join-Path $source $file) (Join-Path $extensionDir $file)
-    }
-}
-
 function Get-AsiLoaderZip {
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
     $zip = Join-Path $cacheDir "version-x64.zip"
     Invoke-WebRequest -Uri $asiLoaderUrl -OutFile $zip -Headers @{
-        "User-Agent" = "DS2MusicPlayer-package-script"
+        "User-Agent" = "DS2VehicleBoardingFastForward-package-script"
     }
     return $zip
 }
@@ -159,30 +115,26 @@ function Write-InstallReadme {
 }
 
 New-CleanDirectory $stageRoot
+New-Item -ItemType Directory -Path $gameRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 if (-not $SkipBuild) {
-    New-CleanDirectory $binDir
-    Invoke-Build (Join-Path $repoRoot "ds2_music_player_asi\Ds2MusicPlayerExtend.sln") `
-        (Join-Path $binDir "asi")
-    Invoke-Build (Join-Path $repoRoot "ds2_runtime_source_plugin\ds2_dll_music_resource.sln") `
-        (Join-Path $binDir "audio")
+    Invoke-Build -ProjectDir $asiProjectDir
 }
 
-Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
-    (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
-Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
-    (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
-if (Assert-Bc7eDll $bc7eDll) {
-    Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
+# The vcxproj outputs to ds2_vehicle_boarding_trace\build\$(Platform)\$(Configuration)\
+$asiName = "ds2_vehicle_boarding_trace.asi"
+$builtAsi = Join-Path $asiProjectDir "build\$Platform\$Configuration\$asiName"
+if (-not (Test-Path $builtAsi)) {
+    throw "Built ASI not found at $builtAsi"
 }
+Copy-RequiredFile $builtAsi (Join-Path $scriptsDir $asiName)
 
 if (-not $SkipAsiLoaderDownload) {
     Copy-AsiLoader (Get-AsiLoaderZip)
 }
 
-Copy-BrowserExtension
 Write-InstallReadme
 
 $stamp = if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
