@@ -39,7 +39,7 @@ constexpr uint32_t kPrimaryCallOffset = 0x34;
 constexpr uint32_t kSecondaryCallOffset = 0x47;
 constexpr uint32_t kApproachCallOffset = 0x29;
 constexpr uint32_t kIndirectCallSize = 6;
-constexpr float kFastTimeScale = 64.0f;
+constexpr float kFastTimeScale = 512.0f;
 
 using EvaluateDescriptorFn = void(__fastcall*)(
     uintptr_t output, uintptr_t descriptor, uint8_t mode,
