@@ -147,12 +147,12 @@ int64_t __fastcall HookRideOnEnter(uintptr_t rideOn, double value)
             oss << VehicleSeatTrace::FormatSnapshot(plugin, s);
         g_logger->Log(oss.str());
         LogAnimationComponent("skip-exit", rideOn);
-        RideOnPoseParamTrace::LogRideOnPoseParams(*g_logger, "skip-exit", rideOn);
+        //RideOnPoseParamTrace::LogRideOnPoseParams(*g_logger, "skip-exit", rideOn);
         return runtime;
     }
     const int64_t result = g_originalRideOnEnter(rideOn, value);
     LogAnimationComponent("exit", rideOn);
-    RideOnPoseParamTrace::LogRideOnPoseParams(*g_logger, "exit", rideOn);
+    //RideOnPoseParamTrace::LogRideOnPoseParams(*g_logger, "exit", rideOn);
     return result;
 }
 

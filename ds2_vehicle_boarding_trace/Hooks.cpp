@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Hooks.h"
-#include "CrashTrace.h"
+//#include "CrashTrace.h"
 #include "CutInCameraFastForward.h"
 #include "DriveVtableTrace.h"
 #include "FastBoardingSession.h"
@@ -50,10 +50,12 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("TryGetModuleSize failed");
         return 1;
     }
+    /*
     if (!CrashTrace::Install(
             gameModule, imageSize, reinterpret_cast<HMODULE>(moduleParam))) {
         g_logger.Log("CrashTrace install failed");
     }
+    */
     if (!TruckSeatTransitionObserver::TryInstall(gameModule, g_logger))
         g_logger.Log("DSVehicleTruck seat observer failed");
 
