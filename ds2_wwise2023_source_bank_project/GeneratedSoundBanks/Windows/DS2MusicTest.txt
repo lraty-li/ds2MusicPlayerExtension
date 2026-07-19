@@ -1,6 +1,0 @@
-Event	ID	Name			Wwise Object Path	Notes
-	2236792162	Play_DS2_ExtMusic			\Default Work Unit\Play_DS2_ExtMusic	
-
-Source plug-ins	ID	Name	Type		Wwise Object Path	Notes
-	586114608	DS2MusicResourceSource	DS2 DLL Music Resource		\Actor-Mixer Hierarchy\Default Work Unit\DS2_ExtMusic_Sound\DS2MusicResourceSource	
-
