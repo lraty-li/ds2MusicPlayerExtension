@@ -14,7 +14,7 @@ on:
         default: false
   push:
     tags:
-      - "v*"
+      - "car-v*"
 
 permissions:
   contents: write
@@ -53,7 +53,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DS2MusicPlayer-${{ steps.version.outputs.value }}
+          name: DS2VehicleBoardingFastForward-${{ steps.version.outputs.value }}
           path: ${{ steps.package.outputs.zip_path }}
           if-no-files-found: error
 
@@ -98,6 +98,6 @@ jobs:
             -FilePath "${{ steps.package.outputs.zip_path }}" `
             -ModFileId "${{ vars.NEXUSMODS_FILE_ID }}" `
             -Version "${{ steps.version.outputs.value }}" `
-            -DisplayName "DS2MusicPlayer ${{ steps.version.outputs.value }}" `
+            -DisplayName "DS2VehicleBoardingFastForward ${{ steps.version.outputs.value }}" `
             -Description "Automated release from GitHub run ${{ github.run_id }}" `
             -ArchiveExistingFile
