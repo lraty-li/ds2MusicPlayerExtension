@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         env:
           NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
-          NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
+          NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID_BOARDING }}
         run: |
           $manualPublish = "${{ github.event.inputs.publish_nexusmods }}" -eq "true"
           $tagPublish = "${{ github.ref_type }}" -eq "tag"
@@ -78,10 +78,10 @@ jobs:
           $hasFileId = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_FILE_ID)
           $configured = $hasApiKey -and $hasFileId
           if ($manualPublish -and -not $configured) {
-            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or NEXUSMODS_FILE_ID is missing."
+            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or NEXUSMODS_FILE_ID_BOARDING is missing."
           }
           if ($tagPublish -and -not $configured) {
-            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and NEXUSMODS_FILE_ID."
+            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and NEXUSMODS_FILE_ID_BOARDING."
           }
           $enabled = $requested -and $configured
           "enabled=$($enabled.ToString().ToLowerInvariant())" |
@@ -96,7 +96,7 @@ jobs:
         run: |
           ./tools/publish-nexusmods.ps1 `
             -FilePath "${{ steps.package.outputs.zip_path }}" `
-            -ModFileId "${{ vars.NEXUSMODS_FILE_ID }}" `
+            -ModFileId "${{ vars.NEXUSMODS_FILE_ID_BOARDING }}" `
             -Version "${{ steps.version.outputs.value }}" `
             -DisplayName "DS2VehicleBoardingFastForward ${{ steps.version.outputs.value }}" `
             -Description "Automated release from GitHub run ${{ github.run_id }}" `
