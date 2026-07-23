@@ -54,13 +54,15 @@ function New-CleanDirectory([string]$Path) {
 }
 
 function Find-MSBuild {
-    $paths = @(
-        "C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\amd64\MSBuild.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Professional\Msbuild\Current\Bin\amd64\MSBuild.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Msbuild\Current\Bin\amd64\MSBuild.exe"
-    )
-    foreach ($path in $paths) {
-        if (Test-Path $path) { return $path }
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path -LiteralPath $vswhere) {
+        $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+        if ($LASTEXITCODE -eq 0 -and $vsInstallPath) {
+            $candidate = Join-Path $vsInstallPath.Trim() "MSBuild\Current\Bin\amd64\MSBuild.exe"
+            if (Test-Path -LiteralPath $candidate) {
+                return $candidate
+            }
+        }
     }
     throw "MSBuild.exe not found"
 }

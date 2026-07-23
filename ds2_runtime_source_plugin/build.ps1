@@ -5,7 +5,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\amd64\MSBuild.exe"
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$msbuild = $null
+if (Test-Path -LiteralPath $vswhere) {
+    $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    if ($LASTEXITCODE -eq 0 -and $vsInstallPath) {
+        $candidate = Join-Path $vsInstallPath.Trim() "MSBuild\Current\Bin\amd64\MSBuild.exe"
+        if (Test-Path -LiteralPath $candidate) {
+            $msbuild = $candidate
+        }
+    }
+}
 $solution = Join-Path $PSScriptRoot "ds2_dll_music_resource.sln"
 
 function Repair-ProcessPath {
