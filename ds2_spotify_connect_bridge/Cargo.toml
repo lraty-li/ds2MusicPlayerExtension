@@ -3,6 +3,10 @@ name = "ds2-spotify-connect-bridge"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+autobins = false
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 base64 = "0.22.1"

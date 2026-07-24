@@ -20,7 +20,7 @@ try {
     $env:ALL_PROXY = $null
     $env:CARGO_HTTP_PROXY = $null
 
-    $cargoArgs = @("build", "--release")
+    $cargoArgs = @("build", "--release", "--lib")
     if (Test-Path (Join-Path $PSScriptRoot "Cargo.lock")) {
         $cargoArgs += "--locked"
     }
@@ -29,8 +29,13 @@ try {
         throw "Cargo build failed with exit code $LASTEXITCODE"
     }
 
-    Copy-Item -LiteralPath (Join-Path $env:CARGO_TARGET_DIR "release\ds2-spotify-connect-bridge.exe") `
-      -Destination (Join-Path $OutputDir "DS2SpotifyConnectBridge.exe") -Force
+    $legacyExe = Join-Path $OutputDir "DS2SpotifyConnectBridge.exe"
+    if (Test-Path -LiteralPath $legacyExe) {
+        Remove-Item -LiteralPath $legacyExe -Force
+    }
+
+    Copy-Item -LiteralPath (Join-Path $env:CARGO_TARGET_DIR "release\ds2_spotify_connect_bridge.dll") `
+      -Destination (Join-Path $OutputDir "DS2SpotifyConnectBridge.dll") -Force
     Write-Host "BUILD_OK"
 }
 finally {

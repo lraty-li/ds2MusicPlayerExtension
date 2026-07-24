@@ -22,7 +22,7 @@ $cacheDir = Join-Path $buildRoot "cache"
 $binDir = Join-Path $buildRoot "bin"
 $bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
 $spotifyBridgeDir = Join-Path $repoRoot "ds2_spotify_connect_bridge"
-$spotifyBridgeExe = Join-Path $spotifyBridgeDir "build\DS2SpotifyConnectBridge.exe"
+$spotifyBridgeDll = Join-Path $spotifyBridgeDir "build\DS2SpotifyConnectBridge.dll"
 $asiLoaderUrl =
     "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/version-x64.zip"
 
@@ -190,7 +190,7 @@ Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
     (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
 Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
     (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
-Copy-RequiredFile $spotifyBridgeExe (Join-Path $scriptsDir "DS2SpotifyConnectBridge.exe")
+Copy-RequiredFile $spotifyBridgeDll (Join-Path $scriptsDir "DS2SpotifyConnectBridge.dll")
 if (Assert-Bc7eDll $bc7eDll) {
     Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
 }

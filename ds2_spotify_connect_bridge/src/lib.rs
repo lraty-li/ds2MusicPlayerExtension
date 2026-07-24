@@ -16,22 +16,59 @@ use librespot::{
     playback::{mixer, mixer::MixerConfig, player::Player},
 };
 use sha1::{Digest, Sha1};
-use std::{error::Error, fs, net::IpAddr, sync::mpsc};
+use std::{
+    error::Error,
+    fs,
+    net::IpAddr,
+    sync::{atomic::{AtomicBool, Ordering}, mpsc},
+    thread,
+};
 use state::SharedBridgeState;
 
 const CONNECT_PORT: u16 = 57_621;
+static STARTED: AtomicBool = AtomicBool::new(false);
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+#[unsafe(no_mangle)]
+pub extern "system" fn DS2SpotifyConnectBridgeStart() -> i32 {
+    if STARTED.swap(true, Ordering::AcqRel) {
+        return 1;
+    }
+
+    let started = thread::Builder::new()
+        .name("DS2SpotifyConnect".to_owned())
+        .spawn(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build();
+            match runtime {
+                Ok(runtime) => {
+                    if let Err(error) = runtime.block_on(run_bridge()) {
+                        log::error!("Spotify Connect bridge stopped: {error}");
+                    }
+                }
+                Err(error) => log::error!("Spotify Connect runtime startup failed: {error}"),
+            }
+            STARTED.store(false, Ordering::Release);
+        })
+        .is_ok();
+
+    if started {
+        1
+    } else {
+        STARTED.store(false, Ordering::Release);
+        0
+    }
+}
+
+async fn run_bridge() -> Result<(), Box<dyn Error>> {
+    let _ = env_logger::try_init();
     let Some(_instance) = instance::ProcessInstance::acquire()? else {
         return Ok(());
     };
-    let config = BridgeConfig::from_args()?;
+    let config = BridgeConfig::fixed()?;
     fs::create_dir_all(config.cache_dir.join("files"))?;
 
     let state = SharedBridgeState::new();
-
     let session_config = SessionConfig {
         device_id: device_id(&config.device_name),
         ..SessionConfig::default()
