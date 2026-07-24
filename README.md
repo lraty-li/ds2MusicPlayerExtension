@@ -19,6 +19,7 @@ Copy the contents of the extracted `DS2MusicPlayer` folder into the game root:
 <GameRoot>\version.dll
 <GameRoot>\scripts\Ds2MusicPlayerExtend.asi
 <GameRoot>\scripts\ds2_dll_music_resource.dll
+<GameRoot>\scripts\DS2SpotifyConnectBridge.exe
 ```
 
 The game root is the folder that contains the game executable. `version.dll` is
@@ -48,6 +49,16 @@ For NetEase Cloud Music, start playback manually in the page once before using
 the game-side controls. Chrome may reject a cold `play()` request until the page
 has received user interaction; after that first manual start, DS2 can take over
 pause/resume synchronization.
+
+## Spotify Connect
+
+The packaged bridge is started automatically by the ASI after the game starts.
+In Spotify's device picker, select `Death Stranding 2`; Spotify audio, title,
+artist, and album art then stream directly into the special in-game track.
+
+Use either the browser extension or Spotify Connect for a playback session, not
+both at once. The game pause/resume state controls the selected Spotify Connect
+device; Spotify-side controls do not change the game player's state.
 
 ## Building a release package
 

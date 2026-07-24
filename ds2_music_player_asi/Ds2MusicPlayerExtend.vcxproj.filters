@@ -77,6 +77,9 @@
     <ClInclude Include="SourcePluginBank.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="SpotifyConnectBootstrap.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="SpecialTrackHelpers.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -194,6 +197,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="SourcePluginBank.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SpotifyConnectBootstrap.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="SpecialTrackHelpers.cpp">

@@ -10,10 +10,12 @@
 namespace
 {
 constexpr size_t kTitleBytes = 1024;
+constexpr size_t kTrackKeyBytes = 1024;
 
 std::mutex g_mutex;
 char g_title[kTitleBytes] = {};
 char g_artist[kTitleBytes] = {};
+char g_trackKey[kTrackKeyBytes] = {};
 
 const char* FindJsonStringValue(const char* json, const char* key)
 {
@@ -75,23 +77,37 @@ void UpdateFromJson(const char* json)
     if (!json || !IsMetadataMessage(json)) return;
     char title[kTitleBytes] = {};
     char artist[kTitleBytes] = {};
+    char trackKey[kTrackKeyBytes] = {};
     CopyJsonValue(json, "\"title\"", title, sizeof(title));
     if (!title[0]) return;
     CopyJsonValue(json, "\"artist\"", artist, sizeof(artist));
+    CopyJsonValue(json, "\"trackKey\"", trackKey, sizeof(trackKey));
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (strcmp(g_title, title) == 0 && strcmp(g_artist, artist) == 0)
+        if (strcmp(g_title, title) == 0 && strcmp(g_artist, artist) == 0 &&
+            strcmp(g_trackKey, trackKey) == 0)
         {
             return;
         }
         strcpy_s(g_title, title);
         strcpy_s(g_artist, artist);
+        strcpy_s(g_trackKey, trackKey);
     }
 
     char line[1152] = {};
     sprintf_s(line, "browser metadata title=\"%s\" artist=\"%s\"",
         title, artist);
     PluginLog::Write(line);
+}
+
+bool IsCurrentTrackKey(const char* trackKey)
+{
+    if (!trackKey || !trackKey[0])
+    {
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_trackKey[0] && strcmp(g_trackKey, trackKey) == 0;
 }
 
 int ReadTitle(char* output, uint32_t outputBytes)

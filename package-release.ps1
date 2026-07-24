@@ -21,6 +21,8 @@ $extensionDir = Join-Path $stageRoot "browser-extension"
 $cacheDir = Join-Path $buildRoot "cache"
 $binDir = Join-Path $buildRoot "bin"
 $bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
+$spotifyBridgeDir = Join-Path $repoRoot "ds2_spotify_connect_bridge"
+$spotifyBridgeExe = Join-Path $spotifyBridgeDir "build\DS2SpotifyConnectBridge.exe"
 $asiLoaderUrl =
     "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/version-x64.zip"
 
@@ -129,6 +131,17 @@ function Copy-BrowserExtension {
     }
 }
 
+function Invoke-SpotifyBridgeBuild {
+    $buildScript = Join-Path $spotifyBridgeDir "build.ps1"
+    if (-not (Test-Path $buildScript)) {
+        throw "Spotify Connect bridge build script is missing: $buildScript"
+    }
+    & $buildScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Spotify Connect bridge build failed"
+    }
+}
+
 function Get-AsiLoaderZip {
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
     $zip = Join-Path $cacheDir "version-x64.zip"
@@ -170,12 +183,14 @@ if (-not $SkipBuild) {
         (Join-Path $binDir "asi")
     Invoke-Build (Join-Path $repoRoot "ds2_runtime_source_plugin\ds2_dll_music_resource.sln") `
         (Join-Path $binDir "audio")
+    Invoke-SpotifyBridgeBuild
 }
 
 Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
     (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
 Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
     (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
+Copy-RequiredFile $spotifyBridgeExe (Join-Path $scriptsDir "DS2SpotifyConnectBridge.exe")
 if (Assert-Bc7eDll $bc7eDll) {
     Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
 }

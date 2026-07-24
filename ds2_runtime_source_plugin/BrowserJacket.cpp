@@ -2,6 +2,7 @@
 
 #include "BrowserJacket.h"
 
+#include "BrowserMetadata.h"
 #include "PluginLog.h"
 
 #include <cstring>
@@ -145,6 +146,7 @@ void UpdateFromJson(const char* json)
     std::string mime;
     std::string source;
     std::string jacketSource;
+    std::string trackKey;
     const char* dataValue = FindJsonStringValue(json, "\"data\"");
     if (!dataValue)
     {
@@ -155,7 +157,15 @@ void UpdateFromJson(const char* json)
     DecodeJsonString(FindJsonStringValue(json, "\"mime\""), mime);
     DecodeJsonString(FindJsonStringValue(json, "\"source\""), source);
     DecodeJsonString(FindJsonStringValue(json, "\"jacketSource\""), jacketSource);
+    DecodeJsonString(FindJsonStringValue(json, "\"trackKey\""), trackKey);
     if (mime.empty()) mime = "application/octet-stream";
+
+    if (!BrowserMetadata::IsCurrentTrackKey(trackKey.c_str()))
+    {
+        SetStatus("runtime_stale_jacket", 0, mime, "track key mismatch",
+            source, jacketSource);
+        return;
+    }
 
     std::vector<uint8_t> decoded;
     if (!DecodeBase64(data, decoded) || decoded.empty())

@@ -138,6 +138,7 @@
     <ClInclude Include="RuntimeJacketBridge.h" />
     <ClInclude Include="SourceAudioBootstrap.h" />
     <ClInclude Include="SourcePluginBank.h" />
+    <ClInclude Include="SpotifyConnectBootstrap.h" />
     <ClInclude Include="SpecialTrackHelpers.h" />
     <ClInclude Include="SpecialTrackIds.h" />
     <ClInclude Include="SpecialTrackInjection.h" />
@@ -180,6 +181,7 @@
     <ClCompile Include="RuntimeJacketBridge.cpp" />
     <ClCompile Include="SourceAudioBootstrap.cpp" />
     <ClCompile Include="SourcePluginBank.cpp" />
+    <ClCompile Include="SpotifyConnectBootstrap.cpp" />
     <ClCompile Include="SpecialTrackHelpers.cpp" />
     <ClCompile Include="SpecialTrackInjection.cpp" />
     <ClCompile Include="SpecialTrackSoundClone.cpp" />

@@ -9,6 +9,7 @@
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
 #include "RuntimeEntryTitleRefresh.h"
+#include "SpotifyConnectBootstrap.h"
 #include "SourceAudioBootstrap.h"
 
 #include <exception>
@@ -110,6 +111,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         }
 
         g_initLogger.Log("source audio registration deferred until music resource load");
+        SpotifyConnectBootstrap::Start(selfModule, g_initLogger);
     }
     catch (const std::exception& ex)
     {
