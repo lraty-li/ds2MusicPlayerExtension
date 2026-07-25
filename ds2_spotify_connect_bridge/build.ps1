@@ -20,7 +20,7 @@ try {
     $env:ALL_PROXY = $null
     $env:CARGO_HTTP_PROXY = $null
 
-    $cargoArgs = @("build", "--release", "--lib")
+    $cargoArgs = @("build", "--release", "--lib", "--bin", "ds2_spotify_connect_dev_host")
     if (Test-Path (Join-Path $PSScriptRoot "Cargo.lock")) {
         $cargoArgs += "--locked"
     }
@@ -36,6 +36,8 @@ try {
 
     Copy-Item -LiteralPath (Join-Path $env:CARGO_TARGET_DIR "release\ds2_spotify_connect_bridge.dll") `
       -Destination (Join-Path $OutputDir "DS2SpotifyConnectBridge.dll") -Force
+    Copy-Item -LiteralPath (Join-Path $env:CARGO_TARGET_DIR "release\ds2_spotify_connect_dev_host.exe") `
+      -Destination (Join-Path $OutputDir "DS2SpotifyConnectDevHost.exe") -Force
     Write-Host "BUILD_OK"
 }
 finally {

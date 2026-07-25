@@ -171,6 +171,8 @@ function Copy-AsiLoader([string]$ZipPath) {
 function Write-InstallReadme {
     Copy-RequiredFile (Join-Path $repoRoot "packaging\README.txt") `
         (Join-Path $stageRoot "README.txt")
+    Copy-RequiredFile (Join-Path $repoRoot "tools\Install-SpotifyConnectFirewall.ps1") `
+        (Join-Path $stageRoot "Install-SpotifyConnectFirewall.ps1")
 }
 
 New-CleanDirectory $stageRoot

@@ -27,6 +27,10 @@ Spotify's device picker. The bridge sends Spotify audio, track information,
 and album art to the in-game special track. Do not use browser streaming and
 Spotify Connect at the same time. Game pause/resume controls Spotify; Spotify
 controls do not change the game player's state.
+9. If Spotify cannot find the game device, right-click
+   Install-SpotifyConnectFirewall.ps1 and choose Run with PowerShell. Approve
+   the UAC prompt. The script only opens DS2.exe's Spotify Connect ports on
+   private networks; use -Remove to undo it.
 
 中文
 
@@ -52,6 +56,10 @@ Chrome 可能会拒绝没有用户交互的冷启动播放请求。
 “Death Stranding 2”。桥接程序会把 Spotify 音频、曲目信息和专辑图发送到
 游戏内的特殊曲目。浏览器推流与 Spotify Connect 不要同时使用；游戏内
 暂停/恢复会控制 Spotify，但 Spotify 侧控制不会改变游戏播放器状态。
+9. 若 Spotify 找不到游戏设备，右键
+   Install-SpotifyConnectFirewall.ps1，选择“使用 PowerShell 运行”，并确认
+   UAC 提示。脚本仅为 DS2.exe 开放专用网络的 Spotify Connect 端口；使用
+   -Remove 可撤销规则。
 
 Credits
 

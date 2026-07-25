@@ -55,11 +55,16 @@ fn advertise(device_name: String, ip: Ipv4Addr, port: u16, stop: Arc<AtomicBool>
             let _ = socket.send_to(&response, destination);
             next_announcement = Instant::now() + Duration::from_secs(10);
         }
-        if let Ok((length, _)) = socket.recv_from(&mut buffer)
+        if let Ok((length, sender)) = socket.recv_from(&mut buffer)
             && is_query(&buffer[..length])
             && query_names.iter().any(|name| contains_name(&buffer[..length], name))
         {
-            let _ = socket.send_to(&response, destination);
+            let target = if wants_unicast_response(&buffer[..length]) || sender.port() != MDNS_PORT {
+                sender
+            } else {
+                destination
+            };
+            let _ = socket.send_to(&response, target);
         }
     }
 }
@@ -71,6 +76,7 @@ fn open_socket(interface: Ipv4Addr) -> std::io::Result<UdpSocket> {
     socket.bind(&SocketAddr::from((Ipv4Addr::UNSPECIFIED, MDNS_PORT)).into())?;
     socket.join_multicast_v4(&MDNS_GROUP, &interface)?;
     socket.set_multicast_if_v4(&interface)?;
+    socket.set_multicast_ttl_v4(255)?;
     let socket: UdpSocket = socket.into();
     socket.set_read_timeout(Some(Duration::from_millis(250)))?;
     Ok(socket)
@@ -137,6 +143,46 @@ fn contains_name(packet: &[u8], name: &[u8]) -> bool {
 
 fn is_query(packet: &[u8]) -> bool {
     packet.len() >= 12 && packet[2] & 0x80 == 0
+}
+
+fn wants_unicast_response(packet: &[u8]) -> bool {
+    if packet.len() < 12 {
+        return false;
+    }
+
+    let questions = u16::from_be_bytes([packet[4], packet[5]]);
+    let mut offset = 12;
+    for _ in 0..questions {
+        let Some(next) = skip_name(packet, offset) else {
+            return false;
+        };
+        if next + 4 > packet.len() {
+            return false;
+        }
+        let class = u16::from_be_bytes([packet[next + 2], packet[next + 3]]);
+        if class & 0x8000 != 0 {
+            return true;
+        }
+        offset = next + 4;
+    }
+    false
+}
+
+fn skip_name(packet: &[u8], mut offset: usize) -> Option<usize> {
+    while offset < packet.len() {
+        let length = packet[offset];
+        if length == 0 {
+            return Some(offset + 1);
+        }
+        if length & 0xC0 == 0xC0 {
+            return (offset + 2 <= packet.len()).then_some(offset + 2);
+        }
+        if length & 0xC0 != 0 {
+            return None;
+        }
+        offset = offset.checked_add(usize::from(length) + 1)?;
+    }
+    None
 }
 
 fn instance_name(device_name: &str) -> Vec<String> {

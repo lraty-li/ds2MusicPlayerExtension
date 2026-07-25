@@ -5,20 +5,20 @@ mod mdns;
 mod metadata;
 mod socket;
 mod state;
+mod zeroconf;
 
 use audio::Ds2AudioSink;
 use config::BridgeConfig;
-use futures_util::StreamExt;
 use librespot::{
     connect::{ConnectConfig, Spirc},
     core::{Session, SessionConfig, authentication::Credentials, cache::Cache},
-    discovery::{Discovery, find as find_discovery},
     playback::{mixer, mixer::MixerConfig, player::Player},
 };
 use sha1::{Digest, Sha1};
 use std::{
     error::Error,
     fs,
+    io::Write,
     net::IpAddr,
     sync::{atomic::{AtomicBool, Ordering}, mpsc},
     thread,
@@ -37,16 +37,21 @@ pub extern "system" fn DS2SpotifyConnectBridgeStart() -> i32 {
     let started = thread::Builder::new()
         .name("DS2SpotifyConnect".to_owned())
         .spawn(|| {
+            write_status("bridge background thread started");
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build();
             match runtime {
                 Ok(runtime) => {
                     if let Err(error) = runtime.block_on(run_bridge()) {
+                        write_status(&format!("bridge stopped: {error}"));
                         log::error!("Spotify Connect bridge stopped: {error}");
                     }
                 }
-                Err(error) => log::error!("Spotify Connect runtime startup failed: {error}"),
+                Err(error) => {
+                    write_status(&format!("runtime startup failed: {error}"));
+                    log::error!("Spotify Connect runtime startup failed: {error}");
+                }
             }
             STARTED.store(false, Ordering::Release);
         })
@@ -78,26 +83,26 @@ async fn run_bridge() -> Result<(), Box<dyn Error>> {
         ..ConnectConfig::default()
     };
     let zeroconf_ips = zeroconf_ips();
-    let discovery_backend = find_discovery(None)?;
-    let mut discovery = Discovery::builder(
-        session_config.device_id.clone(),
-        session_config.client_id.clone(),
-    )
-    .name(connect_config.name.clone())
-    .device_type(connect_config.device_type)
-    .is_group(connect_config.is_group)
-    .port(CONNECT_PORT)
-    .zeroconf_ip(zeroconf_ips.clone())
-    .zeroconf_backend(discovery_backend)
-    .launch()?;
+    let (zeroconf_server, mut credentials_rx) = zeroconf::Server::start(
+        zeroconf::Config::new(
+            connect_config.name.clone(),
+            session_config.device_id.clone(),
+            session_config.client_id.clone(),
+            connect_config.device_type,
+            connect_config.is_group,
+        ),
+        CONNECT_PORT,
+    )?;
     let _mdns_advertiser = mdns::Advertiser::start(
         &connect_config.name,
         &zeroconf_ips,
         CONNECT_PORT,
     );
 
+    let _zeroconf_server = zeroconf_server;
+    write_status("discovery listener ready");
     log::info!("Spotify Connect device is ready: {}", connect_config.name);
-    while let Some(credentials) = discovery.next().await {
+    while let Some(credentials) = credentials_rx.recv().await {
         if let Err(error) = run_connect_session(
             credentials,
             &config.cache_dir,
@@ -162,4 +167,18 @@ fn zeroconf_ips() -> Vec<IpAddr> {
             _ => None,
         })
         .collect()
+}
+
+fn write_status(message: &str) {
+    let Ok(config) = BridgeConfig::fixed() else {
+        return;
+    };
+    if fs::create_dir_all(&config.cache_dir).is_err() {
+        return;
+    }
+    let path = config.cache_dir.join("bridge-status.log");
+    let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let _ = writeln!(file, "{message}");
 }
