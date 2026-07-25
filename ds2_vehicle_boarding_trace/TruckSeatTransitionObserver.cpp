@@ -35,6 +35,9 @@ const Logger* g_logger = nullptr;
 TruckUpdateFn g_original34 = nullptr;
 TruckUpdateFn g_original35 = nullptr;
 
+void __fastcall HookSlot34(uintptr_t truck, float frameDelta);
+void __fastcall HookSlot35(uintptr_t truck, float frameDelta);
+
 bool ReadSnapshot(uintptr_t truck, SeatSnapshot& state)
 {
     if (!VehicleSeatTrace::ReadValue(truck + 0x12F8, state.controller) ||
@@ -69,11 +72,16 @@ bool CompareExchangeRequest(
     }
 }
 
-bool TryCancelFrontRequest(uintptr_t truck, const SeatSnapshot& state)
+bool IsBoardingRequest(int32_t state)
+{
+    return state >= 3 && state <= 6;
+}
+
+bool TryCancelBoardingRequest(uintptr_t truck, const SeatSnapshot& state)
 {
     if (!FastBoardingSession::AllComponentsReady() ||
         state.currentState != 0 ||
-        (state.requestedState != 3 && state.requestedState != 4) ||
+        !IsBoardingRequest(state.requestedState) ||
         !state.controller || !state.controllerPlayback ||
         state.controllerPlaybackState != 2) {
         return false;
@@ -87,7 +95,7 @@ bool TryCancelFrontRequest(uintptr_t truck, const SeatSnapshot& state)
     if (g_suppressedSession.exchange(
             session, std::memory_order_acq_rel) != session) {
         std::ostringstream oss;
-        oss << "FastBoarding TruckSeat front request suppressed"
+        oss << "FastBoarding TruckSeat boarding request suppressed"
             << " session=" << session
             << " truck=" << VehicleSeatTrace::Hex(truck)
             << " current=" << state.currentState
@@ -137,7 +145,7 @@ void ObserveUpdate(
 {
     SeatSnapshot before = {};
     const bool relevant = IsBoundTruck(truck) && ReadSnapshot(truck, before);
-    if (relevant && TryCancelFrontRequest(truck, before))
+    if (relevant && TryCancelBoardingRequest(truck, before))
         ReadSnapshot(truck, before);
     original(truck, frameDelta);
     if (!relevant)
@@ -160,6 +168,38 @@ void __fastcall HookSlot35(uintptr_t truck, float frameDelta)
     ObserveUpdate(kUpdateSlot35, g_original35, truck, frameDelta);
 }
 
+bool TryInstallCompatibleVtable(uintptr_t vtable)
+{
+    uintptr_t target34 = 0;
+    uintptr_t target35 = 0;
+    const uintptr_t slot34 = vtable + kUpdateSlot34 * sizeof(uintptr_t);
+    const uintptr_t slot35 = vtable + kUpdateSlot35 * sizeof(uintptr_t);
+    if (!VehicleSeatTrace::ReadValue(slot34, target34) ||
+        !VehicleSeatTrace::ReadValue(slot35, target35)) {
+        return false;
+    }
+    if (target34 == reinterpret_cast<uintptr_t>(&HookSlot34) &&
+        target35 == reinterpret_cast<uintptr_t>(&HookSlot35)) {
+        return true;
+    }
+    if (target34 != reinterpret_cast<uintptr_t>(g_original34) ||
+        target35 != reinterpret_cast<uintptr_t>(g_original35)) {
+        return false;
+    }
+    if (!VtableLocator::SwapSlot(
+            slot34, target34, reinterpret_cast<void*>(&HookSlot34))) {
+        return false;
+    }
+    if (VtableLocator::SwapSlot(
+            slot35, target35, reinterpret_cast<void*>(&HookSlot35))) {
+        return true;
+    }
+    VtableLocator::SwapSlot(
+        slot34, reinterpret_cast<uintptr_t>(&HookSlot34),
+        reinterpret_cast<void*>(target34));
+    return false;
+}
+
 } // namespace
 
 bool PrepareProcessAttach(uintptr_t rideOn)
@@ -175,8 +215,10 @@ bool PrepareProcessAttach(uintptr_t rideOn)
         !VehicleSeatTrace::ReadValue(player + 0x80, truck) || !truck ||
         !VehicleSeatTrace::ReadValue(truck, vfptr))
         return false;
-    if (vfptr != g_vtable.load(std::memory_order_acquire))
+    if (vfptr != g_vtable.load(std::memory_order_acquire) &&
+        !TryInstallCompatibleVtable(vfptr)) {
         return true;
+    }
 
     const uint32_t session = FastBoardingSession::CurrentSessionId();
     if (g_boundTruck.load(std::memory_order_relaxed) == truck &&
@@ -184,11 +226,11 @@ bool PrepareProcessAttach(uintptr_t rideOn)
         SeatSnapshot state = {};
         if (!ReadSnapshot(truck, state))
             return false;
-        TryCancelFrontRequest(truck, state);
+        TryCancelBoardingRequest(truck, state);
         if (!ReadSnapshot(truck, state))
             return false;
-        return state.currentState != 3 && state.currentState != 4 &&
-            state.requestedState != 3 && state.requestedState != 4;
+        return !IsBoardingRequest(state.currentState) &&
+            !IsBoardingRequest(state.requestedState);
     }
     g_boundTruck.store(truck, std::memory_order_relaxed);
     g_boundSession.store(session, std::memory_order_release);
@@ -196,11 +238,11 @@ bool PrepareProcessAttach(uintptr_t rideOn)
     SeatSnapshot state = {};
     if (!ReadSnapshot(truck, state))
         return false;
-    TryCancelFrontRequest(truck, state);
+    TryCancelBoardingRequest(truck, state);
     if (!ReadSnapshot(truck, state))
         return false;
-    return state.currentState != 3 && state.currentState != 4 &&
-        state.requestedState != 3 && state.requestedState != 4;
+    return !IsBoardingRequest(state.currentState) &&
+        !IsBoardingRequest(state.requestedState);
 }
 
 bool TryInstall(HMODULE gameModule, const Logger& logger)

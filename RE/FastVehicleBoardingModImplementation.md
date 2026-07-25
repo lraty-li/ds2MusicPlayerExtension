@@ -201,7 +201,6 @@ bit 0。该分支直接读取 `DSPlayerEntity+0x100` 的当前 world basis，把
 
 - 同一 RideOn 会话已经完成原生 completion Update 并进入 Drive；
 - Drive 后的玩家姿态已经由 ModifyAnimatedPose 原生调用提交；
-- action hash 属于静态闭合的十六个上车请求 hash；
 - active、未 finished、variant 稳定；
 - 首帧 handshake 已结束，没有末帧保持或 variant-advance flags；
 - elapsed、duration 和每次推进量均为有限值，elapsed 严格前进；

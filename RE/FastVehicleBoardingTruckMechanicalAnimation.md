@@ -24,7 +24,7 @@ RideOnSeatState_ApplyApproachState
 玩家上车、座椅回升”被压成一个短促的下降/回位中间姿态，但没有被真正移除。
 
 当前实现只在经过 RTTI、会话、当前状态和控制器播放状态联合验证后，于车辆消费前
-取消正前方 pending `3/4`。车辆保持原生基线状态 `0`，常规车辆更新、玩家挂接、
+取消 pending 的上车状态 `3..6`。车辆保持原生基线状态 `0`，常规车辆更新、玩家挂接、
 ActionGraph、RideOn、CutInCamera 和 Drive 链仍分别按各自的正常接口完成。
 
 ## 调查方法
@@ -134,21 +134,22 @@ void Function(DSVehicleTruck* truck, float deltaSeconds);
 生产实现位于 `TruckSeatTransitionObserver.cpp`，使用两层保护：
 
 1. `RideOn ProcessVehicleAttach` 原函数返回后，从 `rideOn+0x98` 取得玩家，再从
-   `player+0x80` 取得已挂接车辆，并把车辆主 vfptr 与 RTTI 定位到的
-   `DSVehicleTruck` primary vtable 严格比较。
-2. truck slot 34/35 wrapper 在消费者调用原函数前再次执行相同会话与车辆校验，覆盖
-   写入线程和消费线程之间的竞争窗口。
+   `player+0x80` 取得已挂接车辆。主 vfptr 与 RTTI 定位的 `DSVehicleTruck` primary
+   vtable 不同的情况下，只有 slot 34/35 仍精确指向已验证的两个原实现时，才为该 vtable
+   安装同一 wrapper；重写任一 slot 的未知类型不会被按 truck 布局处理。
+2. 原始 primary vtable 与上述兼容 vtable 都由 slot 34/35 wrapper 在消费者调用原函数前
+   再次执行同一会话与车辆校验，覆盖写入线程和消费线程之间的竞争窗口。
 
-只有以下条件全部成立时才以原子 compare-exchange 把 request 从 `3/4` 改为 `-1`：
+只有以下条件全部成立时才以原子 compare-exchange 把 request 从 `3..6` 改为 `-1`：
 
 - 当前 RideOn 属于同一个五秒有界快速上车会话；
-- 车辆是完整 `DSVehicleTruck` 对象；
+- 车辆是 `DSVehicleTruck` primary vtable，或 slot 34/35 复用已验证原实现的兼容 vtable；
 - current 为原生基线状态 `0`；
-- request 是正前方机械上车状态 `3` 或 `4`；
+- request 是已验证的车辆侧上车状态 `3`、`4`、`5` 或 `6`；
 - `DSSimpleAnimationComponent` 和 controller playback 均存在；
 - controller playback state 为原生完成值 `2`。
 
-静态分析确认取消 pending 后只会跳过 `PlayState(3/4)` 和 current 写入；slot 34/35
+静态分析确认取消 pending 后只会跳过 `PlayState(3..6)` 和 current 写入；slot 34/35
 后续的完成检查、pose 更新和完整车辆更新仍然执行。若字段读取、RTTI、会话、播放态
 或 compare-exchange 任一项失败，机械座椅组件不会声明本次准备完成，其他快速上车层
 也不会进入功能路径。
@@ -184,6 +185,24 @@ CutIn finished、CutIn Deactivate、下车和 DLL 卸载均正常。同步录屏
 最终实现还要求六个快速上车组件全部 ready 才允许取消 request。加入该失效保护后的
 相同二进制完整重跑 PASS；最终日志再次确认 request `3` 在 current `0`、controller
 playback state `2` 时被取消，且下车状态 `7`、CutIn 清理和 DLL 卸载正常。
+
+## 装甲卡车侧面上车验证
+
+2026-07-25 的实机部署日志验证了用户所说的“装甲版卡车侧面攀爬”路径。两个侧面
+会话分别在原消费者执行前出现：
+
+```text
+session=1 current=0 request=5 playbackState=2
+session=2 current=0 request=6 playbackState=2
+```
+
+两次 request 都由生产 wrapper 原子改为 `-1`，没有进入车辆机械上车 clip。对应的
+玩家 descriptor 分别命中 leaf 1 和 leaf 4，均由 `timeScale=1` 加速到 `512`；原生
+RideOn 完成事件在 elapsed `0.0417084s` 进入 Drive。两个 CutIn 分别由原 playback
+推进至 finished（hash `0x53758BED`、`0x6F53F3A5`），并由原 Deactivate 清理完成。
+
+因此该反馈的直接根因是旧实现只取消正前方 `3/4`，没有覆盖已验证的侧面上车状态
+`5/6`；武器装备本身不是独立的生产判定条件。
 
 ## 已排除的错误路径
 

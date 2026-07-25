@@ -5,7 +5,6 @@
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
-#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -23,11 +22,6 @@ constexpr uint32_t kAdvanceVariantFlag = 0x01000000;
 constexpr uint32_t kUnsupportedFlags =
     kHoldLastFrameFlag | kAdvanceVariantFlag;
 constexpr uint32_t kMaximumExtraUpdates = 768;
-constexpr std::array<uint32_t, 16> kBoardingActionHashes = {
-    0x75B4F600, 0x3897A3D5, 0x3DFD6EFC, 0x01DB16B4,
-    0x6F53F3A5, 0x53758BED, 0x11A19E23, 0x4665CE53,
-    0x7A43B61B, 0x5A9F4628, 0x0D5B1658, 0x317D6E10,
-    0x1AC30DFF, 0x5D599AE0, 0x0A9DCA90, 0x36BBB2D8};
 
 using PlaybackFn = void(__fastcall*)(uintptr_t camera, float frameDelta);
 using DeactivateFn = void(__fastcall*)(uintptr_t camera);
@@ -67,20 +61,10 @@ bool ReadState(uintptr_t camera, PlaybackState& state)
         VehicleSeatTrace::ReadValue(camera + 0x258, state.switchPending);
 }
 
-bool IsBoardingHash(uint32_t hash)
-{
-    for (const uint32_t candidate : kBoardingActionHashes) {
-        if (candidate == hash)
-            return true;
-    }
-    return false;
-}
-
 bool CanFastForward(const PlaybackState& state)
 {
     return state.active && !state.finished && !state.controllerActive &&
         !state.switchPending && state.variant &&
-        IsBoardingHash(state.actionHash) &&
         !(state.flags & kUnsupportedFlags) &&
         state.duration > state.elapsed && state.duration < 30.0f;
 }
@@ -161,7 +145,6 @@ void __fastcall HookDeactivate(uintptr_t camera)
 {
     PlaybackState before = {};
     const bool relevant = ReadState(camera, before) && before.finished &&
-        IsBoardingHash(before.actionHash) &&
         FastBoardingSession::IsActiveCutInSession(
             camera, before.actionHash);
     g_originalDeactivate(camera);
