@@ -93,16 +93,22 @@ these repository settings first:
 ```text
 Secret:   NEXUSMODS_API_KEY
 Variable: NEXUSMODS_FILE_ID
+Variable: NEXUSMODS_DIAGNOSTIC_FILE_ID
 ```
 
 `NEXUSMODS_FILE_ID` is the existing Nexus Mods v3 mod-file ID used by
 `POST /mod-files/{id}/versions`; it is not the game mod page number. Create the
 Nexus Mods mod page and first file manually, then use that file ID for automated
-version uploads.
+stable-version uploads. `NEXUSMODS_DIAGNOSTIC_FILE_ID` is a second, manually
+created Nexus file for the Spotify diagnostic package (ID `7709289` at the time
+this was documented). Set that Nexus file's category to Optional files.
 
-After those values are set, pushing a `v*` tag publishes both the GitHub Release
-and a Nexus Mods file version. For a manual workflow run, set
-`publish_nexusmods` to `true`.
+After those values are set, a normal `v*` tag publishes the stable package to
+GitHub Releases and the Nexus Main file. A tag ending in `-diagnose`, such as
+`v1.1-diagnose`, builds the diagnostic Release package and uploads only to the
+Nexus Optional file. It does not change the stable Nexus download. For an
+untagged diagnostic build, run the workflow manually with
+`release_channel = diagnostic` and `publish_nexusmods = true`.
 
 ## Credit
 

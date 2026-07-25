@@ -1,0 +1,18 @@
+DS2MusicPlayer Spotify 切歌诊断包
+
+此包只用于收集 Spotify 切歌崩溃的信息。它仍是 Release 构建，
+但会记录额外的封面资源切换信息，并在未处理异常时尝试生成小型转储。
+
+请勿与正式版同时安装。安装此包会替换游戏目录中的同名文件。
+
+复现步骤：
+1. 关闭游戏，安装此包并加载 browser-extension。
+2. 使用 Spotify 播放，进入游戏音乐播放器，并触发一次会导致问题的切歌。
+3. 崩溃后不要立即重新启动游戏。先复制游戏根目录中的：
+   log.txt
+   ds2_dll_music_resource.log
+   DS2MusicPlayer-diag-*.txt（若存在）
+   DS2MusicPlayer-diag-*.dmp（若存在）
+4. 将这些文件打包，并附上复现时的准确时间和 Spotify 曲目信息。
+
+诊断文件可能包含内存地址和游戏安装路径；请只发送给本 Mod 的维护者。

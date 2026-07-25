@@ -13,6 +13,46 @@ namespace
 uint64_t g_uploadedResource = 0;
 unsigned int g_uploadedVersion = 0;
 unsigned int g_failedVersion = 0;
+
+void LogDiagnosticDecision(const char* decision, uint64_t resource,
+    unsigned int version, const Logger& logger)
+{
+#if defined(DS2_DIAGNOSTIC)
+    static std::string lastDecision;
+    static uint64_t lastResource = 0;
+    static unsigned int lastVersion = 0;
+    static uint64_t lastUploadedResource = 0;
+    static unsigned int lastUploadedVersion = 0;
+    static unsigned int lastFailedVersion = 0;
+    if (lastDecision == decision && lastResource == resource && lastVersion == version
+        && lastUploadedResource == g_uploadedResource
+        && lastUploadedVersion == g_uploadedVersion
+        && lastFailedVersion == g_failedVersion)
+    {
+        return;
+    }
+
+    std::ostringstream oss;
+    oss << "diag jacket upload " << decision
+        << " resource=" << HookUtils::HexU64(resource)
+        << " version=" << version
+        << " uploadedResource=" << HookUtils::HexU64(g_uploadedResource)
+        << " uploadedVersion=" << g_uploadedVersion
+        << " failedVersion=" << g_failedVersion;
+    logger.Log(oss.str());
+    lastDecision = decision;
+    lastResource = resource;
+    lastVersion = version;
+    lastUploadedResource = g_uploadedResource;
+    lastUploadedVersion = g_uploadedVersion;
+    lastFailedVersion = g_failedVersion;
+#else
+    (void)decision;
+    (void)resource;
+    (void)version;
+    (void)logger;
+#endif
+}
 } // namespace
 
 namespace JacketUploadPipeline
@@ -22,22 +62,28 @@ bool DecodeAndUpload(const std::vector<uint8_t>& buffer, unsigned int version,
 {
     if (buffer.empty() || written != buffer.size() || written > kMaxJacketBytes)
     {
+        LogDiagnosticDecision("rejected-input", 0, version, logger);
         return false;
     }
 
     const uint64_t resource = CustomJacketInternal::GetActiveCustomJacketD3D12Resource();
     if (!resource)
     {
+        LogDiagnosticDecision("deferred-no-resource", resource, version, logger);
         return false;
     }
     if (resource == g_uploadedResource && version == g_uploadedVersion)
     {
+        LogDiagnosticDecision("skipped-already-uploaded", resource, version, logger);
         return true;
     }
     if (version == g_failedVersion)
     {
+        LogDiagnosticDecision("skipped-known-failure", resource, version, logger);
         return false;
     }
+
+    LogDiagnosticDecision("begin", resource, version, logger);
 
     std::vector<uint8_t> rgba;
     unsigned int sourceW = 0;
@@ -72,6 +118,7 @@ bool DecodeAndUpload(const std::vector<uint8_t>& buffer, unsigned int version,
     {
         g_failedVersion = version;
     }
+    LogDiagnosticDecision(ok ? "complete" : "failed", resource, version, logger);
     return ok;
 }
 } // namespace JacketUploadPipeline

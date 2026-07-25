@@ -5,7 +5,8 @@ param(
     [string]$PackageVersion = "",
     [switch]$SkipBuild,
     [switch]$SkipAsiLoaderDownload,
-    [switch]$AllowMissingBc7e
+    [switch]$AllowMissingBc7e,
+    [switch]$Diagnostic
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +72,9 @@ function Invoke-Build([string]$Solution, [string]$ProjectOutDir) {
     $msbuild = Find-MSBuild
     New-Item -ItemType Directory -Path $ProjectOutDir -Force | Out-Null
     $properties = "Configuration=$Configuration;Platform=$Platform;OutDir=$ProjectOutDir\"
+    if ($Diagnostic) {
+        $properties += ";Ds2Diagnostic=true"
+    }
     & $msbuild $Solution `
         "/p:$properties" `
         /m /nologo /v:q
@@ -160,6 +164,14 @@ function Write-InstallReadme {
         (Join-Path $stageRoot "README.txt")
 }
 
+function Write-DiagnosticReadme {
+    if (-not $Diagnostic) {
+        return
+    }
+    Copy-RequiredFile (Join-Path $repoRoot "packaging\DIAGNOSTIC.txt") `
+        (Join-Path $stageRoot "DIAGNOSTIC.txt")
+}
+
 New-CleanDirectory $stageRoot
 New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -186,11 +198,15 @@ if (-not $SkipAsiLoaderDownload) {
 
 Copy-BrowserExtension
 Write-InstallReadme
+Write-DiagnosticReadme
 
 $stamp = if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     Get-Date -Format "yyyyMMdd-HHmmss"
 } else {
     $PackageVersion
+}
+if ($Diagnostic -and $stamp -notmatch "(?i)(^|[-_.])diag") {
+    $stamp = "$stamp-diag"
 }
 $zipPath = Join-Path $OutputDir "$packageName-$stamp.zip"
 if (Test-Path $zipPath) {

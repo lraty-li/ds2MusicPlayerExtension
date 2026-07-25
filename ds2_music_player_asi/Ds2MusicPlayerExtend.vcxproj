@@ -111,6 +111,11 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Ds2Diagnostic)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>DS2_DIAGNOSTIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CustomJacketImageLayout.h" />
     <ClInclude Include="CustomJacketInternal.h" />

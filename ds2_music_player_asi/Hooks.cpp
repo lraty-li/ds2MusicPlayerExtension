@@ -11,6 +11,10 @@
 #include "RuntimeEntryTitleRefresh.h"
 #include "SourceAudioBootstrap.h"
 
+#if defined(DS2_DIAGNOSTIC)
+#include <dbghelp.h>
+#endif
+
 #include <exception>
 #include <sstream>
 #include <string>
@@ -20,6 +24,88 @@ namespace
 constexpr wchar_t kExpectedModuleName[] = L"DS2.exe";
 Logger g_dllLogger("DllMain");
 Logger g_initLogger("Init");
+
+#if defined(DS2_DIAGNOSTIC)
+volatile LONG g_writingCrashDump = 0;
+
+std::wstring MakeDiagnosticPath(const wchar_t* extension)
+{
+    const std::wstring logPath = Logger::GetLogPath();
+    const size_t slash = logPath.find_last_of(L"\\/");
+    const std::wstring directory = slash == std::wstring::npos ? L"" :
+        logPath.substr(0, slash + 1);
+    SYSTEMTIME time = {};
+    GetLocalTime(&time);
+    wchar_t name[96] = {};
+    swprintf_s(name, L"DS2MusicPlayer-diag-%04u%02u%02u-%02u%02u%02u.%03u%s",
+        time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+        time.wSecond, time.wMilliseconds, extension);
+    return directory + name;
+}
+
+void WriteCrashSummary(EXCEPTION_POINTERS* exceptionInfo, const std::wstring& path,
+    const std::wstring& dumpPath)
+{
+    const DWORD code = exceptionInfo && exceptionInfo->ExceptionRecord ?
+        exceptionInfo->ExceptionRecord->ExceptionCode : 0;
+    const uintptr_t address = exceptionInfo && exceptionInfo->ExceptionRecord ?
+        reinterpret_cast<uintptr_t>(exceptionInfo->ExceptionRecord->ExceptionAddress) : 0;
+    const uintptr_t gameBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    const uintptr_t rva = address >= gameBase ? address - gameBase : 0;
+    char text[512] = {};
+    const int textBytes = sprintf_s(text,
+        "DS2MusicPlayer diagnostic crash\r\nexception=0x%08lX\r\naddress=0x%p\r\ngameRva=0x%llX\r\ndump=%ls\r\n",
+        code, reinterpret_cast<void*>(address), static_cast<unsigned long long>(rva),
+        dumpPath.c_str());
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE)
+    {
+        DWORD written = 0;
+        if (textBytes > 0) WriteFile(file, text, static_cast<DWORD>(textBytes), &written, nullptr);
+        CloseHandle(file);
+    }
+}
+
+LONG WINAPI DiagnosticUnhandledExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
+{
+    if (InterlockedExchange(&g_writingCrashDump, 1) != 0) return EXCEPTION_CONTINUE_SEARCH;
+
+    const std::wstring textPath = MakeDiagnosticPath(L".txt");
+    const std::wstring dumpPath = MakeDiagnosticPath(L".dmp");
+    WriteCrashSummary(exceptionInfo, textPath, dumpPath);
+
+    HMODULE dbgHelp = LoadLibraryW(L"DbgHelp.dll");
+    if (dbgHelp)
+    {
+        using WriteDumpFn = BOOL(WINAPI*)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE,
+            const MINIDUMP_EXCEPTION_INFORMATION*, const MINIDUMP_USER_STREAM_INFORMATION*,
+            const MINIDUMP_CALLBACK_INFORMATION*);
+        const auto writeDump = reinterpret_cast<WriteDumpFn>(
+            GetProcAddress(dbgHelp, "MiniDumpWriteDump"));
+        HANDLE dump = CreateFileW(dumpPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (writeDump && dump != INVALID_HANDLE_VALUE)
+        {
+            MINIDUMP_EXCEPTION_INFORMATION info = {};
+            info.ThreadId = GetCurrentThreadId();
+            info.ExceptionPointers = exceptionInfo;
+            info.ClientPointers = FALSE;
+            writeDump(GetCurrentProcess(), GetCurrentProcessId(), dump,
+                MiniDumpNormal, &info, nullptr, nullptr);
+        }
+        if (dump != INVALID_HANDLE_VALUE) CloseHandle(dump);
+        FreeLibrary(dbgHelp);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void InstallDiagnosticCrashHandler()
+{
+    SetUnhandledExceptionFilter(DiagnosticUnhandledExceptionFilter);
+    g_initLogger.Log("diagnostic build enabled; unhandled-exception dump handler installed");
+}
+#endif
 
 bool IsCurrentProcessDs2()
 {
@@ -63,6 +149,9 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
 
     g_dllLogger.Log("DLL_PROCESS_ATTACH");
     g_initLogger.Log("begin stream source plugin registration");
+#if defined(DS2_DIAGNOSTIC)
+    InstallDiagnosticCrashHandler();
+#endif
 
     try
     {

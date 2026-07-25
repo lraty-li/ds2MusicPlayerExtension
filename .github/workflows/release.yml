@@ -7,6 +7,14 @@ on:
         description: "Package version suffix, for example v0.1.0"
         required: false
         type: string
+      release_channel:
+        description: "Nexus download to update"
+        required: true
+        type: choice
+        options:
+          - stable
+          - diagnostic
+        default: stable
       publish_nexusmods:
         description: "Upload this package to Nexus Mods"
         required: false
@@ -35,20 +43,38 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.package_version }}"
+          $channel = if ("${{ github.ref_type }}" -eq "tag" -and
+              "${{ github.ref_name }}" -match "(?i)-diagnose$") {
+            "diagnostic"
+          } elseif ("${{ github.ref_type }}" -eq "tag") {
+            "stable"
+          } elseif ("${{ github.event.inputs.release_channel }}" -eq "diagnostic") {
+            "diagnostic"
+          } else {
+            "stable"
+          }
           if ([string]::IsNullOrWhiteSpace($version)) {
             if ("${{ github.ref_type }}" -eq "tag") {
               $version = "${{ github.ref_name }}"
             } else {
-              $version = "manual-${{ github.run_number }}"
+              $version = "$channel-${{ github.run_number }}"
             }
           }
+          if ($channel -eq "diagnostic" -and $version -notmatch "(?i)(^|[-_.])diag") {
+            $version = "$version-diag"
+          }
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "channel=$channel" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Build package
         id: package
         shell: pwsh
         run: |
-          ./package-release.ps1 -PackageVersion "${{ steps.version.outputs.value }}"
+          if ("${{ steps.version.outputs.channel }}" -eq "diagnostic") {
+            ./package-release.ps1 -PackageVersion "${{ steps.version.outputs.value }}" -Diagnostic
+          } else {
+            ./package-release.ps1 -PackageVersion "${{ steps.version.outputs.value }}"
+          }
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -70,21 +96,33 @@ jobs:
         env:
           NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
           NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
+          NEXUSMODS_DIAGNOSTIC_FILE_ID: ${{ vars.NEXUSMODS_DIAGNOSTIC_FILE_ID }}
         run: |
           $manualPublish = "${{ github.event.inputs.publish_nexusmods }}" -eq "true"
           $tagPublish = "${{ github.ref_type }}" -eq "tag"
           $requested = $manualPublish -or $tagPublish
           $hasApiKey = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_API_KEY)
-          $hasFileId = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_FILE_ID)
+          $channel = "${{ steps.version.outputs.channel }}"
+          $targetFileId = if ($channel -eq "diagnostic") {
+            $env:NEXUSMODS_DIAGNOSTIC_FILE_ID
+          } else {
+            $env:NEXUSMODS_FILE_ID
+          }
+          $hasFileId = -not [string]::IsNullOrWhiteSpace($targetFileId)
           $configured = $hasApiKey -and $hasFileId
           if ($manualPublish -and -not $configured) {
-            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or NEXUSMODS_FILE_ID is missing."
+            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or the $channel file ID is missing."
           }
           if ($tagPublish -and -not $configured) {
-            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and NEXUSMODS_FILE_ID."
+            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and the stable file ID."
           }
           $enabled = $requested -and $configured
           "enabled=$($enabled.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "mod_file_id=$targetFileId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "file_category=$(if ($channel -eq 'diagnostic') { 'optional' } else { 'main' })" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "display_name=DS2MusicPlayer ${{ steps.version.outputs.value }} ($channel)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Publish Nexus Mods Release
@@ -96,8 +134,9 @@ jobs:
         run: |
           ./tools/publish-nexusmods.ps1 `
             -FilePath "${{ steps.package.outputs.zip_path }}" `
-            -ModFileId "${{ vars.NEXUSMODS_FILE_ID }}" `
+            -ModFileId "${{ steps.nexusmods.outputs.mod_file_id }}" `
             -Version "${{ steps.version.outputs.value }}" `
-            -DisplayName "DS2MusicPlayer ${{ steps.version.outputs.value }}" `
-            -Description "Automated release from GitHub run ${{ github.run_id }}" `
+            -DisplayName "${{ steps.nexusmods.outputs.display_name }}" `
+            -Description "Automated ${{ steps.version.outputs.channel }} release from GitHub run ${{ github.run_id }}" `
+            -FileCategory "${{ steps.nexusmods.outputs.file_category }}" `
             -ArchiveExistingFile
