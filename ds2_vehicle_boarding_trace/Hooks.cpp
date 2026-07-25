@@ -11,6 +11,7 @@
 #include "MoverRootMotionObserver.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
+#include "RideOffVtableTrace.h"
 #include "TruckSeatTransitionObserver.h"
 
 namespace {
@@ -81,6 +82,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("FastBoarding CutIn wrapper failed");
     if (!MoverRootMotionObserver::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding Mover observer failed");
+    if (!RideOffVtableTrace::TryInstall(gameModule, g_logger))
+        g_logger.Log("RideOff vtable observer failed");
 
     const bool ok = FullGameBoardingFastForward::TryInstall(g_logger);
     g_logger.Log(ok ? "hooks installed" : "hook install FAILED");

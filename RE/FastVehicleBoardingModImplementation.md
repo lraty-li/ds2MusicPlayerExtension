@@ -250,3 +250,39 @@ PASS: fast boarding, Drive, dismount, and quit confirmed
 当前测试脚本控制台仍沿用 `left-front` descriptor 文案；本轮运行时实际命中
 `approach=2`、leaf `8`、caller RVA `0x3607C1A` 和 action hash `0x3897A3D5`，因此
 知识结论按正前方路径记录，不按控制台静态标签归类。
+
+## RideOff 下车跳过
+
+下车不是 RideOn 完成事件的反向复用。`DSPlayerVehicleRideOffState` 的 primary vtable
+三个相关槽已静态确认：slot 11 为 Enter，slot 13 为每帧 Update，slot 14 为
+RunPresentation。slot 13 只累计下车状态时间并驱动 detach/progress；slot 14 创建下车
+CutIn、维护展示状态，然后调用 runtime 终结器。
+
+终结器 `sub_1410103D0` 的有效条件是：
+
+```text
+(runtime+0x7380 的 bit 30 已置位) || a3 != 0
+```
+
+随后它查询 `a1[11]` 动画组件的 vtable `+0x3E0`。查询通过后，终结器由原生代码请求
+动画状态 1、执行组件复位，并完成运行时展示清理。参数 `a2` 不是强制开关；它对应
+RunPresentation 中的 `runtimeMode == 3` 特殊路径。参数 `a3` 才是 force。
+
+生产实现先完整执行一次原 RunPresentation，使原生下车 CutIn/action 已建立；随后仅在
+当前 RideOff 会话内让该动画组件的就绪查询返回 true，并以
+`(runtime, runtimeMode == 3, 1)` 调用经唯一签名解析的终结器。组件状态 1、机械座位
+状态 7 和 CutIn 的完成/Deactivate 均仍由原函数处理。会话外的同一共享 vtable 始终调用
+原查询。
+
+最终 `test_boarding.ps1` 运行结果：
+
+```text
+RideOff state 4                         elapsedMs=0
+RideOff state 1（终结器）               elapsedMs=16
+FastBoarding CutIn playback finished    native finished=1
+PASS: fast boarding, Drive, dismount, and quit confirmed
+```
+
+脚本同时读取 `elapsedMs` 并要求其不超过 750ms，避免仅凭“日志最终出现”产生假通过。
+本轮 200ms、700ms 和 1700ms 截图已保存为 `dismount_*.png`；200ms/700ms 车座已空，
+1700ms 角色处于车外站立状态。进程以正常 `DLL_PROCESS_DETACH` 结束。

@@ -3,6 +3,8 @@
 
 #include "FastBoardingSession.h"
 #include "PatternScan.h"
+#include "RideOffDescriptorTrace.h"
+#include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 
 #include <array>
@@ -139,12 +141,21 @@ void __fastcall HookEvaluateDescriptor(
 {
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     const uint32_t leaf = LeafMask(caller);
+    const uint32_t rideOffSession = RideOffSession::CurrentId();
     uint32_t claimedSession = 0;
     const bool eligible = leaf && mode == 0 && timeScale == 1.0f &&
         evaluatePose == 1 && FastBoardingSession::CanFastForwardAnimation() &&
         ClaimLeafForSession(leaf, descriptor, claimedSession);
     const float effectiveScale = eligible ? kFastTimeScale : timeScale;
     g_original(output, descriptor, mode, effectiveScale, evaluatePose);
+    if (rideOffSession) {
+        ResultState observed = {};
+        ReadResult(output, observed);
+        RideOffDescriptorTrace::Observe(
+            *g_logger, rideOffSession, reinterpret_cast<uintptr_t>(g_fullGame),
+            caller, descriptor, mode, timeScale, evaluatePose, observed.duration,
+            observed.syncDuration, observed.reachedEnd);
+    }
     if (!eligible)
         return;
 

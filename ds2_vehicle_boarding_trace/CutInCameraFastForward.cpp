@@ -2,6 +2,7 @@
 #include "CutInCameraFastForward.h"
 
 #include "FastBoardingSession.h"
+#include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
@@ -92,8 +93,12 @@ void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
     g_original(camera, frameDelta);
 
     PlaybackState state = {};
+    const bool fastBoarding =
+        FastBoardingSession::ShouldFastForwardCutIn(camera);
+    const bool fastRideOff = !fastBoarding &&
+        RideOffSession::ShouldFastForwardCutIn(before.actionHash);
     if (!haveBefore || !ReadState(camera, state) ||
-        !FastBoardingSession::ShouldFastForwardCutIn(camera) ||
+        (!fastBoarding && !fastRideOff) ||
         before.firstPostUpdatePending ||
         state.firstPostUpdatePending ||
         !CanFastForward(state) || state.variant != before.variant ||
@@ -115,8 +120,10 @@ void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
     if (wantedValue > kMaximumExtraUpdates)
         wantedValue = kMaximumExtraUpdates;
     const uint32_t wanted = static_cast<uint32_t>(wantedValue);
-    if (!FastBoardingSession::MarkCutInFastForwarded(
-            camera, state.actionHash)) {
+    const bool claimed = fastBoarding ?
+        FastBoardingSession::MarkCutInFastForwarded(camera, state.actionHash) :
+        RideOffSession::MarkCutInFastForwarded(state.actionHash);
+    if (!claimed) {
         return;
     }
 

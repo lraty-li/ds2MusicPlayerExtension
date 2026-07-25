@@ -4,7 +4,12 @@ $gameDir = "F:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH"
 $logPath = Join-Path $gameDir "log.txt"
 $inputSource = Join-Path $PSScriptRoot "tools\BoardingTestInput.cs"
 Add-Type -Path $inputSource
-Add-Type -AssemblyName System.Drawing.Common
+try {
+    Add-Type -AssemblyName System.Drawing.Common -ErrorAction Stop
+}
+catch {
+    Add-Type -AssemblyName System.Drawing
+}
 $SI = [BoardingTestInput]
 
 Write-Host "=== DS2 Fast Boarding Mod Test ==="
@@ -102,7 +107,6 @@ function Wait-LogLine {
     }
     return $false
 }
-
 function Send-GameKey {
     param([UInt16]$Scan, [string]$Name, [int]$HoldMs = 60)
     Assert-GameAlive "sending $Name"
@@ -254,8 +258,23 @@ foreach ($capture in @(
 Wait-GameSeconds "Fast Drive settle" 1
 [void](Capture-GameWindow (Join-Path $captureDir "drive_settled.png"))
 
+$dismountStartLine = (Get-LogLines).Count
 Send-GameKey 0x21 "F (DISMOUNT)"
-Wait-GameSeconds "Native dismount settle" 7
+if (!(Wait-LogLine "RideOff animation state requested=1" 750 `
+        "accelerated RideOff completion" $dismountStartLine)) {
+    Stop-FailedTest "RideOff animation did not complete within 750ms"
+}
+$rideOffLine = Get-LogLines | Where-Object { $_.Contains("RideOff animation state requested=1") } | Select-Object -Last 1
+if ($rideOffLine -notmatch 'elapsedMs=(\d+)' -or [int]$Matches[1] -gt 750) { Stop-FailedTest "RideOff completion timing was invalid" }
+foreach ($capture in @(
+    @{ Name = "dismount_0200ms.png"; Delay = 200 },
+    @{ Name = "dismount_0700ms.png"; Delay = 500 },
+    @{ Name = "dismount_1700ms.png"; Delay = 1000 }
+)) {
+    Start-Sleep -Milliseconds $capture.Delay
+    [void](Capture-GameWindow (Join-Path $captureDir $capture.Name))
+}
+Wait-GameSeconds "Native dismount settle" 5
 [void](Capture-GameWindow (Join-Path $captureDir "dismount1_settled.png"))
 
 for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {

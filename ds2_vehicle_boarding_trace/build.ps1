@@ -6,10 +6,29 @@ param(
 
 $projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $vcxproj = Join-Path $projectDir "ds2_vehicle_boarding_trace.vcxproj"
-$msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+$vswhere = Join-Path ${env:ProgramFiles(x86)} `
+    "Microsoft Visual Studio\Installer\vswhere.exe"
+$msbuild = $null
 
-if (!(Test-Path $msbuild)) {
-    Write-Host "MSBuild not found at $msbuild"
+if (Test-Path $vswhere) {
+    $installRoot = (& $vswhere -latest -products * `
+        -property installationPath | Select-Object -First 1).Trim()
+    if ($installRoot) {
+        $candidate = Join-Path $installRoot "MSBuild\Current\Bin\MSBuild.exe"
+        if (Test-Path $candidate) {
+            $msbuild = $candidate
+        }
+    }
+}
+
+if (!$msbuild) {
+    Write-Host "MSBuild not found through vswhere at $vswhere"
+    exit 1
+}
+
+$vcvars = Join-Path $installRoot "VC\Auxiliary\Build\vcvars64.bat"
+if ($Platform -ne "x64" -or !(Test-Path $vcvars)) {
+    Write-Host "x64 vcvars environment not found at $vcvars"
     exit 1
 }
 
@@ -20,5 +39,8 @@ if ($OutDir) {
     $properties += ";OutDir=$OutDir"
 }
 
-& $msbuild $vcxproj "/p:$properties" /m /nologo /v:q /t:Build
+$buildCommand = "set `"Path=`" && set `"PATH=%SystemRoot%\System32;%SystemRoot%`" " +
+    "&& call `"$vcvars`" && `"$msbuild`" `"$vcxproj`" " +
+    "`"/p:$properties`" /m /nologo /v:q /t:Build"
+& $env:ComSpec /d /c $buildCommand
 if ($LASTEXITCODE -eq 0) { Write-Host "BUILD_OK" } else { Write-Host "BUILD_FAIL"; exit 1 }

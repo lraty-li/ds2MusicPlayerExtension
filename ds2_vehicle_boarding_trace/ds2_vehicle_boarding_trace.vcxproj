@@ -145,6 +145,10 @@
     <!--<ClInclude Include="RideOnUpdateTrace.h" />-->
     <ClInclude Include="RideOnVtableDiscovery.h" />
     <ClInclude Include="RideOnUpdateVtableTrace.h" />
+    <ClInclude Include="RideOffDescriptorTrace.h" />
+    <ClInclude Include="RideOffFinalizer.h" />
+    <ClInclude Include="RideOffSession.h" />
+    <ClInclude Include="RideOffVtableTrace.h" />
     <ClInclude Include="VehicleSnapshot.h" />
     <ClInclude Include="VtableLocator.h" />
   </ItemGroup>
@@ -179,6 +183,10 @@
     <!--<ClCompile Include="RideOnUpdateTrace.cpp" />-->
     <ClCompile Include="RideOnVtableDiscovery.cpp" />
     <ClCompile Include="RideOnUpdateVtableTrace.cpp" />
+    <ClCompile Include="RideOffDescriptorTrace.cpp" />
+    <ClCompile Include="RideOffFinalizer.cpp" />
+    <ClCompile Include="RideOffSession.cpp" />
+    <ClCompile Include="RideOffVtableTrace.cpp" />
     <ClCompile Include="VehicleSnapshot.cpp" />
     <ClCompile Include="VtableLocator.cpp" />
     <ClCompile Include="pch.cpp">
