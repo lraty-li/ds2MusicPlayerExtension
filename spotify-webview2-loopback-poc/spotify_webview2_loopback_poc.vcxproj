@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{0FD63828-795A-4BDD-84FA-59BB92A273BE}</ProjectGuid>
+    <RootNamespace>SpotifyWebView2LoopbackPoc</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'"
+                 Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <WebView2LoaderPreference>Static</WebView2LoaderPreference>
+    <OutDir Condition="'$(OutDir)'==''">$(ProjectDir)bin\</OutDir>
+    <IntDir Condition="'$(IntDir)'==''">$(ProjectDir)obj\</IntDir>
+    <TargetName>spotify_webview2_loopback_poc</TargetName>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>
+        WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>
+        Mmdevapi.lib;Ole32.lib;Shell32.lib;WindowsApp.lib;%(AdditionalDependencies)
+      </AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="src\Diagnostics.cpp" />
+    <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\PocApp.cpp" />
+    <ClCompile Include="src\PocConfig.cpp" />
+    <ClCompile Include="src\ProcessLoopbackCapture.cpp" />
+    <ClCompile Include="src\WebViewSetup.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\CaptureMetrics.h" />
+    <ClInclude Include="src\PocApp.h" />
+    <ClInclude Include="src\PocConfig.h" />
+    <ClInclude Include="src\ProcessLoopbackCapture.h" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(WebView2PackageDir)\build\native\Microsoft.Web.WebView2.targets"
+          Condition="Exists('$(WebView2PackageDir)\build\native\Microsoft.Web.WebView2.targets')" />
+</Project>

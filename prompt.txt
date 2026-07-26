@@ -1,0 +1,29 @@
+1: 我注意到lirespot的源码更新，但release一直没更新，我倾向于拉源码构建
+2： 从来就没有网页端控制游戏侧播放与暂停吧？
+重新考虑
+
+
+codex resume 019f8f22-4187-75a2-83f1-5367e82b6444
+
+
+从 Spotify 服务器请求许可证，将许可证提供给 Widevine，然后反复调用 decrypt 函数直到文件末尾
+
+
+ 流程大致是：
+
+  Spotify 官方 Web Playback SDK
+  → 浏览器里的 Spotify 播放器（Chrome）
+  → 浏览器正常输出声音
+  → 再把这路声音送入游戏
+
+  它会在 Spotify 设备列表中显示为一个浏览器播放器；用户把播放切到它后，音频在 Chrome 内通过官方 DRM 管线播放。
+
+  关键区别是：Web Playback SDK 不给 mod PCM 解密数据。它只让浏览器播放。所谓“→ 游戏音频”是指再捕获浏览器已经输出的声音并转发给游戏，而不是从 SDK 直接取得音频。
+
+  因此它不是 librespot 的替代实现：
+
+  - librespot：mod 自己请求密钥、自己解密、自己输出 PCM；
+  - Web Playback SDK：Spotify/Chrome 负责播放，mod 无法合法地接管解密音频；
+  - 并且 Spotify 的 SDK 政策禁止将 Spotify 音频与游戏这类视觉媒体同步，所以不能作为正式功能发布。(SDK 政策 (https://developer.spotify.com/documentation/web-playback-sdk/reference))
+
+  它本质上就是“一个专门为 Spotify 做的浏览器页面”，而不是适合接入 DS2 音频链路的新后端。

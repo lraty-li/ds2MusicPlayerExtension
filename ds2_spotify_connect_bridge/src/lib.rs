@@ -14,19 +14,35 @@ use librespot::{
     core::{Session, SessionConfig, authentication::Credentials, cache::Cache},
     playback::{mixer, mixer::MixerConfig, player::Player},
 };
-use sha1::{Digest, Sha1};
+use state::SharedBridgeState;
 use std::{
     error::Error,
     fs,
     io::Write,
     net::IpAddr,
-    sync::{atomic::{AtomicBool, Ordering}, mpsc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
 };
-use state::SharedBridgeState;
 
+const AUDIO_CACHE_LIMIT_BYTES: u64 = 1_000_000_000;
 const CONNECT_PORT: u16 = 57_621;
 static STARTED: AtomicBool = AtomicBool::new(false);
+
+struct BridgeLog;
+
+impl Write for BridgeLog {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        append_bridge_file("bridge.log", buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "system" fn DS2SpotifyConnectBridgeStart() -> i32 {
@@ -37,6 +53,8 @@ pub extern "system" fn DS2SpotifyConnectBridgeStart() -> i32 {
     let started = thread::Builder::new()
         .name("DS2SpotifyConnect".to_owned())
         .spawn(|| {
+            reset_bridge_logs();
+            init_logging();
             write_status("bridge background thread started");
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -72,10 +90,11 @@ async fn run_bridge() -> Result<(), Box<dyn Error>> {
     };
     let config = BridgeConfig::fixed()?;
     fs::create_dir_all(config.cache_dir.join("files"))?;
+    let device_id = config.device_id()?;
 
     let state = SharedBridgeState::new();
     let session_config = SessionConfig {
-        device_id: device_id(&config.device_name),
+        device_id,
         ..SessionConfig::default()
     };
     let connect_config = ConnectConfig {
@@ -93,11 +112,8 @@ async fn run_bridge() -> Result<(), Box<dyn Error>> {
         ),
         CONNECT_PORT,
     )?;
-    let _mdns_advertiser = mdns::Advertiser::start(
-        &connect_config.name,
-        &zeroconf_ips,
-        CONNECT_PORT,
-    );
+    let _mdns_advertiser =
+        mdns::Advertiser::start(&connect_config.name, &zeroconf_ips, CONNECT_PORT);
 
     let _zeroconf_server = zeroconf_server;
     write_status("discovery listener ready");
@@ -130,10 +146,17 @@ async fn run_connect_session(
     state.clear_snapshot();
     let (audio_tx, audio_rx) = mpsc::sync_channel(24);
     let files_dir = cache_dir.join("files");
-    let cache = Cache::new(Some(cache_dir), Some(cache_dir), Some(&files_dir), None)?;
+    let cache = Cache::new(
+        Some(cache_dir),
+        Some(cache_dir),
+        Some(&files_dir),
+        Some(AUDIO_CACHE_LIMIT_BYTES),
+    )?;
     let session = Session::new(session_config, Some(cache));
     let mixer = mixer::find(None)
-        .ok_or_else(|| std::io::Error::other("missing librespot mixer"))?(MixerConfig::default())?;
+        .ok_or_else(|| std::io::Error::other("missing librespot mixer"))?(
+        MixerConfig::default()
+    )?;
     let player = Player::new(
         Default::default(),
         session.clone(),
@@ -151,11 +174,6 @@ async fn run_connect_session(
     Ok(())
 }
 
-fn device_id(name: &str) -> String {
-    let digest = Sha1::digest(name.as_bytes());
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
 fn zeroconf_ips() -> Vec<IpAddr> {
     let Ok(interfaces) = if_addrs::get_if_addrs() else {
         return Vec::new();
@@ -169,16 +187,40 @@ fn zeroconf_ips() -> Vec<IpAddr> {
         .collect()
 }
 
-fn write_status(message: &str) {
+fn init_logging() {
+    let mut builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"));
+    builder.format_timestamp_millis();
+    builder.target(env_logger::Target::Pipe(Box::new(BridgeLog)));
+    let _ = builder.try_init();
+}
+
+fn reset_bridge_logs() {
     let Ok(config) = BridgeConfig::fixed() else {
         return;
     };
     if fs::create_dir_all(&config.cache_dir).is_err() {
         return;
     }
-    let path = config.cache_dir.join("bridge-status.log");
+    for name in ["bridge-status.log", "bridge.log"] {
+        let _ = fs::File::create(config.cache_dir.join(name));
+    }
+}
+
+pub(crate) fn write_status(message: &str) {
+    append_bridge_file("bridge-status.log", format!("{message}\n").as_bytes());
+}
+
+fn append_bridge_file(name: &str, contents: &[u8]) {
+    let Ok(config) = BridgeConfig::fixed() else {
+        return;
+    };
+    if fs::create_dir_all(&config.cache_dir).is_err() {
+        return;
+    }
+    let path = config.cache_dir.join(name);
     let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) else {
         return;
     };
-    let _ = writeln!(file, "{message}");
+    let _ = file.write_all(contents);
 }

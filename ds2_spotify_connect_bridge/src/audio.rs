@@ -24,6 +24,13 @@ impl Ds2AudioSink {
             packetizer: Packetizer::new(),
         }
     }
+
+    fn write_samples(&mut self, samples: &[f64]) {
+        let output = self.resampler.process(samples);
+        for encoded_packet in self.packetizer.push(&output) {
+            let _ = self.sender.try_send(encoded_packet);
+        }
+    }
 }
 
 impl Sink for Ds2AudioSink {
@@ -31,14 +38,13 @@ impl Sink for Ds2AudioSink {
         let samples = match packet {
             AudioPacket::Samples(samples) => samples,
             AudioPacket::Raw(_) => {
-                return Err(SinkError::InvalidParams(String::from("raw audio is unsupported")));
+                return Err(SinkError::InvalidParams(String::from(
+                    "raw audio is unsupported",
+                )));
             }
         };
 
-        let output = self.resampler.process(&samples);
-        for encoded_packet in self.packetizer.push(&output) {
-            let _ = self.sender.try_send(encoded_packet);
-        }
+        self.write_samples(&samples);
         Ok(())
     }
 }
@@ -50,7 +56,10 @@ struct LinearStereoResampler {
 
 impl LinearStereoResampler {
     fn new() -> Self {
-        Self { pending: Vec::new(), position: 0.0 }
+        Self {
+            pending: Vec::new(),
+            position: 0.0,
+        }
     }
 
     fn process(&mut self, input: &[f64]) -> Vec<f32> {
@@ -84,9 +93,53 @@ struct Packetizer {
     sequence: u64,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synthetic_stereo_pcm_uses_the_game_packet_contract() {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+        let mut sink = Ds2AudioSink::new(sender);
+        let samples = vec![0.25; 450 * CHANNELS];
+
+        sink.write_samples(&samples);
+        let packet = receiver.recv().expect("one packet should be generated");
+
+        assert_eq!(
+            u32::from_le_bytes(packet[0..4].try_into().unwrap()),
+            0x4453_3241
+        );
+        assert_eq!(u16::from_le_bytes(packet[4..6].try_into().unwrap()), 2);
+        assert_eq!(
+            u16::from_le_bytes(packet[6..8].try_into().unwrap()),
+            CHANNELS as u16
+        );
+        assert_eq!(
+            u32::from_le_bytes(packet[8..12].try_into().unwrap()),
+            OUTPUT_RATE as u32
+        );
+        assert_eq!(
+            u32::from_le_bytes(packet[12..16].try_into().unwrap()),
+            FRAMES_PER_PACKET as u32
+        );
+        assert_eq!(u64::from_le_bytes(packet[16..24].try_into().unwrap()), 0);
+        assert_eq!(u16::from_le_bytes(packet[28..30].try_into().unwrap()), 2);
+        assert_eq!(u16::from_le_bytes(packet[30..32].try_into().unwrap()), 32);
+        assert_eq!(
+            packet.len(),
+            32 + FRAMES_PER_PACKET * CHANNELS * std::mem::size_of::<f32>()
+        );
+        assert_eq!(f32::from_le_bytes(packet[32..36].try_into().unwrap()), 0.25);
+    }
+}
+
 impl Packetizer {
     fn new() -> Self {
-        Self { pending: Vec::new(), sequence: 0 }
+        Self {
+            pending: Vec::new(),
+            sequence: 0,
+        }
     }
 
     fn push(&mut self, samples: &[f32]) -> Vec<Vec<u8>> {

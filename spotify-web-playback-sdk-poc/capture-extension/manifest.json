@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "DS2 Spotify PCM Capture Probe",
+  "description": "Measure Spotify Web Playback SDK tab audio without storing or forwarding PCM.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "offscreen",
+    "scripting",
+    "tabCapture"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "开始或停止检测此标签页的 PCM"
+  }
+}

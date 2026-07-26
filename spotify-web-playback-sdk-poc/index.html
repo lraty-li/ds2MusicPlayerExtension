@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DS2 Spotify Connect PCM 验证</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">完全脱离游戏 · 不保存音频</p>
+      <h1>Spotify Connect → Chrome PCM 最小验证</h1>
+      <p class="lede">
+        这个页面只验证 Web Playback SDK 是否能注册 Connect 设备，以及受保护音频能否被
+        Chrome 扩展捕获为持续的非零 PCM。
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">1</span>
+        <div>
+          <h2>Spotify 应用配置</h2>
+          <p>Client ID 仅保存在当前浏览器的本地存储中，不需要 Client Secret。</p>
+        </div>
+      </div>
+
+      <label for="client-id">Spotify Client ID</label>
+      <div class="row">
+        <input id="client-id" autocomplete="off" spellcheck="false"
+               placeholder="粘贴 Developer Dashboard 中的 Client ID">
+        <button id="save-client" class="secondary">保存</button>
+      </div>
+
+      <label for="redirect-uri">必须登记的 Redirect URI</label>
+      <div class="row">
+        <input id="redirect-uri" readonly>
+        <button id="copy-redirect" class="secondary">复制</button>
+      </div>
+
+      <div class="actions">
+        <button id="authorize">在本机浏览器授权 Spotify</button>
+        <button id="clear-auth" class="danger">清除本地授权</button>
+      </div>
+      <p id="auth-status" class="status neutral">尚未授权</p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">2</span>
+        <div>
+          <h2>创建 Spotify Connect 设备</h2>
+          <p>设备名称固定为 <strong>Death Stranding 2 Web SDK PoC</strong>。</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="enable-player" disabled>启用 Connect 设备</button>
+        <button id="disconnect-player" class="secondary" disabled>断开设备</button>
+      </div>
+
+      <dl class="facts">
+        <div><dt>SDK</dt><dd id="sdk-state">未加载</dd></div>
+        <div><dt>Connect</dt><dd id="connect-state">未连接</dd></div>
+        <div><dt>Device ID</dt><dd id="device-id">—</dd></div>
+        <div><dt>当前曲目</dt><dd id="track-state">—</dd></div>
+      </dl>
+      <p class="hint">
+        设备就绪后，在手机或桌面 Spotify 的设备列表中选择它。播放进度正常前进即可，
+        随后再执行第 3 步。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">3</span>
+        <div>
+          <h2>捕获并判定 PCM</h2>
+          <p>保持本标签页为当前页，点击已加载的 PoC 扩展图标开始或停止。</p>
+        </div>
+      </div>
+
+      <p class="warning">
+        开始 tabCapture 后本标签页停止本地出声是预期行为；扩展只计算数值，不保存或发送音频。
+      </p>
+
+      <div class="meter-grid">
+        <div><span>采样率</span><strong id="metric-rate">—</strong></div>
+        <div><span>声道</span><strong id="metric-channels">—</strong></div>
+        <div><span>RMS</span><strong id="metric-rms">—</strong></div>
+        <div><span>峰值</span><strong id="metric-peak">—</strong></div>
+        <div><span>非零比例</span><strong id="metric-nonzero">—</strong></div>
+        <div><span>连续非零窗口</span><strong id="metric-windows">0</strong></div>
+      </div>
+
+      <p id="capture-verdict" class="verdict idle">尚未启动捕获</p>
+      <p id="capture-detail" class="hint">通过条件：48 kHz，且连续三个计量窗口包含非零 PCM。</p>
+    </section>
+
+    <section class="card compact">
+      <h2>运行日志</h2>
+      <pre id="log" aria-live="polite"></pre>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

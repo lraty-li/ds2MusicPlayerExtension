@@ -13,9 +13,26 @@ pub fn start(mut events: PlayerEventChannel, state: Arc<SharedBridgeState>) {
     thread::spawn(move || {
         let mut generation = 0u64;
         while let Some(event) = events.blocking_recv() {
-            if let PlayerEvent::TrackChanged { audio_item } = event {
-                generation += 1;
-                publish_track(*audio_item, generation, &state);
+            match event {
+                PlayerEvent::TrackChanged { audio_item } => {
+                    generation += 1;
+                    publish_track(*audio_item, generation, &state);
+                }
+                PlayerEvent::SessionConnected { .. } => {
+                    crate::write_status("Spotify session connected");
+                }
+                PlayerEvent::SessionDisconnected { .. } => {
+                    crate::write_status("Spotify session disconnected");
+                }
+                PlayerEvent::Playing { track_id, .. } => {
+                    crate::write_status(&format!("Spotify playback started: {track_id}"));
+                }
+                PlayerEvent::Unavailable { track_id, .. } => {
+                    crate::write_status(&format!(
+                        "Spotify playback unavailable: {track_id}; check bridge.log for the upstream error"
+                    ));
+                }
+                _ => {}
             }
         }
     });
@@ -32,7 +49,11 @@ fn publish_track(item: AudioItem, generation: u64, state: &SharedBridgeState) {
         "trackKey": track_key,
     })
     .to_string();
-    state.replace_snapshot(TrackSnapshot { generation, metadata_json, jacket_json: None });
+    state.replace_snapshot(TrackSnapshot {
+        generation,
+        metadata_json,
+        jacket_json: None,
+    });
 
     if let Some(jacket_json) = download_jacket(&item, &track_key) {
         state.set_jacket(generation, jacket_json);
