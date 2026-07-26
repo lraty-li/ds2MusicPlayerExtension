@@ -26,13 +26,15 @@ exact cost varies. Install the base edition if Spotify Connect is not needed.
    scripts\DS2SpotifyHelper\config.json:
    {
      "spotifyClientId": "your 32-character Client ID",
-     "proxyServer": ""
+     "proxyServer": "",
+     "diagnostics": false
    }
    Never put the Client Secret in this file. Development Mode apps have an
    authorized-user limit; each user should normally create their own app.
-7. Start the game. The helper window appears for the first PKCE authorization.
-   After authorization, select "Death Stranding 2" in Spotify's device picker.
-   Later launches keep the helper outside the visible desktop and task switcher.
+7. Start the game. On the first run, the Spotify authorization page opens
+   directly; the helper diagnostic dashboard is not shown. After authorization,
+   select "Death Stranding 2" in Spotify's device picker. Later launches keep
+   the playback runtime outside the visible desktop and task switcher.
 8. Optional browser extension: open the Chrome/Edge extensions page, enable
    Developer mode, choose Load unpacked, and select browser-extension.
    WAIT means the extension is waiting for the game plugin; PCM means audio is
@@ -46,8 +48,11 @@ exact cost varies. Install the base edition if Spotify Connect is not needed.
    pauses the previous one. Automatic reconnect does not take ownership.
    Spotify controls do not change the game player's state.
 11. The helper uses the Windows system proxy by default. To force a proxy, edit
-   scripts\DS2SpotifyHelper\config.json and set proxyServer, for example
-   "http://127.0.0.1:7890".
+    scripts\DS2SpotifyHelper\config.json and set proxyServer, for example
+    "http://127.0.0.1:7890".
+12. Production mode does not load the helper dashboard, diagnostic probes,
+    metrics UI, or telemetry logging. Set "diagnostics": true only while
+    troubleshooting; this explicitly enables and displays them.
 
 中文
 
@@ -77,13 +82,14 @@ DS2MusicPlayer Spotify 版
    scripts\DS2SpotifyHelper\config.json：
    {
      "spotifyClientId": "你的 32 位 Client ID",
-     "proxyServer": ""
+     "proxyServer": "",
+     "diagnostics": false
    }
    不要填写 Client Secret。Development Mode App 有授权用户数量限制，
    每位用户通常应创建自己的 App。
-7. 启动游戏。首次运行会显示 helper 窗口以完成 PKCE 授权；授权后在
-   Spotify 的设备选择器中选择“Death Stranding 2”。后续启动时 helper
-   会移到可见桌面之外，并从任务栏和 Alt-Tab 隐去。
+7. 启动游戏。首次运行会直接打开 Spotify 授权页面，不显示 helper 诊断面板；
+   授权后在 Spotify 的设备选择器中选择“Death Stranding 2”。后续启动时
+   播放运行时会移到可见桌面之外，并从任务栏和 Alt-Tab 隐去。
 8. 可选浏览器扩展：打开 Chrome/Edge 扩展管理页，启用开发者模式，
    选择“加载已解压的扩展”，然后选择 browser-extension 文件夹。
    WAIT 表示等待游戏插件，PCM 表示正在推流；点击图标开始或停止推流，
@@ -94,8 +100,10 @@ DS2MusicPlayer Spotify 版
    动作取得游戏音频输入；切换来源时会暂停之前的来源，自动重连不会抢占。
    Spotify 侧控制不会改变游戏播放器状态。
 11. helper 默认使用 Windows 系统代理。如需强制代理，请编辑
-   scripts\DS2SpotifyHelper\config.json 的 proxyServer，例如
-   "http://127.0.0.1:7890"。
+    scripts\DS2SpotifyHelper\config.json 的 proxyServer，例如
+    "http://127.0.0.1:7890"。
+12. 生产模式默认不加载 helper 面板、诊断探针、指标界面，也不写遥测日志。
+    仅在排障时将 "diagnostics" 明确设为 true；这会启用并显示上述功能。
 
 Credits
 

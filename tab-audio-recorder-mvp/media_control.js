@@ -83,7 +83,9 @@ function selectMetadataResult(results) {
         score,
         frameId: item.frameId,
         adapter: item.result.adapter || "",
-        host: item.result.host || ""
+        host: item.result.host || "",
+        paused: typeof item.result.paused === "boolean" ?
+          item.result.paused : null
       };
     }
   }

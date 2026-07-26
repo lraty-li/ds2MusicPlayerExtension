@@ -4,6 +4,7 @@
 
 #include "Logger.h"
 
+#include <cwchar>
 #include <string>
 #include <vector>
 
@@ -11,9 +12,12 @@ namespace
 {
 constexpr wchar_t kHelperRelativePath[] =
     L"DS2SpotifyHelper\\DS2SpotifyWebView2Helper.exe";
+constexpr wchar_t kHelperWindowClass[] =
+    L"DS2SpotifyWebView2HelperWindow";
 
 HANDLE g_helperJob = nullptr;
 HANDLE g_helperProcess = nullptr;
+DWORD g_helperProcessId = 0;
 
 std::wstring GetSiblingPath(HMODULE module, const wchar_t* name)
 {
@@ -55,6 +59,7 @@ void CloseHandles()
         CloseHandle(g_helperJob);
         g_helperJob = nullptr;
     }
+    g_helperProcessId = 0;
 }
 
 bool CreateKillOnCloseJob(HANDLE& job, DWORD& error)
@@ -80,6 +85,38 @@ bool CreateKillOnCloseJob(HANDLE& job, DWORD& error)
         return false;
     }
     return true;
+}
+
+struct CloseWindowContext
+{
+    DWORD processId = 0;
+    bool posted = false;
+};
+
+BOOL CALLBACK PostCloseToHelper(HWND window, LPARAM parameter)
+{
+    auto* context = reinterpret_cast<CloseWindowContext*>(parameter);
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId != context->processId)
+    {
+        return TRUE;
+    }
+    wchar_t className[64]{};
+    if (GetClassNameW(window, className, 64) == 0 ||
+        std::wcscmp(className, kHelperWindowClass) != 0)
+    {
+        return TRUE;
+    }
+    context->posted = PostMessageW(window, WM_CLOSE, 0, 0) != FALSE;
+    return FALSE;
+}
+
+bool RequestGracefulClose(DWORD processId)
+{
+    CloseWindowContext context{processId, false};
+    EnumWindows(PostCloseToHelper, reinterpret_cast<LPARAM>(&context));
+    return context.posted;
 }
 }
 
@@ -117,7 +154,8 @@ void Start(HMODULE selfModule, const Logger& logger)
     }
 
     std::wstring commandLine =
-        L"\"" + helperPath + L"\" --game-helper";
+        L"\"" + helperPath + L"\" --game-helper --game-pid " +
+        std::to_wstring(GetCurrentProcessId());
     std::vector<wchar_t> mutableCommand(
         commandLine.begin(), commandLine.end());
     mutableCommand.push_back(L'\0');
@@ -170,6 +208,7 @@ void Start(HMODULE selfModule, const Logger& logger)
     CloseHandle(process.hThread);
     g_helperJob = job;
     g_helperProcess = process.hProcess;
+    g_helperProcessId = process.dwProcessId;
     logger.Log(
         "spotify WebView2 helper started pid=" +
         std::to_string(process.dwProcessId));
@@ -177,6 +216,15 @@ void Start(HMODULE selfModule, const Logger& logger)
 
 void Stop()
 {
+    if (g_helperProcess &&
+        WaitForSingleObject(g_helperProcess, 0) == WAIT_TIMEOUT)
+    {
+        RequestGracefulClose(g_helperProcessId);
+        if (WaitForSingleObject(g_helperProcess, 1500) == WAIT_TIMEOUT)
+        {
+            TerminateProcess(g_helperProcess, 0);
+        }
+    }
     if (g_helperJob)
     {
         TerminateJobObject(g_helperJob, 0);

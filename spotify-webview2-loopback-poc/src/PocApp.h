@@ -16,8 +16,11 @@
 class PocApp
 {
 public:
-    explicit PocApp(bool helperMode = false)
-        : helperMode_(helperMode)
+    explicit PocApp(
+        bool helperMode = false,
+        DWORD gameProcessId = 0)
+        : helperMode_(helperMode),
+          gameProcessId_(gameProcessId)
     {
     }
     ~PocApp();
@@ -25,10 +28,17 @@ public:
     int Run(HINSTANCE instance, int showCommand);
 
 private:
+    static constexpr UINT kGameProcessExitedMessage = WM_APP + 0x242;
+    static constexpr UINT_PTR kShutdownTimerId = 0xD52;
     static LRESULT CALLBACK WindowProcedure(
         HWND window, UINT message, WPARAM wParam, LPARAM lParam);
     LRESULT HandleWindowMessage(UINT message, WPARAM wParam, LPARAM lParam);
     bool CreateMainWindow(HINSTANCE instance, int showCommand);
+    bool StartGameProcessWatch();
+    void StopGameProcessWatch();
+    void BeginShutdown();
+    static void CALLBACK OnGameProcessExited(
+        void* context, BOOLEAN timedOut);
     void InitializeWebView();
     HRESULT OnEnvironmentCreated(
         HRESULT result, ICoreWebView2Environment* environment);
@@ -36,7 +46,9 @@ private:
         HRESULT result, ICoreWebView2Controller* controller);
     HRESULT InstallFrameAudioProbeAndNavigate();
     void ConfigureWebView();
+    void ConfigureDiagnosticEvents();
     void ConfigureAutoplay();
+    void UpdateHelperWindowForNavigation();
     void InitializeSharedPcmRing(
         ICoreWebView2Environment* environment);
     void ConfigureSharedPcmFrames();
@@ -57,13 +69,20 @@ private:
     void ResetTelemetry();
     void AppendTelemetry(
         const char* source, const std::wstring& payload);
+    void ResetStatusLog();
+    void AppendStatus(const std::wstring& payload);
     void ShowFailure(const wchar_t* stage, HRESULT result);
     void Shutdown();
 
     HWND window_ = nullptr;
     bool helperMode_ = false;
+    bool diagnosticsEnabled_ = false;
+    bool shutdownRequested_ = false;
     bool shuttingDown_ = false;
     bool webContentReady_ = false;
+    DWORD gameProcessId_ = 0;
+    HANDLE gameProcess_ = nullptr;
+    HANDLE gameProcessWait_ = nullptr;
     HRESULT captureResult_ = E_PENDING;
     HRESULT sharedRingResult_ = E_PENDING;
     HRESULT sharedRingPostResult_ = E_PENDING;

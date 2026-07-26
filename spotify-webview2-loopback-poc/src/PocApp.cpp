@@ -32,6 +32,12 @@ int PocApp::Run(HINSTANCE instance, int showCommand)
     {
         return static_cast<int>(GetLastError());
     }
+    if (!StartGameProcessWatch())
+    {
+        const DWORD error = GetLastError();
+        DestroyWindow(window_);
+        return static_cast<int>(error);
+    }
     InitializeWebView();
     gameStreamClient_.Start(window_);
 
@@ -164,6 +170,9 @@ LRESULT PocApp::HandleWindowMessage(
         HandleGameStreamEvent(
             static_cast<GameStreamEvent>(wParam));
         return 0;
+    case kGameProcessExitedMessage:
+        BeginShutdown();
+        return 0;
     case kDiagnosticToneMessage:
         ExecuteDiagnosticScript(
             L"window.__pocToggleTone && window.__pocToggleTone()");
@@ -205,9 +214,18 @@ LRESULT PocApp::HandleWindowMessage(
         }
         return DefWindowProcW(window_, message, wParam, lParam);
     case WM_CLOSE:
-        DestroyWindow(window_);
+        BeginShutdown();
         return 0;
+    case WM_TIMER:
+        if (wParam == kShutdownTimerId)
+        {
+            KillTimer(window_, kShutdownTimerId);
+            DestroyWindow(window_);
+            return 0;
+        }
+        return DefWindowProcW(window_, message, wParam, lParam);
     case WM_DESTROY:
+        window_ = nullptr;
         Shutdown();
         PostQuitMessage(0);
         return 0;
@@ -247,6 +265,7 @@ void PocApp::ShowFailure(const wchar_t* stage, HRESULT result)
     std::wostringstream message;
     message << stage << L" failed: 0x"
             << std::hex << static_cast<uint32_t>(result);
+    AppendStatus(message.str());
     MessageBoxW(window_, message.str().c_str(), kWindowTitle,
         MB_OK | MB_ICONERROR);
 }
@@ -257,8 +276,10 @@ void PocApp::Shutdown()
     {
         return;
     }
+    AppendStatus(L"shutdown");
     shuttingDown_ = true;
     webContentReady_ = false;
+    StopGameProcessWatch();
     gameStreamClient_.Stop();
     sessionMuteController_.Restore();
     if (capture_)

@@ -77,4 +77,14 @@ if (!notifications.some((item) => item.type === "source-preempted") ||
     !notifications.some((item) => item.type === "source-active")) {
   throw new Error("source state notification missing");
 }
+context.sendMetadata({
+  title: "Paused Browser",
+  artist: "Tab",
+  paused: true
+});
+const pausedMetadata = JSON.parse(sent[4]);
+if (pausedMetadata.type !== "metadata" ||
+    pausedMetadata.paused !== true) {
+  throw new Error("paused metadata state missing");
+}
 console.log("TAB_SOURCE_CLAIM_TEST_OK");

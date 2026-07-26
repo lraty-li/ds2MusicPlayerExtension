@@ -21,5 +21,6 @@ void PocApp::HandleGameStreamEvent(GameStreamEvent event)
 
 void PocApp::PostGameStreamState()
 {
+    if (!diagnosticsEnabled_) return;
     PostJson(gameStreamClient_.MetricsJson());
 }

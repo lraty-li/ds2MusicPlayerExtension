@@ -32,32 +32,38 @@
     probe.report();
     try {
       const context = new AudioContext({ sampleRate: 48000 });
+      const source = context.createMediaElementSource(record.element);
       if (probe.desiredMode === "none" &&
           typeof context.setSinkId === "function") {
         await context.setSinkId({ type: "none" });
       }
-      const source = context.createMediaElementSource(record.element);
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0;
       const pcmTap = await probe.createPcmTap(context, record);
       source.connect(pcmTap);
-      pcmTap.connect(analyser);
-      analyser.connect(context.destination);
+      const analyser = probe.runtimeOnly ? null : context.createAnalyser();
+      if (analyser) {
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0;
+        pcmTap.connect(analyser);
+        analyser.connect(context.destination);
+      } else {
+        pcmTap.connect(context.destination);
+      }
       record.graph = {
         context,
         source,
         pcmTap,
         analyser,
-        samples: new Float32Array(analyser.fftSize),
+        samples: analyser ? new Float32Array(analyser.fftSize) : null,
         timer: 0
       };
       record.graphState = "attached";
       await context.resume();
-      record.graph.timer = window.setInterval(
-        () => sampleGraph(record),
-        250
-      );
+      if (analyser) {
+        record.graph.timer = window.setInterval(
+          () => sampleGraph(record),
+          250
+        );
+      }
     } catch (error) {
       record.graphState = "error";
       record.graphError = `${error.name || "Error"}: ${error.message}`;

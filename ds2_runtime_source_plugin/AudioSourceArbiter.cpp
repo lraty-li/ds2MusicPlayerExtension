@@ -17,7 +17,9 @@ namespace
 std::mutex g_mutex;
 SOCKET g_listener = INVALID_SOCKET;
 SOCKET g_active = INVALID_SOCKET;
+SOCKET g_control = INVALID_SOCKET;
 std::vector<SOCKET> g_clients;
+std::vector<SOCKET> g_controlClients;
 std::string g_activeId;
 std::string g_activeKind;
 
@@ -41,6 +43,16 @@ bool IsRegistered(SOCKET socket)
         g_clients.end();
 }
 
+void PromoteControlTargetLocked(SOCKET socket)
+{
+    g_controlClients.erase(
+        std::remove(
+            g_controlClients.begin(), g_controlClients.end(), socket),
+        g_controlClients.end());
+    g_controlClients.push_back(socket);
+    g_control = socket;
+}
+
 void LogClaim(const std::string& id, const std::string& kind,
     const std::string& reason, const std::string& previous, SOCKET socket)
 {
@@ -61,7 +73,9 @@ void Reset()
     std::lock_guard<std::mutex> lock(g_mutex);
     g_listener = INVALID_SOCKET;
     g_active = INVALID_SOCKET;
+    g_control = INVALID_SOCKET;
     g_clients.clear();
+    g_controlClients.clear();
     g_activeId.clear();
     g_activeKind.clear();
 }
@@ -94,6 +108,16 @@ void RemoveClient(SOCKET socket)
         g_clients.erase(
             std::remove(g_clients.begin(), g_clients.end(), socket),
             g_clients.end());
+        g_controlClients.erase(
+            std::remove(
+                g_controlClients.begin(), g_controlClients.end(), socket),
+            g_controlClients.end());
+        if (g_control == socket)
+        {
+            g_control = g_controlClients.empty()
+                ? INVALID_SOCKET
+                : g_controlClients.back();
+        }
         if (g_active == socket)
         {
             g_active = INVALID_SOCKET;
@@ -122,6 +146,14 @@ void Shutdown()
         shutdown(socket, SD_BOTH);
     }
     g_active = INVALID_SOCKET;
+    g_control = INVALID_SOCKET;
+}
+
+void RegisterControlTarget(SOCKET socket)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!IsRegistered(socket)) return;
+    PromoteControlTargetLocked(socket);
 }
 
 bool Claim(SOCKET socket, const char* sourceId,
@@ -138,6 +170,7 @@ bool Claim(SOCKET socket, const char* sourceId,
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (!IsRegistered(socket)) return false;
+        PromoteControlTargetLocked(socket);
         changed = g_active != socket;
         if (changed)
         {
@@ -174,10 +207,19 @@ bool IsActive(SOCKET socket)
     return g_active == socket;
 }
 
+bool IsMetadataSource(SOCKET socket)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_active == socket ||
+        (g_active == INVALID_SOCKET && g_control == socket);
+}
+
 bool SendControl(const char* json)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
-    return g_active != INVALID_SOCKET && json &&
-        WebSocketProtocol::SendTextFrame(g_active, json);
+    const SOCKET target =
+        g_active != INVALID_SOCKET ? g_active : g_control;
+    return target != INVALID_SOCKET && json &&
+        WebSocketProtocol::SendTextFrame(target, json);
 }
 }

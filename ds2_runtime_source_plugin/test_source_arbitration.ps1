@@ -179,11 +179,25 @@ try {
             [SourceArbitrationNative+SendControl]
         )
 
-    $tab = Connect-Source
     $spotify = Connect-Source
-    Send-Text $tab '{"type":"source_hello","sourceId":"tab","sourceKind":"tab_capture"}'
     Send-Text $spotify '{"type":"source_hello","sourceId":"spotify","sourceKind":"spotify_connect"}'
+    Send-Text $spotify '{"type":"metadata","title":"Spotify Paused","artist":"Connect","paused":true}'
+    Assert-Metadata $reader "[PAUSED] Spotify Paused" "Connect"
 
+    if ($sendControl.Invoke(
+        '{"type":"control","command":"resume","reason":"test_connected"}'
+    ) -ne 1) {
+        throw "connected source control send failed"
+    }
+    $connectedControl = Receive-Text $spotify
+    if ($connectedControl -notlike '*"reason":"test_connected"*') {
+        throw "control was not routed to connected source: $connectedControl"
+    }
+    Send-Text $spotify '{"type":"metadata","title":"Spotify Paused","artist":"Connect","paused":false}'
+    Assert-Metadata $reader "Spotify Paused" "Connect"
+
+    $tab = Connect-Source
+    Send-Text $tab '{"type":"source_hello","sourceId":"tab","sourceKind":"tab_capture"}'
     Send-Text $tab '{"type":"source_claim","sourceId":"tab","sourceKind":"tab_capture","reason":"test_tab"}'
     Send-Text $tab '{"type":"metadata","title":"Tab A","artist":"Browser"}'
     Assert-Metadata $reader "Tab A" "Browser"

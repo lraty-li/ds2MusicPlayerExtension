@@ -8,6 +8,7 @@ using Microsoft::WRL::ComPtr;
 
 void PocApp::PostHostState()
 {
+    if (!diagnosticsEnabled_) return;
     BOOL muted = FALSE;
     BOOL playing = FALSE;
     ComPtr<ICoreWebView2_8> audioView;
@@ -54,6 +55,7 @@ void PocApp::PostHostState()
 
 void PocApp::PostMetrics(const CaptureMetrics& metrics)
 {
+    if (!diagnosticsEnabled_) return;
     std::wostringstream json;
     json << std::fixed << std::setprecision(7)
          << L"{\"type\":\"capture-metrics\""
@@ -75,6 +77,7 @@ void PocApp::PostMetrics(const CaptureMetrics& metrics)
 
 void PocApp::PostJson(const std::wstring& json)
 {
+    if (!diagnosticsEnabled_) return;
     AppendTelemetry("HOST", json);
     if (webView_ && webContentReady_)
     {

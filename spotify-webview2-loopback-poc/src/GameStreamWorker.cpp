@@ -56,11 +56,11 @@ void GameStreamClient::Impl::SetConnected(
             textMessages_.clear();
             helloPending_ = true;
             claimPending_ = sourceClaimed_;
-            if (sourceClaimed_ && !latestMetadata_.empty())
+            if (!latestMetadata_.empty())
             {
                 textMessages_.push_back(latestMetadata_);
             }
-            if (sourceClaimed_ && !latestJacket_.empty())
+            if (!latestJacket_.empty())
             {
                 textMessages_.push_back(latestJacket_);
             }

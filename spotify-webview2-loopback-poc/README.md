@@ -32,9 +32,11 @@ Helper 连接游戏后先注册为 `spotify_connect` 来源，但不会仅因连
 
 - 不带参数启动：显示完整诊断窗口，可配合独立 probe 验证，不启动游戏；
 - 带 `--game-helper` 启动：tool window 保持 WebView2 可见，但位于虚拟桌面
-  之外且不进入任务栏/Alt-Tab；自动接管播放中的 Spotify 媒体、切到
-  silent sink，并连接本机游戏音频协议；
-- helper 模式首次缺少 PKCE 授权时才显示窗口，授权完成后自动隐藏。
+  之外且不进入任务栏/Alt-Tab；默认只加载最小播放运行时，自动接管播放中的
+  Spotify 媒体、切到 silent sink，并连接本机游戏音频协议；
+- helper 模式首次缺少 PKCE 授权时直接显示 Spotify 授权页，不加载诊断面板；
+- `config.json` 明确设置 `"diagnostics": true` 时，才加载并显示完整 helper
+  面板、诊断探针、指标刷新与遥测日志。
 
 ## 环境
 
@@ -95,7 +97,8 @@ probe 只监听本机回环地址，不连接或加载游戏。
    ```json
    {
      "spotifyClientId": "你的 Client ID",
-     "proxyServer": "http://127.0.0.1:7890"
+     "proxyServer": "http://127.0.0.1:7890",
+     "diagnostics": false
    }
    ```
 
@@ -127,8 +130,9 @@ Data Folder：
 同一目录中的 `standalone-telemetry.log` 保存可见诊断模式的 SDK 页面事件、
 宿主静音状态、每 500 ms 的 Process Loopback 指标，以及约每秒一次的原生
 Direct PCM 接收统计。每次启动会清空旧日志，避免不同实验混在一起。原始
-PCM 分块不会写入日志或磁盘。隐藏模式写入 `helper-telemetry.log`，且没有
-Process Loopback 指标。
+PCM 分块不会写入日志或磁盘。默认 helper 模式不创建日志；只有明确设置
+`"diagnostics": true` 时才写入 `helper-status.log` 和
+`helper-telemetry.log`。
 
 probe 在 EXE 工作目录写入 `game-stream-probe.log`，只记录数据包、缓冲深度、
 欠载和样本统计，不记录原始 PCM。
@@ -202,8 +206,9 @@ WebSocket 通道发出 `pause` 或 `resume`，最终调用 Spotify Web Playback 
 “手动激活并重连”只用于诊断。如果只有点击它之后才能播放，说明当前无感冷启动
 目标尚未通过。“接管媒体并启动 PCM 桥接”不可撤销，重复实验需重启 PoC。
 
-helper 模式不执行第 5、8 步：它在检测到播放中的 Spotify 媒体后自动接管，
-并在新建 AudioContext 时自动应用 silent sink。
+默认 helper 模式不加载上述诊断界面及其统计模块。注入 SDK frame 的最小
+运行时代码会在媒体开始播放时直接接管，并在新建 AudioContext 时自动应用
+silent sink；`"diagnostics": true` 才恢复完整观测路径。
 
 ## Go / No-Go
 

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify Connect 诊断</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">完全脱离游戏 · 无扩展 · 不保存 PCM</p>
+      <h1>WebView2 Spotify Connect + Direct PCM</h1>
+      <p class="lede">
+        这个独立程序验证 Connect、EME、自动播放、Direct Web Audio PCM 和
+        原生连续分块。它不会启动或连接游戏，也尚未实现手机二维码授权。
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">1</span>
+        <div>
+          <h2>先排除 Spotify：本地音调与静音矩阵</h2>
+          <p>捕获在宿主启动后自动开始，目标是 WebView2 Browser PID 及其进程树。</p>
+        </div>
+      </div>
+
+      <dl class="facts four">
+        <div><dt>WebView2 Runtime</dt><dd id="runtime-version">等待宿主</dd></div>
+        <div><dt>Helper PID</dt><dd id="helper-pid">—</dd></div>
+        <div><dt>Browser PID</dt><dd id="browser-pid">—</dd></div>
+        <div><dt>Capture Target PID</dt><dd id="capture-target-pid">—</dd></div>
+        <div><dt>WebView2 代理</dt><dd id="proxy-state">—</dd></div>
+        <div><dt>EME</dt><dd id="eme-state">探测中</dd></div>
+        <div><dt>Process Loopback</dt><dd id="capture-state">等待宿主</dd></div>
+        <div><dt>页面音频状态</dt><dd id="doc-audio">—</dd></div>
+        <div><dt>WebView2 内部静音</dt><dd id="muted-state">—</dd></div>
+        <div><dt>Windows 会话静音</dt><dd id="session-muted-state">—</dd></div>
+        <div><dt>目标格式</dt><dd>48 kHz · 2 ch · PCM16</dd></div>
+      </dl>
+
+      <div class="actions">
+        <button id="test-tone">播放本地 440 Hz 音调</button>
+        <button id="toggle-session-mute" class="secondary">
+          静音 Windows 音频会话
+        </button>
+        <button id="toggle-mute" class="ghost">WebView2 内部静音（对照）</button>
+        <button id="open-devtools" class="ghost">打开开发者工具</button>
+      </div>
+      <p class="hint">
+        WebView2 内部静音和 Windows 会话静音均已证实会切断 PCM，这两个按钮
+        只保留作对照，不再作为候选实现。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">2</span>
+        <div>
+          <h2>全 frame 实例级音频出口探针</h2>
+          <p>原生宿主在每个文档解析前注入，覆盖顶层页面和 Spotify 子 frame。</p>
+        </div>
+      </div>
+
+      <dl class="facts four">
+        <div><dt>setSinkId 支持</dt><dd id="audio-sink-support">探测中</dd></div>
+        <div><dt>AudioContext</dt><dd id="audio-context-count">0</dd></div>
+        <div><dt>媒体元素</dt><dd id="media-element-count">0</dd></div>
+        <div><dt>Frame 覆盖</dt><dd id="child-frame-count">0/1 已回报</dd></div>
+        <div><dt>请求的出口</dt><dd id="audio-sink-mode">默认</dd></div>
+        <div><dt>Web Audio 接管</dt><dd id="media-graph-state">0 已接管 · 0 失败</dd></div>
+        <div><dt>Direct RMS</dt><dd id="direct-rms">0.0000000</dd></div>
+        <div><dt>Direct Peak</dt><dd id="direct-peak">0.0000000</dd></div>
+        <div><dt>Direct 非零比例</dt><dd id="direct-nonzero">0.000%</dd></div>
+        <div class="wide">
+          <dt>各 frame 音频状态</dt>
+          <dd id="audio-context-detail">等待原生预注入脚本回报</dd>
+        </div>
+      </dl>
+      <div class="actions">
+        <button id="attach-media-graph">接管媒体并启动 PCM 桥接</button>
+        <button id="set-silent-sink">本实例切到 silent sink</button>
+        <button id="restore-page-sink" class="secondary">恢复本实例默认输出</button>
+        <button id="refresh-audio-probe" class="ghost">刷新对象探针</button>
+      </div>
+      <p id="audio-probe-result" class="status neutral">
+        当前页面音频对象使用默认输出
+      </p>
+      <p class="hint">
+        先播放 Spotify，再接管媒体；接管会同时启动连续 PCM 分块。确认原生接收
+        通过后再切到 silent sink。接管不可撤销，重启 PoC 才能复原。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">3</span>
+        <div>
+          <h2>连续 PCM → 原生 C++</h2>
+          <p>AudioWorklet 写入 WebView2 共享内存环，仅用小型消息通知原生消费。</p>
+        </div>
+      </div>
+
+      <dl class="facts four">
+        <div><dt>原生共享内存</dt><dd id="pcm-shared-host">等待宿主</dd></div>
+        <div><dt>Frame 映射</dt><dd id="pcm-frame-ring">尚未映射</dd></div>
+        <div><dt>Frame 发送</dt><dd id="pcm-frame-state">等待媒体接管</dd></div>
+        <div><dt>音频线程实现</dt><dd id="pcm-method">—</dd></div>
+        <div><dt>Web 传输</dt><dd id="pcm-transport">—</dd></div>
+        <div><dt>环形缓冲丢块</dt><dd id="pcm-ring-drops">0</dd></div>
+        <div><dt>Web 累计</dt><dd id="pcm-web-chunks">0 块 · 0 帧</dd></div>
+        <div><dt>原生状态</dt><dd id="pcm-native-state">等待数据</dd></div>
+        <div><dt>原生传输</dt><dd id="pcm-native-transport">—</dd></div>
+        <div><dt>原生格式</dt><dd id="pcm-native-format">—</dd></div>
+        <div><dt>原生累计</dt><dd id="pcm-native-total">0 块 · 0 帧</dd></div>
+        <div><dt>最近吞吐量</dt><dd id="pcm-throughput">—</dd></div>
+        <div><dt>连续性</dt><dd id="pcm-continuity">—</dd></div>
+        <div><dt>原生 RMS</dt><dd id="pcm-native-rms">0.0000000</dd></div>
+        <div><dt>原生 Peak</dt><dd id="pcm-native-peak">0.0000000</dd></div>
+        <div><dt>滚动校验值</dt><dd id="pcm-checksum">—</dd></div>
+      </dl>
+      <p id="pcm-bridge-verdict" class="verdict idle">
+        等待连续 PCM 到达原生 C++
+      </p>
+      <p id="pcm-bridge-detail" class="hint">
+        共享环含 64 个槽位，每槽容量最多约 100 ms；当前实际分块为 20 ms。
+        Base64/WebMessage 只作为失败回退，原始样本不写 WAV。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">4</span>
+        <div>
+          <h2>游戏音频协议替身</h2>
+          <p>把 PCM 重分为 480 帧/包，经本地 WebSocket 送给独立接收探针。</p>
+        </div>
+      </div>
+
+      <dl class="facts">
+        <div><dt>目标端点</dt><dd id="game-stream-endpoint">ws://127.0.0.1:47832</dd></div>
+        <div><dt>连接状态</dt><dd id="game-stream-connection">等待接收探针</dd></div>
+        <div><dt>累计发送</dt><dd id="game-stream-sent">0 包 · 0 帧</dd></div>
+        <div><dt>发送队列</dt><dd id="game-stream-queue">当前 0 · 峰值 0</dd></div>
+        <div><dt>连续性</dt><dd id="game-stream-errors">丢包 0 · 发送错误 0 · 无效 0</dd></div>
+        <div><dt>反向控制</dt><dd id="game-stream-controls">暂停 0 · 恢复 0</dd></div>
+      </dl>
+      <p id="game-stream-verdict" class="verdict idle">
+        等待独立游戏协议接收探针
+      </p>
+      <div class="actions">
+        <button id="probe-pause">probe 发送暂停</button>
+        <button id="probe-resume" class="secondary">probe 发送恢复</button>
+      </div>
+      <p id="game-stream-detail" class="hint">
+        两个诊断按钮会先请求 probe，再由 probe 沿正式反向通道发出控制命令；
+        接收端模拟现有 Wwise SourcePlugin，本阶段不会启动游戏。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">5</span>
+        <div>
+          <h2>Spotify PKCE 授权</h2>
+          <p>本轮用嵌入页完成一次本机授权；二维码中继明确后置。</p>
+        </div>
+      </div>
+
+      <label for="client-id">Spotify Developer App Client ID</label>
+      <div class="row">
+        <input id="client-id" autocomplete="off" spellcheck="false"
+               placeholder="粘贴 Client ID">
+        <button id="save-client" class="secondary">保存</button>
+      </div>
+
+      <label for="redirect-uri">必须登记的 Redirect URI</label>
+      <div class="row">
+        <input id="redirect-uri" readonly>
+        <button id="copy-redirect" class="secondary">复制</button>
+      </div>
+
+      <div class="actions">
+        <button id="authorize">授权 Spotify</button>
+        <button id="clear-auth" class="danger">清除本地授权</button>
+      </div>
+      <p id="auth-status" class="status neutral">尚未授权</p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">6</span>
+        <div>
+          <h2>从 Spotify Connect 选择这个设备</h2>
+          <p>授权后会自动注册，不需要点击页面；手动激活按钮只用于诊断自动播放失败。</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="manual-connect" disabled>手动激活并重连</button>
+        <button id="disconnect-player" class="secondary">断开设备</button>
+      </div>
+      <dl class="facts">
+        <div><dt>SDK</dt><dd id="sdk-state">未加载</dd></div>
+        <div><dt>Connect</dt><dd id="connect-state">未连接</dd></div>
+        <div><dt>设备名</dt><dd>Death Stranding 2 Helper PoC</dd></div>
+        <div><dt>Device ID</dt><dd id="device-id">—</dd></div>
+        <div class="wide"><dt>当前曲目</dt><dd id="track-state">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">6</span>
+        <div>
+          <h2>PCM 判定</h2>
+          <p>只计算数值并立即丢弃样本，不写 WAV，不通过网络发送 PCM。</p>
+        </div>
+      </div>
+
+      <div class="meter-grid">
+        <div><span>格式</span><strong id="metric-rate">—</strong></div>
+        <div><span>RMS</span><strong id="metric-rms">—</strong></div>
+        <div><span>Peak</span><strong id="metric-peak">—</strong></div>
+        <div><span>非零比例</span><strong id="metric-nonzero">—</strong></div>
+        <div><span>累计帧</span><strong id="metric-frames">—</strong></div>
+        <div><span>静音包</span><strong id="metric-silent">—</strong></div>
+        <div><span>不连续</span><strong id="metric-discontinuity">—</strong></div>
+        <div><span>时间戳错误</span><strong id="metric-timestamp">—</strong></div>
+      </div>
+      <p id="capture-verdict" class="verdict idle">等待原生捕获数据</p>
+      <p id="capture-detail" class="hint">
+        最终判定必须使用真实 Spotify 完整曲目再次通过，而不只依赖本地音调。
+      </p>
+    </section>
+
+    <section class="card compact">
+      <h2>诊断日志</h2>
+      <pre id="log" aria-live="polite"></pre>
+    </section>
+  </main>
+  <script type="module" src="./bootstrap.js"></script>
+</body>
+</html>

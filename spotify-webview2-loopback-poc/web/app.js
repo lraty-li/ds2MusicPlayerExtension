@@ -21,7 +21,9 @@ const byId = (id) => document.getElementById(id);
 const HELPER_MODE_KEY = "ds2.spotify.helperMode";
 let spotifyPlayer = null;
 let helperMode = false;
+let diagnosticsMode = false;
 window.__pocSpotifyControl = applyNativeSpotifyControl;
+window.__pocSpotifyShutdown = disconnectPlayer;
 
 initialize().catch((error) => {
   setAuthStatus(error.message, "error");
@@ -37,6 +39,7 @@ async function initialize() {
   helperMode =
     query.get("helper_mode") === "1" ||
     sessionStorage.getItem(HELPER_MODE_KEY) === "1";
+  diagnosticsMode = window.__ds2HelperDiagnostics === true;
   if (configuredClientId && /^[0-9a-f]{32}$/i.test(configuredClientId)) {
     saveClientId(configuredClientId);
   }
@@ -166,6 +169,10 @@ function updateAuthorizationUi() {
 
 function updateHelperWindow() {
   if (!helperMode) return;
+  if (diagnosticsMode) {
+    window.chrome?.webview?.postMessage("helper-diagnostics-ready");
+    return;
+  }
   window.chrome?.webview?.postMessage(
     hasStoredAuthorization()
       ? "helper-auth-ready"

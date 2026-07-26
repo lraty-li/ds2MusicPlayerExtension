@@ -1,5 +1,5 @@
 (function installDs2PageMediaControl() {
-  const version = 7;
+  const version = 8;
   window.__ds2PageMediaControlVersion = version;
   window.__ds2MediaAdapters = [];
 
@@ -37,6 +37,8 @@
           best = Object.assign({ adapter: adapter.name, host: location.hostname }, result);
         }
       }
+      const paused = readPlaybackPaused();
+      if (typeof paused === "boolean") best.paused = paused;
       return best;
     },
     probe(command) {
@@ -69,6 +71,20 @@
       if (element.shadowRoot) result.push(...collectMedia(element.shadowRoot));
     }
     return result;
+  }
+
+  function readPlaybackPaused() {
+    const media = collectMedia(document);
+    if (media.some((element) => !element.paused && !element.ended)) {
+      return false;
+    }
+    const sessionState = navigator.mediaSession &&
+      navigator.mediaSession.playbackState;
+    if (sessionState === "playing") return false;
+    if (sessionState === "paused") return true;
+    return media.some((element) =>
+      element.currentSrc || element.readyState > 0
+    ) ? true : null;
   }
 
   function waitFor(predicate, timeoutMs) {

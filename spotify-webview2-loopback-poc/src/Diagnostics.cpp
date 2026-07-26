@@ -70,21 +70,25 @@ void PocApp::HandleWebMessage(
         if (ringError.empty())
         {
             gameStreamClient_.Push(ringChunk);
-            pcmStreamReceiver_.HandleChunk(
-                ringChunk, L"shared-ring", pcmMetrics);
+            if (diagnosticsEnabled_)
+            {
+                pcmStreamReceiver_.HandleChunk(
+                    ringChunk, L"shared-ring", pcmMetrics);
+            }
         }
-        else
+        else if (diagnosticsEnabled_)
         {
             pcmStreamReceiver_.RecordInvalidChunk(
                 L"shared-ring", ringError, pcmMetrics);
         }
-        if (!pcmMetrics.empty())
+        if (diagnosticsEnabled_ && !pcmMetrics.empty())
         {
             PostJson(pcmMetrics);
             PostGameStreamState();
         }
     }
-    else if (pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
+    else if (diagnosticsEnabled_ &&
+             pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
     {
         if (!pcmMetrics.empty())
         {
@@ -93,30 +97,76 @@ void PocApp::HandleWebMessage(
     }
     else if (message == L"toggle-mute")
     {
-        ToggleMute();
+        if (diagnosticsEnabled_) ToggleMute();
     }
     else if (message == L"toggle-session-mute")
     {
-        ToggleSessionMute();
+        if (diagnosticsEnabled_) ToggleSessionMute();
     }
     else if (message == L"request-host-state")
     {
-        PostHostState();
+        if (diagnosticsEnabled_) PostHostState();
     }
     else if (message == L"helper-auth-required")
     {
         AppendTelemetry("SESSION", L"helper_auth=required");
-        SetHelperWindowVisible(true);
+        if (diagnosticsEnabled_) SetHelperWindowVisible(true);
     }
     else if (message == L"helper-auth-ready")
     {
         AppendTelemetry("SESSION", L"helper_auth=ready");
+        AppendStatus(L"authorization=ready");
         SetHelperWindowVisible(false);
+    }
+    else if (message.starts_with(L"helper-status:"))
+    {
+        AppendStatus(message.substr(14));
+    }
+    else if (message == L"helper-player-error")
+    {
+        AppendStatus(L"player=error");
+    }
+    else if (message == L"helper-diagnostics-ready")
+    {
+        SetHelperWindowVisible(true);
+    }
+    else if (message == L"helper-config-missing-client-id")
+    {
+        AppendStatus(L"config-client-id=missing");
+        MessageBoxW(
+            nullptr,
+            L"Spotify Client ID is missing. Edit "
+            L"scripts\\DS2SpotifyHelper\\config.json and restart the game.",
+            L"Death Stranding 2 Spotify",
+            MB_OK | MB_ICONWARNING);
+    }
+    else if (message == L"helper-auth-error")
+    {
+        AppendStatus(L"authorization=error");
+        MessageBoxW(
+            nullptr,
+            L"Spotify authorization was not completed. "
+            L"Restart the game to try again.",
+            L"Death Stranding 2 Spotify",
+            MB_OK | MB_ICONWARNING);
+    }
+    else if (message == L"helper-runtime-load-error" ||
+             message == L"helper-runtime-error")
+    {
+        AppendStatus(message);
+        MessageBoxW(
+            nullptr,
+            L"Spotify helper runtime failed to load.",
+            L"Death Stranding 2 Spotify",
+            MB_OK | MB_ICONERROR);
     }
     else if (message.starts_with(L"probe-control:"))
     {
-        gameStreamClient_.RequestProbeControl(message.substr(14));
-        PostGameStreamState();
+        if (diagnosticsEnabled_)
+        {
+            gameStreamClient_.RequestProbeControl(message.substr(14));
+            PostGameStreamState();
+        }
     }
     else if (message.starts_with(L"game-json:"))
     {
@@ -130,10 +180,13 @@ void PocApp::HandleWebMessage(
     }
     else if (message == L"open-devtools" && webView_)
     {
-        webView_->OpenDevToolsWindow();
+        if (diagnosticsEnabled_) webView_->OpenDevToolsWindow();
     }
     else if (message.starts_with(L"web-log:"))
     {
-        AppendTelemetry("WEB", message.substr(8));
+        if (diagnosticsEnabled_)
+        {
+            AppendTelemetry("WEB", message.substr(8));
+        }
     }
 }

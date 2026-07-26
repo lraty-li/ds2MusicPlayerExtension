@@ -212,6 +212,9 @@ function sendMetadata(metadata) {
     adapter: String(metadata.adapter || ""),
     host: String(metadata.host || "")
   };
+  if (typeof metadata.paused === "boolean") {
+    payload.paused = metadata.paused;
+  }
   if (!sendJsonPayload(payload)) {
     return { ok: false, sent: false, error: "socket closed" };
   }

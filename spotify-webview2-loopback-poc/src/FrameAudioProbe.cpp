@@ -10,7 +10,9 @@ using Microsoft::WRL::Callback;
 
 namespace
 {
-constexpr wchar_t kStartUrl[] = L"https://appassets.example/index.html";
+constexpr wchar_t kRuntimeUrl[] = L"https://appassets.example/index.html";
+constexpr wchar_t kDiagnosticsUrl[] =
+    L"https://appassets.example/diagnostics.html";
 constexpr wchar_t kProbeScript[] = L"frame-audio-probe-injected.js";
 constexpr wchar_t kSharedRingScript[] = L"frame-shared-ring-injected.js";
 constexpr wchar_t kPcmBridgeScript[] = L"frame-pcm-bridge-injected.js";
@@ -94,6 +96,11 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
         ShowFailure(L"Load frame audio probe scripts", result);
         return result;
     }
+    if (helperMode_ && !diagnosticsEnabled_)
+    {
+        probeScript.insert(
+            0, L"window.__ds2SpotifyRuntimeOnly = true;\n");
+    }
     probeScript += L"\n";
     probeScript += sharedRingScript;
     probeScript += L"\n";
@@ -122,7 +129,9 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
                     AppendTelemetry(
                         "SESSION",
                         L"frame_audio_probe=installed");
-                    std::wstring startUrl = kStartUrl;
+                    std::wstring startUrl = diagnosticsEnabled_
+                        ? kDiagnosticsUrl
+                        : kRuntimeUrl;
                     if (!configuredClientId_.empty())
                     {
                         startUrl += L"?client_id=";
@@ -132,6 +141,12 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
                     {
                         startUrl += configuredClientId_.empty() ? L"?" : L"&";
                         startUrl += L"helper_mode=1";
+                    }
+                    if (diagnosticsEnabled_)
+                    {
+                        startUrl += configuredClientId_.empty() &&
+                            !helperMode_ ? L"?" : L"&";
+                        startUrl += L"diagnostics=1";
                     }
                     const HRESULT navigateResult =
                         webView_->Navigate(startUrl.c_str());

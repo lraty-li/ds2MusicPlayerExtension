@@ -34,9 +34,12 @@ async function collectAndSendMetadata() {
   if (!result || !result.ok || !result.metadata || !result.metadata.title) return;
 
   const metadata = result.metadata;
-  const key = `${metadata.title}\n${metadata.artist || ""}`;
+  const trackKey = `${metadata.title}\n${metadata.artist || ""}`;
+  const playbackKey = typeof metadata.paused === "boolean" ?
+    (metadata.paused ? "paused" : "playing") : "unknown";
+  const key = `${trackKey}\n${playbackKey}`;
   const jacketUrl = metadata.jacket && metadata.jacket.url || "";
-  const jacketKey = `${key}\n${jacketUrl}`;
+  const jacketKey = `${trackKey}\n${jacketUrl}`;
   if (jacketUrl && jacketKey !== lastJacketSuccessKey && jacketKey !== jacketInFlight) {
     sendJacketUpdate(metadata.jacket, jacketKey);
   } else if (!jacketUrl && jacketKey !== lastJacketSuccessKey) {
@@ -49,7 +52,8 @@ async function collectAndSendMetadata() {
     title: metadata.title,
     artist: metadata.artist || "",
     adapter: metadata.adapter || "",
-    host: metadata.host || ""
+    host: metadata.host || "",
+    paused: metadata.paused
   });
 }
 

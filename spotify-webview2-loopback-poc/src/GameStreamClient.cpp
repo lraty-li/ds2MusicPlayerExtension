@@ -151,7 +151,6 @@ void GameStreamClient::Impl::PushText(std::wstring_view json)
         latestJacket_ = message;
         ++jacketMessagesQueued_;
     }
-    if (!sourceClaimed_) return;
     if (textMessages_.size() >= kMaxQueuedTextMessages)
     {
         textMessages_.pop_front();

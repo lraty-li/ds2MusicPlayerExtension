@@ -69,7 +69,9 @@
     <ClCompile Include="src\GameStreamSetup.cpp" />
     <ClCompile Include="src\GameStreamWorker.cpp" />
     <ClCompile Include="src\HostState.cpp" />
+    <ClCompile Include="src\Lifecycle.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\NavigationVisibility.cpp" />
     <ClCompile Include="src\PcmChunkCodec.cpp" />
     <ClCompile Include="src\PcmSharedRing.cpp" />
     <ClCompile Include="src\PcmStreamReceiver.cpp" />

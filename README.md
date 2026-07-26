@@ -91,7 +91,8 @@ Before the first launch:
    ```json
    {
      "spotifyClientId": "your 32-character Client ID",
-     "proxyServer": ""
+     "proxyServer": "",
+     "diagnostics": false
    }
    ```
 
@@ -107,9 +108,14 @@ placed in a kill-on-close job, so it exits with the game even after a crash.
 Its silent Web Audio sink belongs only to this helper and does not mute the
 user's Edge browser sessions.
 
-On the first run without a saved PKCE authorization, the helper window appears
-for authorization. Later runs stay hidden. In Spotify's device picker, select
-`Death Stranding 2`; Spotify audio then streams into the special in-game track.
+On the first run without a saved PKCE authorization, the Spotify authorization
+page opens directly; the helper dashboard is not loaded. Later runs stay
+hidden. In Spotify's device picker, select `Death Stranding 2`; Spotify audio
+then streams into the special in-game track.
+
+Production mode also skips the diagnostic probes, metrics UI, and telemetry
+logging. Set `"diagnostics": true` in `config.json` only while troubleshooting;
+that explicitly loads and displays the full helper dashboard.
 
 The browser extension and Spotify helper may remain connected together. The
 most recent explicit playback action owns the stream: starting Spotify preempts

@@ -101,6 +101,7 @@ bool HandleProtocolText(AudioStreamClient& client, const char* text)
         client.protocolAware = true;
         client.sourceId = ReadJsonString(text, "\"sourceId\"");
         client.sourceKind = ReadJsonString(text, "\"sourceKind\"");
+        AudioSourceArbiter::RegisterControlTarget(client.socket);
         char line[256] = {};
         sprintf_s(line, "audio source connected kind=\"%s\" id=\"%s\"",
             client.sourceKind.c_str(), client.sourceId.c_str());
@@ -130,7 +131,7 @@ bool HandleProtocolText(AudioStreamClient& client, const char* text)
 void HandleText(AudioStreamClient& client, const char* text)
 {
     if (HandleProtocolText(client, text)) return;
-    if (!AudioSourceArbiter::IsActive(client.socket))
+    if (!AudioSourceArbiter::IsMetadataSource(client.socket))
     {
         if (HasType(text, "\"type\":\"metadata\"",
             "\"type\": \"metadata\""))

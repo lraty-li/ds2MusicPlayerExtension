@@ -167,9 +167,14 @@ function Invoke-SpotifyHelperBuild {
 }
 
 function Copy-SpotifyHelper {
+    $configName = if ($Diagnostic) {
+        "config.diagnostic.json"
+    } else {
+        "config.release.json"
+    }
     Copy-RequiredFile $spotifyHelperExe `
         (Join-Path $spotifyHelperPackageDir "DS2SpotifyWebView2Helper.exe")
-    Copy-RequiredFile (Join-Path $spotifyHelperDir "config.release.json") `
+    Copy-RequiredFile (Join-Path $spotifyHelperDir $configName) `
         (Join-Path $spotifyHelperPackageDir "config.json")
     $sourceWeb = Join-Path $spotifyHelperOutput "web"
     $destinationWeb = Join-Path $spotifyHelperPackageDir "web"

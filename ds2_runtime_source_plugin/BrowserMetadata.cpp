@@ -11,11 +11,14 @@ namespace
 {
 constexpr size_t kTitleBytes = 1024;
 constexpr size_t kTrackKeyBytes = 1024;
+constexpr char kPausedPrefix[] = "[PAUSED] ";
 
 std::mutex g_mutex;
 char g_title[kTitleBytes] = {};
 char g_artist[kTitleBytes] = {};
 char g_trackKey[kTrackKeyBytes] = {};
+bool g_hasPausedState = false;
+bool g_paused = false;
 
 const char* FindJsonStringValue(const char* json, const char* key)
 {
@@ -68,6 +71,40 @@ void CopyJsonValue(const char* json, const char* key, char* output, size_t outpu
     }
 }
 
+bool ReadJsonBool(const char* json, const char* key, bool& value)
+{
+    const char* keyAt = strstr(json, key);
+    if (!keyAt) return false;
+    const char* at = strchr(keyAt + strlen(key), ':');
+    if (!at) return false;
+    do
+    {
+        ++at;
+    } while (*at == ' ' || *at == '\t' || *at == '\r' || *at == '\n');
+    if (strncmp(at, "true", 4) == 0)
+    {
+        value = true;
+        return true;
+    }
+    if (strncmp(at, "false", 5) == 0)
+    {
+        value = false;
+        return true;
+    }
+    return false;
+}
+
+void CopyDisplayTitle(char* output, uint32_t outputBytes)
+{
+    if (g_hasPausedState && g_paused)
+    {
+        strncpy_s(output, outputBytes, kPausedPrefix, _TRUNCATE);
+        strncat_s(output, outputBytes, g_title, _TRUNCATE);
+        return;
+    }
+    strcpy_s(output, outputBytes, g_title);
+}
+
 }
 
 namespace BrowserMetadata
@@ -78,6 +115,8 @@ void UpdateFromJson(const char* json)
     char title[kTitleBytes] = {};
     char artist[kTitleBytes] = {};
     char trackKey[kTrackKeyBytes] = {};
+    bool paused = false;
+    const bool hasPausedState = ReadJsonBool(json, "\"paused\"", paused);
     CopyJsonValue(json, "\"title\"", title, sizeof(title));
     if (!title[0]) return;
     CopyJsonValue(json, "\"artist\"", artist, sizeof(artist));
@@ -85,18 +124,24 @@ void UpdateFromJson(const char* json)
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (strcmp(g_title, title) == 0 && strcmp(g_artist, artist) == 0 &&
-            strcmp(g_trackKey, trackKey) == 0)
+            strcmp(g_trackKey, trackKey) == 0 &&
+            g_hasPausedState == hasPausedState &&
+            (!hasPausedState || g_paused == paused))
         {
             return;
         }
         strcpy_s(g_title, title);
         strcpy_s(g_artist, artist);
         strcpy_s(g_trackKey, trackKey);
+        g_hasPausedState = hasPausedState;
+        g_paused = paused;
     }
 
     char line[1152] = {};
-    sprintf_s(line, "browser metadata title=\"%s\" artist=\"%s\"",
-        title, artist);
+    sprintf_s(line,
+        "browser metadata title=\"%s\" artist=\"%s\" paused=%s",
+        title, artist,
+        hasPausedState ? (paused ? "true" : "false") : "unknown");
     PluginLog::Write(line);
 }
 
@@ -114,7 +159,7 @@ int ReadTitle(char* output, uint32_t outputBytes)
 {
     if (!output || outputBytes == 0) return 0;
     std::lock_guard<std::mutex> lock(g_mutex);
-    strcpy_s(output, outputBytes, g_title);
+    CopyDisplayTitle(output, outputBytes);
     return g_title[0] ? 1 : 0;
 }
 
@@ -122,7 +167,7 @@ int Read(char* title, uint32_t titleBytes, char* artist, uint32_t artistBytes)
 {
     if (!title || titleBytes == 0 || !artist || artistBytes == 0) return 0;
     std::lock_guard<std::mutex> lock(g_mutex);
-    strcpy_s(title, titleBytes, g_title);
+    CopyDisplayTitle(title, titleBytes);
     strcpy_s(artist, artistBytes, g_artist);
     return g_title[0] ? 1 : 0;
 }

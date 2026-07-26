@@ -2,15 +2,17 @@
   "use strict";
   const channel = "ds2-audio-frame-probe-v1";
   if (window.__ds2AudioFrameProbe) return;
+  const runtimeOnly = window.__ds2SpotifyRuntimeOnly === true;
 
   const probe = {
     channel,
+    runtimeOnly,
     frameId: crypto.randomUUID?.() ||
       `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     contexts: new Map(),
     mediaElements: new Map(),
     commandHandlers: new Map(),
-    desiredMode: "default",
+    desiredMode: runtimeOnly ? "none" : "default",
     nextContextId: 1,
     nextMediaId: 1,
     observer: null
@@ -92,6 +94,7 @@
   }
 
   probe.report = (closed = false) => {
+    if (runtimeOnly) return;
     try {
       window.top.postMessage({
         channel,
@@ -196,8 +199,17 @@
       bridge: null
     };
     probe.mediaElements.set(element, record);
-    for (const name of ["play", "playing", "pause", "ended", "emptied"]) {
-      element.addEventListener(name, () => probe.report());
+    if (runtimeOnly) {
+      element.addEventListener("playing", () => {
+        probe.prepareMediaPlayback?.(record);
+      });
+      if (!element.paused && !element.ended) {
+        queueMicrotask(() => probe.prepareMediaPlayback?.(record));
+      }
+    } else {
+      for (const name of ["play", "playing", "pause", "ended", "emptied"]) {
+        element.addEventListener(name, () => probe.report());
+      }
     }
     probe.report();
   }
@@ -216,12 +228,10 @@
         );
         return result;
       };
-      const preparation = probe.prepareMediaPlayback?.(
+      probe.prepareMediaPlayback?.(
         probe.mediaElements.get(this)
       );
-      return preparation
-        ? Promise.resolve(preparation).then(start)
-        : start();
+      return start();
     };
     Object.defineProperty(
       wrappedPlay, "__ds2AudioFrameProbe", { value: true }
@@ -279,6 +289,10 @@
   } else {
     startObserver();
   }
-  window.addEventListener("pagehide", () => probe.report(true), { once: true });
+  if (!runtimeOnly) {
+    window.addEventListener(
+      "pagehide", () => probe.report(true), { once: true }
+    );
+  }
   queueMicrotask(probe.report);
 })();

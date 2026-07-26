@@ -4,6 +4,8 @@ import {
 } from "./spotify-metadata.js";
 
 let sdkPromise = null;
+const READY_TIMEOUT_MS = 20_000;
+const RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 30_000];
 
 export class SpotifyConnectPlayer {
   constructor({ getToken, onStatus, onTrack, log }) {
@@ -14,26 +16,46 @@ export class SpotifyConnectPlayer {
     this.player = null;
     this.lastStateFingerprint = "";
     this.lastTrackKey = "";
+    this.lastMetadataPaused = null;
     this.lastPlaying = null;
+    this.stopped = true;
+    this.ready = false;
+    this.connecting = false;
+    this.retryAttempt = 0;
+    this.retryTimer = 0;
+    this.readyTimer = 0;
   }
 
   async prepareAndConnect() {
+    this.stopped = false;
     this.onStatus({ sdk: "正在加载", connect: "未连接", deviceId: "—" });
-    await loadSpotifySdk();
+    try {
+      await loadSpotifySdk();
+    } catch (error) {
+      this.onStatus({ sdk: "加载失败", connect: "等待重试" });
+      this.log(`SDK 加载失败：${error.message}`);
+      this.scheduleReconnect("SDK 加载失败");
+      return false;
+    }
     this.onStatus({ sdk: "已加载" });
     if (!this.player) this.createPlayer();
-    await this.connect(false);
+    return this.connect(false);
   }
 
   async activateAndConnect() {
+    this.stopped = false;
     await loadSpotifySdk();
     if (!this.player) this.createPlayer();
-    await this.connect(true);
+    return this.connect(true);
   }
 
   disconnect() {
+    this.stopped = true;
+    this.ready = false;
+    this.clearConnectionTimers();
     if (this.player) this.player.disconnect();
     this.lastTrackKey = "";
+    this.lastMetadataPaused = null;
     this.updateSourcePlaying(false);
     resetSpotifyMetadata();
     this.onStatus({ connect: "未连接", deviceId: "—" });
@@ -68,12 +90,17 @@ export class SpotifyConnectPlayer {
     });
 
     this.player.addListener("ready", ({ device_id: deviceId }) => {
+      this.ready = true;
+      this.retryAttempt = 0;
+      this.clearConnectionTimers();
       this.onStatus({ connect: "设备已就绪", deviceId });
       this.log(`Connect 设备已就绪：${deviceId}`);
     });
     this.player.addListener("not_ready", () => {
+      this.ready = false;
       this.onStatus({ connect: "设备离线", deviceId: "—" });
       this.log("Connect 设备进入 not_ready");
+      this.scheduleReconnect("设备离线");
     });
     this.player.addListener("player_state_changed", (state) => {
       if (!state) {
@@ -86,9 +113,16 @@ export class SpotifyConnectPlayer {
       const artists = track?.artists?.map((artist) => artist.name).join(", ");
       const trackKey = track?.uri || track?.id ||
         `${track?.name || ""}\n${artists || ""}`;
-      if (track?.name && trackKey !== this.lastTrackKey) {
+      const trackChanged = track?.name &&
+        trackKey !== this.lastTrackKey;
+      const pauseChanged = track?.name &&
+        state.paused !== this.lastMetadataPaused;
+      if (trackChanged || pauseChanged) {
         this.lastTrackKey = trackKey;
-        publishSpotifyTrack(track, this.log);
+        this.lastMetadataPaused = state.paused;
+        publishSpotifyTrack(
+          track, state.paused, trackChanged, this.log
+        );
       }
       this.updateSourcePlaying(!state.paused);
       const fingerprint = `${state.paused}:${track?.uri || ""}`;
@@ -118,6 +152,9 @@ export class SpotifyConnectPlayer {
       this.player.addListener(type, ({ message }) => {
         this.onStatus({ connect: type });
         this.log(`${type}：${message}`);
+        if (type !== "playback_error") {
+          this.scheduleReconnect(type);
+        }
       });
     }
   }
@@ -132,6 +169,9 @@ export class SpotifyConnectPlayer {
   }
 
   async connect(withActivation) {
+    if (this.connecting || this.stopped) return false;
+    this.clearRetryTimer();
+    this.connecting = true;
     this.onStatus({ connect: withActivation ? "手动激活中" : "自动连接中" });
     try {
       if (withActivation) await this.player.activateElement();
@@ -143,23 +183,89 @@ export class SpotifyConnectPlayer {
           ? "已用用户点击调用 activateElement()"
           : "未调用 activateElement()，正在验证无点击冷启动"
       );
+      this.armReadyTimeout();
+      return true;
     } catch (error) {
       this.onStatus({ connect: "连接失败" });
       this.log(`连接失败：${error.message}`);
+      this.scheduleReconnect("连接失败");
+      return false;
+    } finally {
+      this.connecting = false;
     }
+  }
+
+  armReadyTimeout() {
+    if (this.ready || this.stopped) return;
+    clearTimeout(this.readyTimer);
+    this.readyTimer = window.setTimeout(() => {
+      this.readyTimer = 0;
+      if (this.ready || this.stopped) return;
+      this.log("等待 Spotify ready 超时");
+      this.player?.disconnect();
+      this.scheduleReconnect("等待 ready 超时");
+    }, READY_TIMEOUT_MS);
+  }
+
+  scheduleReconnect(reason) {
+    if (this.stopped || this.retryTimer) return;
+    clearTimeout(this.readyTimer);
+    this.readyTimer = 0;
+    const index = Math.min(
+      this.retryAttempt,
+      RETRY_DELAYS_MS.length - 1
+    );
+    const delay = RETRY_DELAYS_MS[index];
+    this.retryAttempt++;
+    this.onStatus({
+      connect: `${reason}；${delay / 1000} 秒后重试`
+    });
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = 0;
+      if (this.stopped) return;
+      this.ready = false;
+      this.player?.disconnect();
+      void this.prepareAndConnect();
+    }, delay);
+  }
+
+  clearRetryTimer() {
+    clearTimeout(this.retryTimer);
+    this.retryTimer = 0;
+  }
+
+  clearConnectionTimers() {
+    this.clearRetryTimer();
+    clearTimeout(this.readyTimer);
+    this.readyTimer = 0;
   }
 }
 
 function loadSpotifySdk() {
   if (window.Spotify) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
-  sdkPromise = new Promise((resolve, reject) => {
-    window.onSpotifyWebPlaybackSDKReady = resolve;
-    const script = document.createElement("script");
+  const script = document.createElement("script");
+  const pending = new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      script.remove();
+      reject(new Error("Spotify Web Playback SDK 加载超时"));
+    }, READY_TIMEOUT_MS);
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      clearTimeout(timer);
+      resolve();
+    };
     script.src = "https://sdk.scdn.co/spotify-player.js";
     script.async = true;
-    script.onerror = () => reject(new Error("Spotify Web Playback SDK 加载失败"));
+    script.onerror = () => {
+      clearTimeout(timer);
+      script.remove();
+      reject(new Error("Spotify Web Playback SDK 加载失败"));
+    };
     document.head.appendChild(script);
+  });
+  sdkPromise = pending.catch((error) => {
+    sdkPromise = null;
+    throw error;
   });
   return sdkPromise;
 }

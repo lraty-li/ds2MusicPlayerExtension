@@ -16,12 +16,15 @@ void PocApp::InitializeSharedPcmRing(
     ICoreWebView2Environment* environment)
 {
     sharedRingResult_ = pcmSharedRing_.Initialize(environment);
-    std::wostringstream entry;
-    entry << L"pcm_shared_ring=create result="
-          << static_cast<uint32_t>(sharedRingResult_)
-          << L" ready="
-          << (pcmSharedRing_.IsReady() ? L"true" : L"false");
-    AppendTelemetry("SESSION", entry.str());
+    if (diagnosticsEnabled_)
+    {
+        std::wostringstream entry;
+        entry << L"pcm_shared_ring=create result="
+              << static_cast<uint32_t>(sharedRingResult_)
+              << L" ready="
+              << (pcmSharedRing_.IsReady() ? L"true" : L"false");
+        AppendTelemetry("SESSION", entry.str());
+    }
 }
 
 void PocApp::ConfigureSharedPcmFrames()
@@ -125,12 +128,15 @@ void PocApp::PostSharedPcmRingToFrame(
         pcmSharedRing_.DescriptorJson().c_str());
     if (SUCCEEDED(sharedRingPostResult_))
     {
-        ++sharedRingPostCount_;
+        if (diagnosticsEnabled_) ++sharedRingPostCount_;
     }
-    std::wostringstream entry;
-    entry << L"pcm_shared_ring=post-sdk-frame result="
-          << static_cast<uint32_t>(sharedRingPostResult_)
-          << L" count=" << sharedRingPostCount_;
-    AppendTelemetry("SESSION", entry.str());
-    PostHostState();
+    if (diagnosticsEnabled_)
+    {
+        std::wostringstream entry;
+        entry << L"pcm_shared_ring=post-sdk-frame result="
+              << static_cast<uint32_t>(sharedRingPostResult_)
+              << L" count=" << sharedRingPostCount_;
+        AppendTelemetry("SESSION", entry.str());
+        PostHostState();
+    }
 }

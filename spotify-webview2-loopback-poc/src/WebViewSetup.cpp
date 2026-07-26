@@ -44,16 +44,21 @@ std::wstring PersistentUserDataFolder()
 void PocApp::InitializeWebView()
 {
     const std::filesystem::path executableFolder = ExecutableFolder();
+    const std::filesystem::path configPath =
+        executableFolder / L"config.json";
     webFolder_ = (executableFolder / L"web").wstring();
-    configuredClientId_ =
-        LoadSpotifyClientId(executableFolder / L"config.json");
-    configuredProxyServer_ =
-        LoadProxyServer(executableFolder / L"config.json");
+    configuredClientId_ = LoadSpotifyClientId(configPath);
+    configuredProxyServer_ = LoadProxyServer(configPath);
+    diagnosticsEnabled_ =
+        !helperMode_ || LoadDiagnosticsEnabled(configPath);
     userDataFolder_ = PersistentUserDataFolder();
-    if (!std::filesystem::exists(
-        std::filesystem::path(webFolder_) / L"index.html"))
+    const auto webEntry = std::filesystem::path(webFolder_) /
+        (diagnosticsEnabled_ ? L"diagnostics.html" : L"index.html");
+    if (!std::filesystem::exists(webEntry))
     {
-        ShowFailure(L"Locate web/index.html", HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+        ShowFailure(
+            L"Locate WebView entry",
+            HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
         return;
     }
     if (userDataFolder_.empty())
@@ -61,6 +66,15 @@ void PocApp::InitializeWebView()
         ShowFailure(L"Create WebView2 user data folder", E_FAIL);
         return;
     }
+    ResetStatusLog();
+    AppendStatus(
+        configuredClientId_.empty()
+            ? L"config-client-id=missing"
+            : L"config-client-id=loaded");
+    AppendStatus(
+        configuredProxyServer_.empty()
+            ? L"proxy=system"
+            : L"proxy=configured");
     ResetTelemetry();
     AppendTelemetry(
         "SESSION",
@@ -99,7 +113,10 @@ void PocApp::InitializeWebView()
         return;
     }
     std::wstring browserArguments = helperMode_
-        ? L"--autoplay-policy=no-user-gesture-required"
+        ? L"--autoplay-policy=no-user-gesture-required "
+          L"--disable-background-timer-throttling "
+          L"--disable-backgrounding-occluded-windows "
+          L"--disable-renderer-backgrounding"
         : L"";
     if (!configuredProxyServer_.empty())
     {
@@ -190,7 +207,8 @@ void PocApp::ConfigureWebView()
     if (SUCCEEDED(webView_->get_Settings(&settings)))
     {
         settings->put_IsStatusBarEnabled(FALSE);
-        settings->put_AreDevToolsEnabled(helperMode_ ? FALSE : TRUE);
+        settings->put_AreDevToolsEnabled(
+            diagnosticsEnabled_ ? TRUE : FALSE);
     }
     ConfigureSharedPcmFrames();
 
@@ -221,6 +239,11 @@ void PocApp::ConfigureWebView()
                 BOOL success = FALSE;
                 args->get_IsSuccess(&success);
                 webContentReady_ = success != FALSE;
+                AppendStatus(
+                    webContentReady_
+                        ? L"navigation=ready"
+                        : L"navigation=failed");
+                UpdateHelperWindowForNavigation();
                 PostHostState();
                 PostGameStreamState();
                 return S_OK;
@@ -242,26 +265,7 @@ void PocApp::ConfigureWebView()
             }).Get(),
         &ignoredToken);
 
-    ComPtr<ICoreWebView2_8> audioView;
-    if (SUCCEEDED(webView_.As(&audioView)))
-    {
-        audioView->add_IsDocumentPlayingAudioChanged(
-            Callback<ICoreWebView2IsDocumentPlayingAudioChangedEventHandler>(
-                [this](ICoreWebView2*, IUnknown*)
-                {
-                    PostHostState();
-                    return S_OK;
-                }).Get(),
-            &ignoredToken);
-        audioView->add_IsMutedChanged(
-            Callback<ICoreWebView2IsMutedChangedEventHandler>(
-                [this](ICoreWebView2*, IUnknown*)
-                {
-                    PostHostState();
-                    return S_OK;
-                }).Get(),
-            &ignoredToken);
-    }
+    ConfigureDiagnosticEvents();
 }
 
 void PocApp::ConfigureAutoplay()

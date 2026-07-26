@@ -15,6 +15,11 @@ std::filesystem::path TelemetryPath(
         (helperMode ? L"helper-telemetry.log" : L"standalone-telemetry.log");
 }
 
+std::filesystem::path StatusPath(const std::wstring& folder)
+{
+    return std::filesystem::path(folder) / L"helper-status.log";
+}
+
 std::string Utf8(const std::wstring& value)
 {
     if (value.empty())
@@ -62,7 +67,7 @@ std::wstring SingleLine(std::wstring value)
 
 void PocApp::ResetTelemetry()
 {
-    if (userDataFolder_.empty())
+    if (!diagnosticsEnabled_ || userDataFolder_.empty())
     {
         return;
     }
@@ -75,7 +80,7 @@ void PocApp::ResetTelemetry()
 void PocApp::AppendTelemetry(
     const char* source, const std::wstring& payload)
 {
-    if (userDataFolder_.empty() || !source)
+    if (!diagnosticsEnabled_ || userDataFolder_.empty() || !source)
     {
         return;
     }
@@ -84,4 +89,29 @@ void PocApp::AppendTelemetry(
         std::ios::binary | std::ios::app);
     output << Timestamp() << '\t' << source << '\t'
            << Utf8(SingleLine(payload)) << '\n';
+}
+
+void PocApp::ResetStatusLog()
+{
+    if (!diagnosticsEnabled_ || !helperMode_ || userDataFolder_.empty())
+    {
+        return;
+    }
+    std::ofstream output(
+        StatusPath(userDataFolder_),
+        std::ios::binary | std::ios::trunc);
+    output << Timestamp() << "\tstart\n";
+}
+
+void PocApp::AppendStatus(const std::wstring& payload)
+{
+    if (!diagnosticsEnabled_ || !helperMode_ || userDataFolder_.empty())
+    {
+        return;
+    }
+    const std::wstring line = SingleLine(payload).substr(0, 512);
+    std::ofstream output(
+        StatusPath(userDataFolder_),
+        std::ios::binary | std::ios::app);
+    output << Timestamp() << '\t' << Utf8(line) << '\n';
 }

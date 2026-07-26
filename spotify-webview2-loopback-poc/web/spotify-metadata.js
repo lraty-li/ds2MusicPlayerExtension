@@ -3,7 +3,7 @@ const FETCH_TIMEOUT_MS = 8000;
 
 let trackGeneration = 0;
 
-export function publishSpotifyTrack(track, log) {
+export function publishSpotifyTrack(track, paused, refreshJacket, log) {
   if (!track?.name) return;
   const artist = (track.artists || [])
     .map((item) => item?.name)
@@ -19,7 +19,8 @@ export function publishSpotifyTrack(track, log) {
     album: String(track.album?.name || "").slice(0, 512),
     adapter: "spotify_web_playback_sdk",
     host: "spotify",
-    trackKey
+    trackKey,
+    paused: Boolean(paused)
   };
   if (postGamePayload(metadata)) {
     log?.(`Spotify 元数据已发送：${metadata.title} — ${metadata.artist}`);
@@ -27,6 +28,7 @@ export function publishSpotifyTrack(track, log) {
     log?.("Spotify 元数据发送失败：WebView2 host 不可用");
   }
 
+  if (!refreshJacket) return;
   const generation = ++trackGeneration;
   const urls = readImageUrls(track);
   void publishJacket(urls, trackKey, generation, log);

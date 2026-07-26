@@ -79,6 +79,33 @@ bool IsProxyServer(const std::string& value)
                         static_cast<char>(character)) != std::string::npos;
             });
 }
+
+bool LoadJsonBool(
+    const std::filesystem::path& configPath,
+    const std::string& propertyName)
+{
+    std::ifstream input(configPath, std::ios::binary);
+    if (!input)
+    {
+        return false;
+    }
+    const std::string contents{
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()};
+    const std::string key = '"' + propertyName + '"';
+    const auto keyPosition = contents.find(key);
+    const auto colonPosition = keyPosition == std::string::npos
+        ? std::string::npos
+        : contents.find(':', keyPosition + key.size());
+    if (colonPosition == std::string::npos)
+    {
+        return false;
+    }
+    const auto valuePosition =
+        contents.find_first_not_of(" \t\r\n", colonPosition + 1);
+    return valuePosition != std::string::npos &&
+        contents.compare(valuePosition, 4, "true") == 0;
+}
 }
 
 std::wstring LoadSpotifyClientId(
@@ -103,4 +130,10 @@ std::wstring LoadProxyServer(
         return {};
     }
     return std::wstring(proxyServer.begin(), proxyServer.end());
+}
+
+bool LoadDiagnosticsEnabled(
+    const std::filesystem::path& configPath)
+{
+    return LoadJsonBool(configPath, "diagnostics");
 }
