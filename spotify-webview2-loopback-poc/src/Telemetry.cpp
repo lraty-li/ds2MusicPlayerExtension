@@ -7,9 +7,12 @@
 
 namespace
 {
-std::filesystem::path TelemetryPath(const std::wstring& folder)
+std::filesystem::path TelemetryPath(
+    const std::wstring& folder,
+    bool helperMode)
 {
-    return std::filesystem::path(folder) / L"standalone-telemetry.log";
+    return std::filesystem::path(folder) /
+        (helperMode ? L"helper-telemetry.log" : L"standalone-telemetry.log");
 }
 
 std::string Utf8(const std::wstring& value)
@@ -64,7 +67,8 @@ void PocApp::ResetTelemetry()
         return;
     }
     std::ofstream output(
-        TelemetryPath(userDataFolder_), std::ios::binary | std::ios::trunc);
+        TelemetryPath(userDataFolder_, helperMode_),
+        std::ios::binary | std::ios::trunc);
     output << Timestamp() << "\tSESSION\tstart\n";
 }
 
@@ -76,7 +80,8 @@ void PocApp::AppendTelemetry(
         return;
     }
     std::ofstream output(
-        TelemetryPath(userDataFolder_), std::ios::binary | std::ios::app);
+        TelemetryPath(userDataFolder_, helperMode_),
+        std::ios::binary | std::ios::app);
     output << Timestamp() << '\t' << source << '\t'
            << Utf8(SingleLine(payload)) << '\n';
 }

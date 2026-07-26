@@ -103,6 +103,16 @@ void PocApp::HandleWebMessage(
     {
         PostHostState();
     }
+    else if (message == L"helper-auth-required")
+    {
+        AppendTelemetry("SESSION", L"helper_auth=required");
+        SetHelperWindowVisible(true);
+    }
+    else if (message == L"helper-auth-ready")
+    {
+        AppendTelemetry("SESSION", L"helper_auth=ready");
+        SetHelperWindowVisible(false);
+    }
     else if (message.starts_with(L"probe-control:"))
     {
         gameStreamClient_.RequestProbeControl(message.substr(14));

@@ -7,6 +7,7 @@ export class SpotifyConnectPlayer {
     this.onTrack = onTrack;
     this.log = log;
     this.player = null;
+    this.lastStateFingerprint = "";
   }
 
   async prepareAndConnect() {
@@ -43,7 +44,7 @@ export class SpotifyConnectPlayer {
 
   createPlayer() {
     this.player = new Spotify.Player({
-      name: "Death Stranding 2 Helper PoC",
+      name: "Death Stranding 2",
       volume: 1,
       enableMediaSession: true,
       getOAuthToken: (callback) => {
@@ -67,10 +68,19 @@ export class SpotifyConnectPlayer {
     this.player.addListener("player_state_changed", (state) => {
       if (!state) {
         this.onTrack("尚未转移播放");
+        this.log("player_state_changed state=null");
         return;
       }
       const track = state.track_window?.current_track;
       const artists = track?.artists?.map((artist) => artist.name).join(", ");
+      const fingerprint = `${state.paused}:${track?.uri || ""}`;
+      if (fingerprint !== this.lastStateFingerprint) {
+        this.lastStateFingerprint = fingerprint;
+        this.log(
+          `player_state_changed paused=${state.paused} ` +
+          `position=${state.position} track=${track?.uri || "none"}`
+        );
+      }
       this.onTrack(
         track
           ? `${state.paused ? "已暂停" : "播放中"} · ${track.name} — ${artists}`

@@ -128,6 +128,11 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
                         startUrl += L"?client_id=";
                         startUrl += configuredClientId_;
                     }
+                    if (helperMode_)
+                    {
+                        startUrl += configuredClientId_.empty() ? L"?" : L"&";
+                        startUrl += L"helper_mode=1";
+                    }
                     const HRESULT navigateResult =
                         webView_->Navigate(startUrl.c_str());
                     if (FAILED(navigateResult))

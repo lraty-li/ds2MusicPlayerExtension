@@ -1,7 +1,7 @@
-# Spotify Connect WebView2 + Direct PCM PoC
+# Spotify Connect WebView2 Helper
 
-这是完全脱离游戏的最小验证程序。它不加载浏览器扩展、不连接游戏、不把
-Spotify PCM 写入磁盘，也不实现二维码中继。
+同一个程序同时提供可见的独立诊断模式和 ASI 启动的隐藏 helper 模式。
+它不加载浏览器扩展，也不把 Spotify PCM 写入磁盘。
 
 当前验证的最终候选链路：
 
@@ -17,22 +17,19 @@ Spotify Web Playback SDK
   → 原生 C++ 连续性、吞吐量、RMS、Peak、滚动校验
   → 重分为现有游戏协议的 480 帧 / 10 ms 数据包
   → ws://127.0.0.1:47832
-  → 独立 probe 模拟 Wwise 实时拉取
+  → 独立 probe 或游戏内 Wwise SourcePlugin 实时拉取
 ```
 
-Windows Process Loopback 仍并行保留，作为接管前后的对照观测，不再是最终
-候选 PCM 来源。
+Windows Process Loopback 只在可见诊断模式中运行，作为接管前后的对照
+观测；隐藏 helper 不启动这条采集路径。
 
-## 当前明确不做
+## 运行模式
 
-- 不启动或修改游戏；
-- 不把 PCM 送进 Wwise；
-- 不在游戏专辑图位置显示二维码；
-- 不部署公网 OAuth rendezvous；
-- 不隐藏 WebView2 窗口。
-
-本轮只验证独立宿主中的 Connect、受保护音频、Direct PCM、共享内存传输与
-无声输出，不扩大到游戏集成。
+- 不带参数启动：显示完整诊断窗口，可配合独立 probe 验证，不启动游戏；
+- 带 `--game-helper` 启动：tool window 保持 WebView2 可见，但位于虚拟桌面
+  之外且不进入任务栏/Alt-Tab；自动接管播放中的 Spotify 媒体、切到
+  silent sink，并连接本机游戏音频协议；
+- helper 模式首次缺少 PKCE 授权时才显示窗口，授权完成后自动隐藏。
 
 ## 环境
 
@@ -57,13 +54,19 @@ cd spotify-webview2-loopback-poc
 
 ```text
 build/spotify-webview2-loopback-poc/Release/
-  spotify_webview2_loopback_poc.exe
+  DS2SpotifyWebView2Helper.exe
   spotify_game_stream_probe.exe
 ```
 
 普通 SharedBuffer 验证可以执行 `.\start.ps1`。游戏协议替身验证先启动
-`spotify_game_stream_probe.exe`，再启动 `spotify_webview2_loopback_poc.exe`。
+`spotify_game_stream_probe.exe`，再启动 `DS2SpotifyWebView2Helper.exe`。
 probe 只监听本机回环地址，不连接或加载游戏。
+
+隐藏模式可直接执行：
+
+```powershell
+.\DS2SpotifyWebView2Helper.exe --game-helper
+```
 
 ## Spotify Developer App 配置
 
@@ -103,10 +106,11 @@ Data Folder：
 %LOCALAPPDATA%\DS2SpotifyWebView2LoopbackPoc
 ```
 
-同一目录中的 `standalone-telemetry.log` 保存当前一次运行的 SDK 页面事件、
+同一目录中的 `standalone-telemetry.log` 保存可见诊断模式的 SDK 页面事件、
 宿主静音状态、每 500 ms 的 Process Loopback 指标，以及约每秒一次的原生
 Direct PCM 接收统计。每次启动会清空旧日志，避免不同实验混在一起。原始
-PCM 分块不会写入日志或磁盘。
+PCM 分块不会写入日志或磁盘。隐藏模式写入 `helper-telemetry.log`，且没有
+Process Loopback 指标。
 
 probe 在 EXE 工作目录写入 `game-stream-probe.log`，只记录数据包、缓冲深度、
 欠载和样本统计，不记录原始 PCM。
@@ -158,7 +162,7 @@ WebSocket 通道发出 `pause` 或 `resume`，最终调用 Spotify Web Playback 
 1. 确认 Client ID 已从 `config.json` 自动加载，并进行一次 PKCE 授权。
 2. 授权回调后，SDK 会在没有 DOM 点击和 `activateElement()` 的情况下自动连接。
 3. 在手机或桌面 Spotify 的设备列表选择
-   `Death Stranding 2 Helper PoC`。
+   `Death Stranding 2`。
 4. 播放一首完整曲目，确认曲目信息更新且 PCM 持续非零。
 5. 点击“接管媒体并启动 PCM 桥接”，等待至少三秒。
 6. 确认原生共享内存、frame 映射均为就绪，传输显示 `shared-ring`。
@@ -179,6 +183,9 @@ WebSocket 通道发出 `pause` 或 `resume`，最终调用 Spotify Web Playback 
 
 “手动激活并重连”只用于诊断。如果只有点击它之后才能播放，说明当前无感冷启动
 目标尚未通过。“接管媒体并启动 PCM 桥接”不可撤销，重复实验需重启 PoC。
+
+helper 模式不执行第 5、8 步：它在检测到播放中的 Spotify 媒体后自动接管，
+并在新建 AudioContext 时自动应用 silent sink。
 
 ## Go / No-Go
 
@@ -218,3 +225,8 @@ Go 至少要求：
 - silent sink 下 probe PCM 仍持续非零，缓冲保持在实时低延迟范围；
 - probe 反向 pause 和 resume 均被 WebView2 宿主接收并由 Spotify SDK
   成功执行，恢复后 PCM 序号继续连续。
+- helper 模式的屏幕外 tool window 可在没有 WebView2 页面点击的情况下完成
+  Connect 转移；真正隐藏顶层 HWND 会使 SDK 只更新播放状态而不创建媒体
+  渲染管线，因此正式模式不会使用 `SW_HIDE`。
+- helper 检测到媒体元素后可自动接管并应用 silent sink；实测超过 3,700 个
+  游戏协议包时，探针仍为零缺口、零无效包、零欠载、零裁剪和零覆盖。

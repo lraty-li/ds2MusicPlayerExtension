@@ -16,7 +16,10 @@
 class PocApp
 {
 public:
-    PocApp() = default;
+    explicit PocApp(bool helperMode = false)
+        : helperMode_(helperMode)
+    {
+    }
     ~PocApp();
 
     int Run(HINSTANCE instance, int showCommand);
@@ -43,6 +46,7 @@ private:
     void ResizeWebView();
     void ToggleMute();
     void ToggleSessionMute();
+    void SetHelperWindowVisible(bool visible);
     void ExecuteDiagnosticScript(const wchar_t* script);
     void HandleWebMessage(ICoreWebView2WebMessageReceivedEventArgs* args);
     void HandleGameStreamEvent(GameStreamEvent event);
@@ -57,6 +61,7 @@ private:
     void Shutdown();
 
     HWND window_ = nullptr;
+    bool helperMode_ = false;
     bool shuttingDown_ = false;
     bool webContentReady_ = false;
     HRESULT captureResult_ = E_PENDING;

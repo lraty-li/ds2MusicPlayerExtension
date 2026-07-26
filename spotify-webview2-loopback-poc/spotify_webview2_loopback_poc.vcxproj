@@ -33,7 +33,7 @@
     <WebView2LoaderPreference>Static</WebView2LoaderPreference>
     <OutDir Condition="'$(OutDir)'==''">$(ProjectDir)bin\</OutDir>
     <IntDir Condition="'$(IntDir)'==''">$(ProjectDir)obj\</IntDir>
-    <TargetName>spotify_webview2_loopback_poc</TargetName>
+    <TargetName>DS2SpotifyWebView2Helper</TargetName>
   </PropertyGroup>
 
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

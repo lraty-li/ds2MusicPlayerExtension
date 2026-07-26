@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $executable = Join-Path $repoRoot `
-    "build\spotify-webview2-loopback-poc\Release\spotify_webview2_loopback_poc.exe"
+    "build\spotify-webview2-loopback-poc\Release\DS2SpotifyWebView2Helper.exe"
 
 if (-not (Test-Path -LiteralPath $executable)) {
     & (Join-Path $PSScriptRoot "build.ps1")

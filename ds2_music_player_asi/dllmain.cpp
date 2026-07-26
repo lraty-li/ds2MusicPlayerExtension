@@ -2,7 +2,7 @@
 
 #include "Hooks.h"
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
     {
@@ -16,7 +16,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     }
     else if (reason == DLL_PROCESS_DETACH)
     {
-        Hooks::Shutdown();
+        Hooks::Shutdown(reserved != nullptr);
     }
 
     return TRUE;

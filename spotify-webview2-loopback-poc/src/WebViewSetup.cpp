@@ -72,6 +72,11 @@ void PocApp::InitializeWebView()
         configuredProxyServer_.empty()
             ? L"proxy_server=system"
             : L"proxy_server=" + configuredProxyServer_);
+    if (helperMode_)
+    {
+        AppendTelemetry(
+            "SESSION", L"autoplay_policy=no-user-gesture-required");
+    }
 
     LPWSTR version = nullptr;
     const HRESULT versionResult =
@@ -93,12 +98,19 @@ void PocApp::InitializeWebView()
         ShowFailure(L"Create WebView2 environment options", E_OUTOFMEMORY);
         return;
     }
+    std::wstring browserArguments = helperMode_
+        ? L"--autoplay-policy=no-user-gesture-required"
+        : L"";
     if (!configuredProxyServer_.empty())
     {
-        const std::wstring arguments =
-            L"--proxy-server=" + configuredProxyServer_;
+        if (!browserArguments.empty()) browserArguments += L" ";
+        browserArguments += L"--proxy-server=" + configuredProxyServer_;
+    }
+    if (!browserArguments.empty())
+    {
         const HRESULT optionResult =
-            options->put_AdditionalBrowserArguments(arguments.c_str());
+            options->put_AdditionalBrowserArguments(
+                browserArguments.c_str());
         if (FAILED(optionResult))
         {
             ShowFailure(L"Configure WebView2 proxy", optionResult);
@@ -167,7 +179,7 @@ HRESULT PocApp::OnControllerCreated(
     ConfigureWebView();
     ConfigureAutoplay();
     ResizeWebView();
-    StartCapture();
+    if (!helperMode_) StartCapture();
     return InstallFrameAudioProbeAndNavigate();
 }
 
@@ -178,7 +190,7 @@ void PocApp::ConfigureWebView()
     if (SUCCEEDED(webView_->get_Settings(&settings)))
     {
         settings->put_IsStatusBarEnabled(FALSE);
-        settings->put_AreDevToolsEnabled(TRUE);
+        settings->put_AreDevToolsEnabled(helperMode_ ? FALSE : TRUE);
     }
     ConfigureSharedPcmFrames();
 

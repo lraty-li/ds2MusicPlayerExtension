@@ -8,14 +8,19 @@ import {
   redirectUri,
   saveClientId
 } from "./auth.js";
-import { initializeAudioOutputProbe } from "./audio-output-probe.js";
+import {
+  enableAutomaticHelperAudio,
+  initializeAudioOutputProbe
+} from "./audio-output-probe.js";
 import { initializeGameStreamStatus } from "./game-stream-status.js";
 import { initializeHostProbe } from "./host-probe.js";
 import { initializeNativePcmBridge } from "./native-pcm-bridge.js";
 import { SpotifyConnectPlayer } from "./spotify-player.js";
 
 const byId = (id) => document.getElementById(id);
+const HELPER_MODE_KEY = "ds2.spotify.helperMode";
 let spotifyPlayer = null;
+let helperMode = false;
 window.__pocSpotifyControl = applyNativeSpotifyControl;
 
 initialize().catch((error) => {
@@ -24,8 +29,14 @@ initialize().catch((error) => {
 });
 
 async function initialize() {
-  const configuredClientId =
-    new URLSearchParams(window.location.search).get("client_id");
+  const query = new URLSearchParams(window.location.search);
+  const configuredClientId = query.get("client_id");
+  if (query.get("helper_mode") === "1") {
+    sessionStorage.setItem(HELPER_MODE_KEY, "1");
+  }
+  helperMode =
+    query.get("helper_mode") === "1" ||
+    sessionStorage.getItem(HELPER_MODE_KEY) === "1";
   if (configuredClientId && /^[0-9a-f]{32}$/i.test(configuredClientId)) {
     saveClientId(configuredClientId);
   }
@@ -36,6 +47,7 @@ async function initialize() {
   initializeGameStreamStatus(log);
   initializeHostProbe(log);
   initializeAudioOutputProbe(log);
+  if (helperMode) enableAutomaticHelperAudio();
   if (configuredClientId) log("已从 config.json 自动加载 Client ID");
 
   try {
@@ -49,6 +61,7 @@ async function initialize() {
     log(error.message);
   }
   updateAuthorizationUi();
+  updateHelperWindow();
   if (hasStoredAuthorization()) await autoStartPlayer();
 }
 
@@ -83,6 +96,7 @@ function bindActions() {
     clearAuthorization();
     setAuthStatus("本地授权已清除", "neutral");
     updateAuthorizationUi();
+    updateHelperWindow();
     log("已清除 WebView2 配置中的 Spotify token");
   });
 
@@ -104,6 +118,7 @@ async function autoStartPlayer() {
   } catch (error) {
     setConnectStatus({ sdk: "加载失败", connect: "失败" });
     log(`播放器自动启动失败：${error.message}`);
+    updateHelperWindow();
   }
 }
 
@@ -147,6 +162,15 @@ function updateAuthorizationUi() {
   } else if (hasClientId) {
     setAuthStatus("Client ID 已保存，下一步进行本机 PKCE 授权", "neutral");
   }
+}
+
+function updateHelperWindow() {
+  if (!helperMode) return;
+  window.chrome?.webview?.postMessage(
+    hasStoredAuthorization()
+      ? "helper-auth-ready"
+      : "helper-auth-required"
+  );
 }
 
 function setConnectStatus(update) {

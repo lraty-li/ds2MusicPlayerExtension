@@ -5,9 +5,20 @@
 
 namespace
 {
-constexpr wchar_t kWindowClass[] = L"DS2SpotifyWebView2LoopbackPoc";
-constexpr wchar_t kWindowTitle[] =
-    L"Spotify Connect WebView2 + Process Loopback PoC";
+constexpr wchar_t kWindowClass[] = L"DS2SpotifyWebView2HelperWindow";
+constexpr wchar_t kWindowTitle[] = L"Death Stranding 2 Spotify Helper";
+constexpr int kWindowWidth = 1120;
+constexpr int kWindowHeight = 840;
+
+int OffscreenX()
+{
+    return GetSystemMetrics(SM_XVIRTUALSCREEN) - kWindowWidth - 64;
+}
+
+int OffscreenY()
+{
+    return GetSystemMetrics(SM_YVIRTUALSCREEN);
+}
 }
 
 PocApp::~PocApp()
@@ -55,8 +66,8 @@ bool PocApp::CreateMainWindow(HINSTANCE instance, int showCommand)
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        1120,
-        840,
+        kWindowWidth,
+        kWindowHeight,
         nullptr,
         nullptr,
         instance,
@@ -65,9 +76,52 @@ bool PocApp::CreateMainWindow(HINSTANCE instance, int showCommand)
     {
         return false;
     }
-    ShowWindow(window_, showCommand == SW_HIDE ? SW_SHOWNORMAL : showCommand);
+    if (helperMode_)
+    {
+        SetHelperWindowVisible(false);
+    }
+    else
+    {
+        ShowWindow(
+            window_,
+            showCommand == SW_HIDE ? SW_SHOWNORMAL : showCommand);
+    }
     UpdateWindow(window_);
     return true;
+}
+
+void PocApp::SetHelperWindowVisible(bool visible)
+{
+    if (!helperMode_ || !window_)
+    {
+        return;
+    }
+    LONG_PTR extendedStyle = GetWindowLongPtrW(window_, GWL_EXSTYLE);
+    if (visible)
+    {
+        extendedStyle &= ~(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        SetWindowLongPtrW(window_, GWL_EXSTYLE, extendedStyle);
+        RECT workArea{};
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+        const int x =
+            workArea.left + (workArea.right - workArea.left - kWindowWidth) / 2;
+        const int y =
+            workArea.top + (workArea.bottom - workArea.top - kWindowHeight) / 2;
+        SetWindowPos(
+            window_, HWND_TOP, x, y, kWindowWidth, kWindowHeight,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        ShowWindow(window_, SW_SHOWNORMAL);
+        SetForegroundWindow(window_);
+        return;
+    }
+
+    extendedStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    SetWindowLongPtrW(window_, GWL_EXSTYLE, extendedStyle);
+    SetWindowPos(
+        window_, HWND_BOTTOM, OffscreenX(), OffscreenY(),
+        kWindowWidth, kWindowHeight,
+        SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    ShowWindow(window_, SW_SHOWNOACTIVATE);
 }
 
 LRESULT CALLBACK PocApp::WindowProcedure(

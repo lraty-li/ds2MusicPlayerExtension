@@ -20,6 +20,7 @@ void PocApp::PostHostState()
     std::wostringstream json;
     json << L"{\"type\":\"host-state\""
          << L",\"helperPid\":" << GetCurrentProcessId()
+         << L",\"helperMode\":" << (helperMode_ ? L"true" : L"false")
          << L",\"browserPid\":" << browserProcessId_
          << L",\"captureTargetPid\":" << captureTargetProcessId_
          << L",\"runtime\":\"" << runtimeVersion_ << L"\""

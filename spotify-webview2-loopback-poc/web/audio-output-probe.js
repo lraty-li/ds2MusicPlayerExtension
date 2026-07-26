@@ -15,6 +15,8 @@ let desiredMode = "default";
 let commandSequence = 0;
 let logMessage = () => {};
 let installed = false;
+let automaticHelperMode = false;
+let automaticAttachScheduled = false;
 
 export function initializeAudioOutputProbe(log) {
   if (installed) return;
@@ -25,6 +27,13 @@ export function initializeAudioOutputProbe(log) {
   publishState();
   postCommand("report");
   window.setTimeout(() => logSnapshot("原生 frame 探针已安装"), 500);
+}
+
+export function enableAutomaticHelperAudio() {
+  automaticHelperMode = true;
+  setDesiredMode("none");
+  scheduleAutomaticAttach();
+  logMessage("FRAME_PROBE helper mode enabled");
 }
 
 function bindActions() {
@@ -70,7 +79,33 @@ function handleFrameMessage(event) {
   if (desiredMode === "none" && state.desiredMode !== "none") {
     postCommandTo(event.source, "set-mode", "none");
   }
+  scheduleAutomaticAttach();
   publishState();
+}
+
+function scheduleAutomaticAttach() {
+  if (!automaticHelperMode ||
+      automaticAttachScheduled ||
+      !hasUnattachedMedia()) {
+    return;
+  }
+  automaticAttachScheduled = true;
+  window.setTimeout(() => {
+    automaticAttachScheduled = false;
+    if (!hasUnattachedMedia()) return;
+    postCommand("attach-media");
+    logMessage(
+      `FRAME_PROBE auto attach-media knownFrames=${frameReports.size}`
+    );
+  }, 50);
+}
+
+function hasUnattachedMedia() {
+  return [...frameReports.values()].some((state) =>
+    state.media?.some(
+      ({ graphState }) => graphState === "none"
+    )
+  );
 }
 
 function setDesiredMode(mode) {

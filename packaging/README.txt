@@ -10,7 +10,9 @@ English
   <GameRoot>\scripts\Ds2MusicPlayerExtend.asi
   <GameRoot>\scripts\ds2_dll_music_resource.dll
   <GameRoot>\scripts\ds2_jacket_bc7e.dll
-  <GameRoot>\scripts\DS2SpotifyConnectBridge.dll
+  <GameRoot>\scripts\DS2SpotifyHelper\DS2SpotifyWebView2Helper.exe
+  <GameRoot>\scripts\DS2SpotifyHelper\config.json
+  <GameRoot>\scripts\DS2SpotifyHelper\web\
 4. Browser extension:
    Open Chrome/Edge extensions page, enable Developer mode, choose Load
    unpacked, and select the browser-extension folder.
@@ -22,15 +24,16 @@ English
 7. NetEase Cloud Music: manually start playback in the page once before using
 game-side pause/resume. Chrome can reject a cold play request until the page
 has received user interaction.
-8. Spotify Connect: after the game starts, select "Death Stranding 2" in
-Spotify's device picker. The bridge sends Spotify audio, track information,
-and album art to the in-game special track. Do not use browser streaming and
-Spotify Connect at the same time. Game pause/resume controls Spotify; Spotify
-controls do not change the game player's state.
-9. If Spotify cannot find the game device, right-click
-   Install-SpotifyConnectFirewall.ps1 and choose Run with PowerShell. Approve
-   the UAC prompt. The script only opens DS2.exe's Spotify Connect ports on
-   private networks; use -Remove to undo it.
+8. Spotify Connect: on the first run, complete PKCE authorization if the helper
+   window appears. Then select "Death Stranding 2" in Spotify's device picker.
+   Later launches keep the helper outside the visible desktop and task switcher.
+   The helper's silent sink does not mute Microsoft Edge. Do not use browser
+   streaming and Spotify Connect at the same time.
+   Game pause/resume controls Spotify; Spotify controls do not change the game
+   player's state.
+9. The helper uses the Windows system proxy by default. To force a proxy, edit
+   scripts\DS2SpotifyHelper\config.json and set proxyServer, for example
+   "http://127.0.0.1:7890".
 
 中文
 
@@ -42,7 +45,9 @@ controls do not change the game player's state.
   <游戏根目录>\scripts\Ds2MusicPlayerExtend.asi
   <游戏根目录>\scripts\ds2_dll_music_resource.dll
   <游戏根目录>\scripts\ds2_jacket_bc7e.dll
-  <游戏根目录>\scripts\DS2SpotifyConnectBridge.dll
+  <游戏根目录>\scripts\DS2SpotifyHelper\DS2SpotifyWebView2Helper.exe
+  <游戏根目录>\scripts\DS2SpotifyHelper\config.json
+  <游戏根目录>\scripts\DS2SpotifyHelper\web\
 4. 浏览器扩展：
    打开 Chrome/Edge 扩展管理页，启用开发者模式，选择“加载已解压的扩展”，
    然后选择 browser-extension 文件夹。
@@ -52,14 +57,15 @@ controls do not change the game player's state.
    播放器状态控制。
 7. 网易云音乐：使用游戏内暂停/恢复前，请先在网页内手动播放一次。
 Chrome 可能会拒绝没有用户交互的冷启动播放请求。
-8. Spotify Connect：启动游戏后，在 Spotify 的设备选择器中选择
-“Death Stranding 2”。桥接程序会把 Spotify 音频、曲目信息和专辑图发送到
-游戏内的特殊曲目。浏览器推流与 Spotify Connect 不要同时使用；游戏内
-暂停/恢复会控制 Spotify，但 Spotify 侧控制不会改变游戏播放器状态。
-9. 若 Spotify 找不到游戏设备，右键
-   Install-SpotifyConnectFirewall.ps1，选择“使用 PowerShell 运行”，并确认
-   UAC 提示。脚本仅为 DS2.exe 开放专用网络的 Spotify Connect 端口；使用
-   -Remove 可撤销规则。
+8. Spotify Connect：首次运行时，如果 helper 窗口出现，请先完成 PKCE
+   授权，再在 Spotify 的设备选择器中选择“Death Stranding 2”。后续启动时
+   helper 会移到可见桌面之外，并从任务栏和 Alt-Tab 隐去。helper 的 silent
+   sink 不会静音 Microsoft Edge。浏览器推流与 Spotify Connect 不要同时
+   使用；游戏内暂停/恢复会控制 Spotify，但 Spotify 侧控制不会改变游戏
+   播放器状态。
+9. helper 默认使用 Windows 系统代理。如需强制代理，请编辑
+   scripts\DS2SpotifyHelper\config.json 的 proxyServer，例如
+   "http://127.0.0.1:7890"。
 
 Credits
 

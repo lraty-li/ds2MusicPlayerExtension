@@ -128,7 +128,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     return 0;
 }
 
-void Hooks::Shutdown()
+void Hooks::Shutdown(bool processTerminating)
 {
     if (!IsCurrentProcessDs2())
     {
@@ -136,4 +136,8 @@ void Hooks::Shutdown()
     }
 
     g_dllLogger.Log("DLL_PROCESS_DETACH");
+    if (!processTerminating)
+    {
+        SpotifyConnectBootstrap::Stop();
+    }
 }
