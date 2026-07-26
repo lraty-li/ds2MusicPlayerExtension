@@ -124,14 +124,44 @@
         等待连续 PCM 到达原生 C++
       </p>
       <p id="pcm-bridge-detail" class="hint">
-        共享环含 64 个约 100 ms 的槽位。Base64/WebMessage 只作为失败回退；
-        原生端仍只校验并立即丢弃样本，不写 WAV，也不连接游戏。
+        共享环含 64 个槽位，每槽容量最多约 100 ms；当前实际分块为 20 ms。
+        Base64/WebMessage 只作为失败回退，原始样本不写 WAV。
       </p>
     </section>
 
     <section class="card">
       <div class="section-heading">
         <span class="step">4</span>
+        <div>
+          <h2>游戏音频协议替身</h2>
+          <p>把 PCM 重分为 480 帧/包，经本地 WebSocket 送给独立接收探针。</p>
+        </div>
+      </div>
+
+      <dl class="facts">
+        <div><dt>目标端点</dt><dd id="game-stream-endpoint">ws://127.0.0.1:47832</dd></div>
+        <div><dt>连接状态</dt><dd id="game-stream-connection">等待接收探针</dd></div>
+        <div><dt>累计发送</dt><dd id="game-stream-sent">0 包 · 0 帧</dd></div>
+        <div><dt>发送队列</dt><dd id="game-stream-queue">当前 0 · 峰值 0</dd></div>
+        <div><dt>连续性</dt><dd id="game-stream-errors">丢包 0 · 发送错误 0 · 无效 0</dd></div>
+        <div><dt>反向控制</dt><dd id="game-stream-controls">暂停 0 · 恢复 0</dd></div>
+      </dl>
+      <p id="game-stream-verdict" class="verdict idle">
+        等待独立游戏协议接收探针
+      </p>
+      <div class="actions">
+        <button id="probe-pause">probe 发送暂停</button>
+        <button id="probe-resume" class="secondary">probe 发送恢复</button>
+      </div>
+      <p id="game-stream-detail" class="hint">
+        两个诊断按钮会先请求 probe，再由 probe 沿正式反向通道发出控制命令；
+        接收端模拟现有 Wwise SourcePlugin，本阶段不会启动游戏。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">5</span>
         <div>
           <h2>Spotify PKCE 授权</h2>
           <p>本轮用嵌入页完成一次本机授权；二维码中继明确后置。</p>
@@ -160,7 +190,7 @@
 
     <section class="card">
       <div class="section-heading">
-        <span class="step">5</span>
+        <span class="step">6</span>
         <div>
           <h2>从 Spotify Connect 选择这个设备</h2>
           <p>授权后会自动注册，不需要点击页面；手动激活按钮只用于诊断自动播放失败。</p>

@@ -9,12 +9,14 @@ import {
   saveClientId
 } from "./auth.js";
 import { initializeAudioOutputProbe } from "./audio-output-probe.js";
+import { initializeGameStreamStatus } from "./game-stream-status.js";
 import { initializeHostProbe } from "./host-probe.js";
 import { initializeNativePcmBridge } from "./native-pcm-bridge.js";
 import { SpotifyConnectPlayer } from "./spotify-player.js";
 
 const byId = (id) => document.getElementById(id);
 let spotifyPlayer = null;
+window.__pocSpotifyControl = applyNativeSpotifyControl;
 
 initialize().catch((error) => {
   setAuthStatus(error.message, "error");
@@ -31,6 +33,7 @@ async function initialize() {
   byId("redirect-uri").value = redirectUri();
   bindActions();
   initializeNativePcmBridge(log);
+  initializeGameStreamStatus(log);
   initializeHostProbe(log);
   initializeAudioOutputProbe(log);
   if (configuredClientId) log("已从 config.json 自动加载 Client ID");
@@ -117,6 +120,20 @@ function createPlayer() {
 
 function disconnectPlayer() {
   if (spotifyPlayer) spotifyPlayer.disconnect();
+}
+
+async function applyNativeSpotifyControl(command) {
+  if (!spotifyPlayer) {
+    log(`忽略游戏协议控制：播放器尚未创建（${command}）`);
+    return false;
+  }
+  try {
+    await spotifyPlayer.applyControl(command);
+    return true;
+  } catch (error) {
+    log(`游戏协议控制失败：${error.message}`);
+    return false;
+  }
 }
 
 function updateAuthorizationUi() {

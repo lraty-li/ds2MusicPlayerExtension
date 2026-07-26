@@ -210,6 +210,7 @@ void PocApp::ConfigureWebView()
                 args->get_IsSuccess(&success);
                 webContentReady_ = success != FALSE;
                 PostHostState();
+                PostGameStreamState();
                 return S_OK;
             }).Get(),
         &ignoredToken);

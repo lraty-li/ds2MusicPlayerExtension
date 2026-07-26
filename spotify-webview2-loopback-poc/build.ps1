@@ -99,6 +99,18 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+$probeProject = Join-Path $projectRoot "spotify_game_stream_probe.vcxproj"
+$probeIntermediateDir = Join-Path $buildRoot "probe-obj"
+New-Item -ItemType Directory -Path $probeIntermediateDir -Force | Out-Null
+$probeProperties =
+    "Configuration=Release;Platform=x64;OutDir=$outputDir\;" +
+    "IntDir=$probeIntermediateDir\"
+& $msbuild $probeProject "/p:$probeProperties" /m /nologo /v:q
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "PROBE_BUILD_FAIL"
+    exit $LASTEXITCODE
+}
+
 $webOutput = Join-Path $outputDir "web"
 New-Item -ItemType Directory -Path $webOutput -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $projectRoot "web") -File |
@@ -107,3 +119,4 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "config.json") `
     -Destination (Join-Path $outputDir "config.json") -Force
 Write-Host "BUILD_OK"
 Write-Host (Join-Path $outputDir "spotify_webview2_loopback_poc.exe")
+Write-Host (Join-Path $outputDir "spotify_game_stream_probe.exe")

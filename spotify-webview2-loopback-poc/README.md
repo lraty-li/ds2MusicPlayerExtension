@@ -1,7 +1,7 @@
 # Spotify Connect WebView2 + Direct PCM PoC
 
-这是完全脱离游戏的最小验证程序。它不加载浏览器扩展、不连接游戏、不写入
-Spotify PCM，也不实现二维码中继。
+这是完全脱离游戏的最小验证程序。它不加载浏览器扩展、不连接游戏、不把
+Spotify PCM 写入磁盘，也不实现二维码中继。
 
 当前验证的最终候选链路：
 
@@ -11,11 +11,13 @@ Spotify Web Playback SDK
   → HTMLMediaElement
   → MediaElementAudioSourceNode
   → AudioWorklet（失败时显式回退 ScriptProcessor）
-  → 约 100 ms 的 48 kHz / 双声道 / PCM16 分块
+  → 20 ms 的 48 kHz / 双声道 / PCM16 分块
   → WebView2 SharedBuffer 环形缓冲区
   → 小型 WebMessage 仅通知原生消费槽位
   → 原生 C++ 连续性、吞吐量、RMS、Peak、滚动校验
-  → 丢弃 PCM
+  → 重分为现有游戏协议的 480 帧 / 10 ms 数据包
+  → ws://127.0.0.1:47832
+  → 独立 probe 模拟 Wwise 实时拉取
 ```
 
 Windows Process Loopback 仍并行保留，作为接管前后的对照观测，不再是最终
@@ -55,9 +57,13 @@ cd spotify-webview2-loopback-poc
 
 ```text
 build/spotify-webview2-loopback-poc/Release/
+  spotify_webview2_loopback_poc.exe
+  spotify_game_stream_probe.exe
 ```
 
-也可以执行 `.\start.ps1`；缺少 EXE 时它会先构建。
+普通 SharedBuffer 验证可以执行 `.\start.ps1`。游戏协议替身验证先启动
+`spotify_game_stream_probe.exe`，再启动 `spotify_webview2_loopback_poc.exe`。
+probe 只监听本机回环地址，不连接或加载游戏。
 
 ## Spotify Developer App 配置
 
@@ -102,6 +108,9 @@ Data Folder：
 Direct PCM 接收统计。每次启动会清空旧日志，避免不同实验混在一起。原始
 PCM 分块不会写入日志或磁盘。
 
+probe 在 EXE 工作目录写入 `game-stream-probe.log`，只记录数据包、缓冲深度、
+欠载和样本统计，不记录原始 PCM。
+
 ## 验证顺序
 
 ### 1. 本地音调与基础捕获
@@ -119,7 +128,7 @@ Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直
 `AudioContext`。点击“接管媒体并启动 PCM 桥接”会调用
 `createMediaElementSource()`，把媒体接到新 `AudioContext`，并在
 `AnalyserNode` 前插入 PCM tap。tap 优先运行在 AudioWorklet 音频线程，每
-4800 帧发送一个 PCM16 双声道分块；如果当前文档策略不允许加载 Worklet
+960 帧发送一个 PCM16 双声道分块；如果当前文档策略不允许加载 Worklet
 模块，界面会明确显示 `ScriptProcessor fallback`。
 
 原生宿主通过 `CreateSharedBuffer` 建立 64 槽环形缓冲区。每个槽可容纳一个
@@ -132,6 +141,12 @@ Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直
 旧的 WebMessage + Base64 路径只保留为兼容性诊断回退。正式判定要求界面和
 原生日志都显示 `transport=shared-ring`；发生 Base64 回退或 ring drop 会明确
 判定失败。
+
+原生端把每个 960 帧分块重分为两个 480 帧数据包，使用运行时 SourcePlugin
+已经支持的 PCM16 v1 协议发送到 `ws://127.0.0.1:47832`。独立 probe 使用同一
+数据包解析规则，并每 10 ms 消费 480 帧，模拟 Wwise 音频回调。页面中的
+“probe 发送暂停/恢复”按钮会先向 probe 发诊断请求，再由 probe 沿正式反向
+WebSocket 通道发出 `pause` 或 `resume`，最终调用 Spotify Web Playback SDK。
 
 自动化诊断可使用 `F8` 直接切换本地 WebAudio 音调、`F9` 切换宿主静音、
 `F10` 滚动到 PCM 指标、`F11` 滚动到日志。F8 不伪造用户手势，因此也能
@@ -151,6 +166,17 @@ Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直
 8. 再点击“本实例切到 silent sink”。
 9. 确认桌面无声，同时 Direct PCM 与原生累计仍持续增长。
 
+### 3. 游戏音频协议替身
+
+1. 先启动 `spotify_game_stream_probe.exe`，再启动 PoC。
+2. 确认“游戏音频协议替身”显示已连接。
+3. 播放并接管 Spotify 媒体，等待发送端累计至少 100 个数据包。
+4. 确认发送端和 probe 均无丢包、无效包、欠载、裁剪或覆盖。
+5. 切到 silent sink，确认 probe PCM 仍持续非零。
+6. 点击“probe 发送暂停”，确认 Spotify 客户端显示暂停。
+7. 点击“probe 发送恢复”，确认 Spotify 客户端恢复播放。
+8. 确认恢复后共享内存与游戏协议数据包序号仍连续。
+
 “手动激活并重连”只用于诊断。如果只有点击它之后才能播放，说明当前无感冷启动
 目标尚未通过。“接管媒体并启动 PCM 桥接”不可撤销，重复实验需重启 PoC。
 
@@ -167,6 +193,9 @@ Go 至少要求：
 - 原生 C++ 连续收到 PCM16 分块，吞吐量约为 48,000 帧/秒；
 - PCM 传输为 `shared-ring`，没有 Base64 回退和 ring drop；
 - 分块序号缺口、乱序和无效块均为零；
+- 游戏协议稳定输出 100 个 480 帧数据包/秒；
+- probe 无序号缺口、无效包、欠载、裁剪或覆盖；
+- probe 反向 pause/resume 能改变 Spotify 的真实播放状态；
 - 其他程序出声不会进入本 PoC 的指标。
 
 任何一项失败都应停留在 standalone 阶段调查，不需要启动游戏。
@@ -182,4 +211,10 @@ Go 至少要求：
 - 同期 Direct PCM 仍为非零，例如
   `RMS 0.2600084 / Peak 1.0000000`；
 - 累计 1,411 个共享内存分块时，序号缺口、乱序和无效块仍全部为零；
-- 全程传输类型仅为 `shared-ring`，未回退 Base64。
+- 全程传输类型仅为 `shared-ring`，未回退 Base64；
+- 游戏协议发送端稳定输出 100 包/秒，队列峰值仅 2–3 包；
+- probe 累计超过 15,000 包时仍保持序号缺口、无效包、欠载、补静音、
+  裁剪和覆盖全部为零；
+- silent sink 下 probe PCM 仍持续非零，缓冲保持在实时低延迟范围；
+- probe 反向 pause 和 resume 均被 WebView2 宿主接收并由 Spotify SDK
+  成功执行，恢复后 PCM 序号继续连续。

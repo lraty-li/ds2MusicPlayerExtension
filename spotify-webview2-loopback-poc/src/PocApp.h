@@ -2,6 +2,7 @@
 
 #include "AudioSessionMute.h"
 #include "CaptureMetrics.h"
+#include "GameStreamClient.h"
 #include "PcmSharedRing.h"
 #include "PcmStreamReceiver.h"
 #include "ProcessLoopbackCapture.h"
@@ -44,8 +45,10 @@ private:
     void ToggleSessionMute();
     void ExecuteDiagnosticScript(const wchar_t* script);
     void HandleWebMessage(ICoreWebView2WebMessageReceivedEventArgs* args);
+    void HandleGameStreamEvent(GameStreamEvent event);
     void PostHostState();
     void PostMetrics(const CaptureMetrics& metrics);
+    void PostGameStreamState();
     void PostJson(const std::wstring& json);
     void ResetTelemetry();
     void AppendTelemetry(
@@ -75,6 +78,7 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;
     Microsoft::WRL::ComPtr<ProcessLoopbackCapture> capture_;
     AudioSessionMuteController sessionMuteController_;
+    GameStreamClient gameStreamClient_;
     PcmSharedRing pcmSharedRing_;
     PcmStreamReceiver pcmStreamReceiver_;
 };

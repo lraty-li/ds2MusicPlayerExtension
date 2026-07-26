@@ -29,6 +29,18 @@ export class SpotifyConnectPlayer {
     this.onTrack("—");
   }
 
+  async applyControl(command) {
+    if (!this.player) throw new Error("Spotify Player 尚未创建");
+    if (command === "pause") {
+      await this.player.pause();
+    } else if (command === "resume") {
+      await this.player.resume();
+    } else {
+      throw new Error(`未知控制命令：${command}`);
+    }
+    this.log(`游戏协议控制已执行：${command}`);
+  }
+
   createPlayer() {
     this.player = new Spotify.Player({
       name: "Death Stranding 2 Helper PoC",

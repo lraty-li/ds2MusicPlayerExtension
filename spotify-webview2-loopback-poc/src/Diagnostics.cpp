@@ -69,6 +69,7 @@ void PocApp::HandleWebMessage(
     {
         if (ringError.empty())
         {
+            gameStreamClient_.Push(ringChunk);
             pcmStreamReceiver_.HandleChunk(
                 ringChunk, L"shared-ring", pcmMetrics);
         }
@@ -80,6 +81,7 @@ void PocApp::HandleWebMessage(
         if (!pcmMetrics.empty())
         {
             PostJson(pcmMetrics);
+            PostGameStreamState();
         }
     }
     else if (pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
@@ -100,6 +102,11 @@ void PocApp::HandleWebMessage(
     else if (message == L"request-host-state")
     {
         PostHostState();
+    }
+    else if (message.starts_with(L"probe-control:"))
+    {
+        gameStreamClient_.RequestProbeControl(message.substr(14));
+        PostGameStreamState();
     }
     else if (message == L"open-devtools" && webView_)
     {

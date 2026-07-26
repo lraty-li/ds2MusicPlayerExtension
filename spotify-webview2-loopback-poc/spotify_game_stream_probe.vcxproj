@@ -11,8 +11,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{0FD63828-795A-4BDD-84FA-59BB92A273BE}</ProjectGuid>
-    <RootNamespace>SpotifyWebView2LoopbackPoc</RootNamespace>
+    <ProjectGuid>{D529F9E2-9486-476E-8CB4-5A43050E4A6A}</ProjectGuid>
+    <RootNamespace>SpotifyGameStreamProbe</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
 
@@ -30,10 +30,9 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
 
   <PropertyGroup>
-    <WebView2LoaderPreference>Static</WebView2LoaderPreference>
     <OutDir Condition="'$(OutDir)'==''">$(ProjectDir)bin\</OutDir>
-    <IntDir Condition="'$(IntDir)'==''">$(ProjectDir)obj\</IntDir>
-    <TargetName>spotify_webview2_loopback_poc</TargetName>
+    <IntDir Condition="'$(IntDir)'==''">$(ProjectDir)obj-probe\</IntDir>
+    <TargetName>spotify_game_stream_probe</TargetName>
   </PropertyGroup>
 
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -46,57 +45,33 @@
       <PreprocessorDefinitions>
         WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)
       </PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>
+        $(ProjectDir)src;$(ProjectDir)probe;%(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>
-        Advapi32.lib;Bcrypt.lib;Crypt32.lib;Mmdevapi.lib;Ole32.lib;Shell32.lib;
-        WindowsApp.lib;Ws2_32.lib;%(AdditionalDependencies)
+        Advapi32.lib;Bcrypt.lib;Crypt32.lib;Ws2_32.lib;%(AdditionalDependencies)
       </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <ClCompile Include="src\AudioSessionMute.cpp" />
-    <ClCompile Include="src\Diagnostics.cpp" />
-    <ClCompile Include="src\FrameAudioProbe.cpp" />
+    <ClCompile Include="probe\GameStreamProbe.cpp" />
+    <ClCompile Include="probe\ProbeAudioRing.cpp" />
     <ClCompile Include="src\GameAudioProtocol.cpp" />
-    <ClCompile Include="src\GameStreamClient.cpp" />
-    <ClCompile Include="src\GameStreamSetup.cpp" />
-    <ClCompile Include="src\GameStreamWorker.cpp" />
-    <ClCompile Include="src\HostState.cpp" />
-    <ClCompile Include="src\Main.cpp" />
-    <ClCompile Include="src\PcmChunkCodec.cpp" />
-    <ClCompile Include="src\PcmSharedRing.cpp" />
-    <ClCompile Include="src\PcmStreamReceiver.cpp" />
-    <ClCompile Include="src\PocApp.cpp" />
-    <ClCompile Include="src\PocConfig.cpp" />
-    <ClCompile Include="src\ProcessLoopbackCapture.cpp" />
-    <ClCompile Include="src\SharedPcmSetup.cpp" />
-    <ClCompile Include="src\Telemetry.cpp" />
-    <ClCompile Include="src\WebViewSetup.cpp" />
     <ClCompile Include="src\WebSocketHandshake.cpp" />
     <ClCompile Include="src\WebSocketWire.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\AudioSessionMute.h" />
-    <ClInclude Include="src\CaptureMetrics.h" />
+    <ClInclude Include="probe\ProbeAudioRing.h" />
     <ClInclude Include="src\GameAudioProtocol.h" />
-    <ClInclude Include="src\GameStreamClient.h" />
-    <ClInclude Include="src\GameStreamClientInternal.h" />
-    <ClInclude Include="src\PcmChunkCodec.h" />
-    <ClInclude Include="src\PcmSharedRing.h" />
-    <ClInclude Include="src\PcmStreamReceiver.h" />
-    <ClInclude Include="src\PocApp.h" />
-    <ClInclude Include="src\PocConfig.h" />
-    <ClInclude Include="src\ProcessLoopbackCapture.h" />
     <ClInclude Include="src\WebSocketWire.h" />
   </ItemGroup>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Import Project="$(WebView2PackageDir)\build\native\Microsoft.Web.WebView2.targets"
-          Condition="Exists('$(WebView2PackageDir)\build\native\Microsoft.Web.WebView2.targets')" />
 </Project>

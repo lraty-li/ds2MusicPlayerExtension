@@ -5,8 +5,8 @@
   probe.pcmBridgeExtensionInstalled = true;
 
   const CHANNELS = 2;
-  const CHUNK_FRAMES = 4800;
-  const WORKLET_NAME = "ds2-pcm-tap-v1";
+  const CHUNK_FRAMES = 960;
+  const WORKLET_NAME = "ds2-pcm-tap-v2";
 
   function errorText(error) {
     return `${error?.name || "Error"}: ${error?.message || String(error)}`;
@@ -62,7 +62,7 @@
       bridge.sentFrames += frames;
       bridge.state = "streaming";
       bridge.error = "";
-      if (bridge.sentChunks === 1 || bridge.sentChunks % 10 === 0) {
+      if (bridge.sentChunks === 1 || bridge.sentChunks % 50 === 0) {
         probe.report();
       }
     } catch (error) {
