@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package_version:
-        description: "Package version suffix, for example v0.1.0"
+        description: "Package version suffix, for example v2.0"
         required: false
         type: string
       release_channel:
@@ -16,7 +16,7 @@ on:
           - diagnostic
         default: stable
       publish_nexusmods:
-        description: "Upload this package to Nexus Mods"
+        description: "Upload generated package(s) to Nexus Mods"
         required: false
         type: boolean
         default: false
@@ -37,9 +37,6 @@ jobs:
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Resolve package version
         id: version
@@ -69,28 +66,59 @@ jobs:
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "channel=$channel" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Build package
-        id: package
+      - name: Build base package
+        if: steps.version.outputs.channel == 'stable'
+        id: package_base
+        shell: pwsh
+        run: |
+          ./package-release.ps1 `
+            -PackageVersion "${{ steps.version.outputs.value }}" `
+            -Edition Base
+
+      - name: Build Spotify package
+        id: package_spotify
         shell: pwsh
         run: |
           if ("${{ steps.version.outputs.channel }}" -eq "diagnostic") {
-            ./package-release.ps1 -PackageVersion "${{ steps.version.outputs.value }}" -Diagnostic
+            ./package-release.ps1 `
+              -PackageVersion "${{ steps.version.outputs.value }}" `
+              -Edition Spotify `
+              -Diagnostic
           } else {
-            ./package-release.ps1 -PackageVersion "${{ steps.version.outputs.value }}"
+            ./package-release.ps1 `
+              -PackageVersion "${{ steps.version.outputs.value }}" `
+              -Edition Spotify
           }
 
-      - name: Upload workflow artifact
+      - name: Upload base workflow artifact
+        if: steps.version.outputs.channel == 'stable'
         uses: actions/upload-artifact@v4
         with:
           name: DS2MusicPlayer-${{ steps.version.outputs.value }}
-          path: ${{ steps.package.outputs.zip_path }}
+          path: ${{ steps.package_base.outputs.zip_path }}
           if-no-files-found: error
 
-      - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+      - name: Upload Spotify workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DS2MusicPlayer-Spotify-${{ steps.version.outputs.value }}
+          path: ${{ steps.package_spotify.outputs.zip_path }}
+          if-no-files-found: error
+
+      - name: Publish stable GitHub Release
+        if: github.ref_type == 'tag' && steps.version.outputs.channel == 'stable'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.zip_path }}
+          files: |
+            ${{ steps.package_base.outputs.zip_path }}
+            ${{ steps.package_spotify.outputs.zip_path }}
+          generate_release_notes: true
+
+      - name: Publish diagnostic GitHub Release
+        if: github.ref_type == 'tag' && steps.version.outputs.channel == 'diagnostic'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package_spotify.outputs.zip_path }}
           generate_release_notes: true
 
       - name: Resolve Nexus Mods publish
@@ -99,6 +127,7 @@ jobs:
         env:
           NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
           NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
+          NEXUSMODS_SPOTIFY_FILE_ID: ${{ vars.NEXUSMODS_SPOTIFY_FILE_ID }}
           NEXUSMODS_DIAGNOSTIC_FILE_ID: ${{ vars.NEXUSMODS_DIAGNOSTIC_FILE_ID }}
         run: |
           $manualPublish = "${{ github.event.inputs.publish_nexusmods }}" -eq "true"
@@ -106,40 +135,78 @@ jobs:
           $requested = $manualPublish -or $tagPublish
           $hasApiKey = -not [string]::IsNullOrWhiteSpace($env:NEXUSMODS_API_KEY)
           $channel = "${{ steps.version.outputs.channel }}"
-          $targetFileId = if ($channel -eq "diagnostic") {
+          $baseFileId = $env:NEXUSMODS_FILE_ID
+          $spotifyFileId = if ($channel -eq "diagnostic") {
             $env:NEXUSMODS_DIAGNOSTIC_FILE_ID
           } else {
-            $env:NEXUSMODS_FILE_ID
+            $env:NEXUSMODS_SPOTIFY_FILE_ID
           }
-          $hasFileId = -not [string]::IsNullOrWhiteSpace($targetFileId)
-          $configured = $hasApiKey -and $hasFileId
-          if ($manualPublish -and -not $configured) {
-            throw "Nexus Mods publishing requested, but NEXUSMODS_API_KEY or the $channel file ID is missing."
+          $missing = [System.Collections.Generic.List[string]]::new()
+          if (-not $hasApiKey) {
+            $missing.Add("NEXUSMODS_API_KEY")
           }
-          if ($tagPublish -and -not $configured) {
-            Write-Warning "Skipping Nexus Mods publish; configure NEXUSMODS_API_KEY and the stable file ID."
+          if ($channel -eq "stable" -and [string]::IsNullOrWhiteSpace($baseFileId)) {
+            $missing.Add("NEXUSMODS_FILE_ID")
           }
-          $enabled = $requested -and $configured
-          "enabled=$($enabled.ToString().ToLowerInvariant())" |
+          if ([string]::IsNullOrWhiteSpace($spotifyFileId)) {
+            $missing.Add($(if ($channel -eq "diagnostic") {
+              "NEXUSMODS_DIAGNOSTIC_FILE_ID"
+            } else {
+              "NEXUSMODS_SPOTIFY_FILE_ID"
+            }))
+          }
+          if ($manualPublish -and $missing.Count -gt 0) {
+            throw "Nexus Mods publishing requested, but these settings are missing: $($missing -join ', ')."
+          }
+          if ($tagPublish -and $missing.Count -gt 0) {
+            Write-Warning "Some Nexus uploads will be skipped; missing: $($missing -join ', ')."
+          }
+          $baseEnabled = $requested -and $hasApiKey -and
+            $channel -eq "stable" -and
+            -not [string]::IsNullOrWhiteSpace($baseFileId)
+          $spotifyEnabled = $requested -and $hasApiKey -and
+            -not [string]::IsNullOrWhiteSpace($spotifyFileId)
+          "base_enabled=$($baseEnabled.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "mod_file_id=$targetFileId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "file_category=$(if ($channel -eq 'diagnostic') { 'optional' } else { 'main' })" |
+          "spotify_enabled=$($spotifyEnabled.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "display_name=DS2MusicPlayer ${{ steps.version.outputs.value }} ($channel)" |
+          "base_file_id=$baseFileId" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "spotify_file_id=$spotifyFileId" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Publish Nexus Mods Release
-        if: steps.nexusmods.outputs.enabled == 'true'
-        id: nexusmods_upload
+      - name: Publish base Nexus Mods Release
+        if: steps.nexusmods.outputs.base_enabled == 'true'
         shell: pwsh
         env:
           NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
         run: |
           ./tools/publish-nexusmods.ps1 `
-            -FilePath "${{ steps.package.outputs.zip_path }}" `
-            -ModFileId "${{ steps.nexusmods.outputs.mod_file_id }}" `
+            -FilePath "${{ steps.package_base.outputs.zip_path }}" `
+            -ModFileId "${{ steps.nexusmods.outputs.base_file_id }}" `
             -Version "${{ steps.version.outputs.value }}" `
-            -DisplayName "${{ steps.nexusmods.outputs.display_name }}" `
-            -Description "Automated ${{ steps.version.outputs.channel }} release from GitHub run ${{ github.run_id }}" `
-            -FileCategory "${{ steps.nexusmods.outputs.file_category }}" `
+            -DisplayName "DS2MusicPlayer ${{ steps.version.outputs.value }} (base)" `
+            -Description "Automated base release from GitHub run ${{ github.run_id }}" `
+            -FileCategory main `
+            -ArchiveExistingFile
+
+      - name: Publish Spotify Nexus Mods Release
+        if: steps.nexusmods.outputs.spotify_enabled == 'true'
+        shell: pwsh
+        env:
+          NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          $channel = "${{ steps.version.outputs.channel }}"
+          $label = if ($channel -eq "diagnostic") {
+            "Spotify diagnostic"
+          } else {
+            "Spotify"
+          }
+          ./tools/publish-nexusmods.ps1 `
+            -FilePath "${{ steps.package_spotify.outputs.zip_path }}" `
+            -ModFileId "${{ steps.nexusmods.outputs.spotify_file_id }}" `
+            -Version "${{ steps.version.outputs.value }}" `
+            -DisplayName "DS2MusicPlayer ${{ steps.version.outputs.value }} ($label)" `
+            -Description "Automated $label release from GitHub run ${{ github.run_id }}" `
+            -FileCategory optional `
             -ArchiveExistingFile

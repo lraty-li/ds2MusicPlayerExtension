@@ -68,6 +68,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <Ds2SpotifyConnect Condition="'$(Ds2SpotifyConnect)'==''">true</Ds2SpotifyConnect>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetExt>.asi</TargetExt>
     <OutDir>F:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH\scripts\</OutDir>
@@ -114,6 +117,11 @@
   <ItemDefinitionGroup Condition="'$(Ds2Diagnostic)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>DS2_DIAGNOSTIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Ds2SpotifyConnect)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>DS2_SPOTIFY_CONNECT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -186,7 +194,8 @@
     <ClCompile Include="RuntimeJacketBridge.cpp" />
     <ClCompile Include="SourceAudioBootstrap.cpp" />
     <ClCompile Include="SourcePluginBank.cpp" />
-    <ClCompile Include="SpotifyConnectBootstrap.cpp" />
+    <ClCompile Include="SpotifyConnectBootstrap.cpp"
+               Condition="'$(Ds2SpotifyConnect)'=='true'" />
     <ClCompile Include="SpecialTrackHelpers.cpp" />
     <ClCompile Include="SpecialTrackInjection.cpp" />
     <ClCompile Include="SpecialTrackSoundClone.cpp" />

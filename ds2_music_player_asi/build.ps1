@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("Base", "Spotify")]
+    [string]$Edition = "Spotify"
+)
+
 $ErrorActionPreference = "Stop"
 
 $pathValue = $env:Path
@@ -32,7 +37,9 @@ if (-not (Test-Path $solution)) {
     exit 3
 }
 
-& $msbuild $solution "/p:Configuration=Release;Platform=x64" /m /nologo /v:q
+$spotifyConnect = ($Edition -eq "Spotify").ToString().ToLowerInvariant()
+$properties = "Configuration=Release;Platform=x64;Ds2SpotifyConnect=$spotifyConnect"
+& $msbuild $solution "/p:$properties" /m /nologo /v:q
 if ($LASTEXITCODE -eq 0) {
     Write-Host "BUILD_OK"
     exit 0

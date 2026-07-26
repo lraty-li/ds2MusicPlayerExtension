@@ -75,7 +75,10 @@ probe 只监听本机回环地址，不连接或加载游戏。
 
 ## Spotify Developer App 配置
 
-1. 创建或打开自己的 Spotify Developer App。
+发行配置不会内置测试 Client ID。Spotify 版用户需要 Premium 账号，并创建
+自己的 Spotify Developer App：
+
+1. 登录 https://developer.spotify.com/dashboard 并创建 App。
 2. 为应用启用 Web Playback SDK。
 3. 在 Redirect URIs 中精确添加：
 
@@ -83,7 +86,7 @@ probe 只监听本机回环地址，不连接或加载游戏。
    https://appassets.example/index.html
    ```
 
-4. 保存设置，把 Client ID 写入：
+4. 保存设置，把公开的 Client ID 写入开发配置：
 
    ```text
    spotify-webview2-loopback-poc/config.json
@@ -99,6 +102,16 @@ probe 只监听本机回环地址，不连接或加载游戏。
 构建时该文件会复制到 EXE 旁边；`start.ps1` 每次启动也会同步它。PoC
 启动后自动加载，不需要每次粘贴。Client ID 是公开标识；不要把 Client
 Secret 写进配置或分发出去。
+
+发行包对应的配置路径为：
+
+```text
+<GameRoot>\scripts\DS2SpotifyHelper\config.json
+```
+
+Spotify Development Mode 对授权用户数量有限制；个人用户通常应使用自己
+创建的 App。若 App 还要授权其他 Spotify 账号，需要在 Dashboard 的
+Users Management 中加入对应账号。
 
 `proxyServer` 可省略；省略时使用 Windows 系统代理。填写后会通过
 WebView2 的 `--proxy-server` 参数显式使用该 HTTP、HTTPS 或 SOCKS5 代理。

@@ -9,7 +9,9 @@
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
 #include "RuntimeEntryTitleRefresh.h"
+#if defined(DS2_SPOTIFY_CONNECT)
 #include "SpotifyConnectBootstrap.h"
+#endif
 #include "SourceAudioBootstrap.h"
 
 #if defined(DS2_DIAGNOSTIC)
@@ -200,7 +202,9 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         }
 
         g_initLogger.Log("source audio registration deferred until music resource load");
+#if defined(DS2_SPOTIFY_CONNECT)
         SpotifyConnectBootstrap::Start(selfModule, g_initLogger);
+#endif
     }
     catch (const std::exception& ex)
     {
@@ -225,8 +229,10 @@ void Hooks::Shutdown(bool processTerminating)
     }
 
     g_dllLogger.Log("DLL_PROCESS_DETACH");
+#if defined(DS2_SPOTIFY_CONNECT)
     if (!processTerminating)
     {
         SpotifyConnectBootstrap::Stop();
     }
+#endif
 }

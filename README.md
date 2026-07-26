@@ -11,7 +11,20 @@ official Spotify Web Playback SDK.
 
 ## User installation
 
-Download the latest `DS2MusicPlayer-*.zip` from GitHub Releases and extract it.
+Choose one package from GitHub Releases:
+
+- `DS2MusicPlayer-v*.zip`: base edition for browser-tab playback. It never
+  starts the Spotify WebView2 helper.
+- `DS2MusicPlayer-Spotify-v*.zip`: Spotify edition with both browser-tab
+  playback and Spotify Connect.
+
+The editions are separate because Spotify Connect requires a hidden Edge
+WebView2 process group. It added about 400 MiB of private committed memory on
+the test system; the exact cost varies by WebView2 version and machine state.
+Users who do not need Spotify should install the base edition to avoid this
+resident memory overhead.
+
+Extract the selected package.
 
 Copy the contents of the extracted `DS2MusicPlayer` folder into the game root:
 
@@ -19,17 +32,18 @@ Copy the contents of the extracted `DS2MusicPlayer` folder into the game root:
 <GameRoot>\version.dll
 <GameRoot>\scripts\Ds2MusicPlayerExtend.asi
 <GameRoot>\scripts\ds2_dll_music_resource.dll
-<GameRoot>\scripts\DS2SpotifyHelper\DS2SpotifyWebView2Helper.exe
-<GameRoot>\scripts\DS2SpotifyHelper\config.json
-<GameRoot>\scripts\DS2SpotifyHelper\web\
+<GameRoot>\scripts\ds2_jacket_bc7e.dll
 ```
 
 The game root is the folder that contains the game executable. `version.dll` is
 the ASI loader, and the ASI plus audio DLL must stay in the `scripts` folder.
+The Spotify edition additionally installs `scripts\DS2SpotifyHelper`. The base
+ASI never starts that helper, even if the folder remains from an older install.
 
-### Optional browser tab playback
+### Browser tab playback
 
-To use browser-tab playback, load the optional browser extension:
+Both editions include the browser extension. Load it to use browser-tab
+playback; Spotify-only users may leave it unloaded:
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable Developer mode.
@@ -56,6 +70,36 @@ pause/resume synchronization.
 
 ## Spotify Connect
 
+Spotify Connect requires the `DS2MusicPlayer-Spotify-v*.zip` edition.
+
+Before the first launch:
+
+1. A Spotify Premium account is required.
+2. Sign in to the
+   [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and
+   create an app for personal use. Select Web Playback SDK when asked which
+   API/SDK the app will use.
+3. Open the app settings and add this exact Redirect URI:
+
+   ```text
+   https://appassets.example/index.html
+   ```
+
+4. Copy the app's Client ID into
+   `scripts\DS2SpotifyHelper\config.json`:
+
+   ```json
+   {
+     "spotifyClientId": "your 32-character Client ID",
+     "proxyServer": ""
+   }
+   ```
+
+Only the public Client ID is needed; never put the Client Secret in this file.
+Spotify Development Mode apps have an authorized-user limit, so each user
+should normally create their own app instead of sharing the package author's
+Client ID.
+
 The ASI starts the packaged WebView2 helper as an external process. During
 playback its tool window remains visible to WebView2 but is positioned outside
 the virtual desktop and excluded from the taskbar and Alt-Tab. The helper is
@@ -80,35 +124,36 @@ do not change the game player's state.
 Run from the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\package-release.ps1
+.\package-release.ps1 -Edition Base -PackageVersion v2.0
+.\package-release.ps1 -Edition Spotify -PackageVersion v2.0
 ```
 
-The output zip is written to:
+This writes two packages to `dist\`:
 
 ```text
-dist\
+DS2MusicPlayer-v2.0.zip
+DS2MusicPlayer-Spotify-v2.0.zip
 ```
 
-To choose a package name suffix:
+The base edition is the default when `-Edition` is omitted. Spotify diagnostic
+packages are built explicitly:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\package-release.ps1 -PackageVersion v0.1.0
+.\package-release.ps1 -Edition Spotify -PackageVersion v2.0-diagnose -Diagnostic
 ```
 
-This produces `dist\DS2MusicPlayer-v0.1.0.zip`.
-
-The script builds the ASI, runtime audio DLL, and WebView2 Spotify helper,
-downloads `version.dll` from Ultimate ASI Loader, copies the browser extension
-files, and writes a bilingual `README.txt` into the package.
+Both editions contain the ASI, runtime audio DLL, browser extension, BC7
+encoder, and Ultimate ASI Loader. Only the Spotify edition builds and packages
+the WebView2 helper.
 
 ## GitHub Releases
 
-Pushing a tag named `v*` runs `.github/workflows/release.yml` and attaches the
-package zip to the GitHub Release:
+Pushing a normal `v*` tag runs `.github/workflows/release.yml` and attaches both
+the base and Spotify packages to one GitHub Release:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v2.0
+git push origin v2.0
 ```
 
 ## Nexus Mods Releases
@@ -119,22 +164,22 @@ these repository settings first:
 ```text
 Secret:   NEXUSMODS_API_KEY
 Variable: NEXUSMODS_FILE_ID
+Variable: NEXUSMODS_SPOTIFY_FILE_ID
 Variable: NEXUSMODS_DIAGNOSTIC_FILE_ID
 ```
 
 `NEXUSMODS_FILE_ID` is the existing Nexus Mods v3 mod-file ID used by
 `POST /mod-files/{id}/versions`; it is not the game mod page number. Create the
-Nexus Mods mod page and first file manually, then use that file ID for automated
-stable-version uploads. `NEXUSMODS_DIAGNOSTIC_FILE_ID` is a second, manually
-created Nexus file for the Spotify diagnostic package (ID `7709289` at the time
-this was documented). Set that Nexus file's category to Optional files.
+Nexus Mods mod page and initial files manually. Use `NEXUSMODS_FILE_ID` for the
+base Main file, `NEXUSMODS_SPOTIFY_FILE_ID` for the Spotify Optional file, and
+`NEXUSMODS_DIAGNOSTIC_FILE_ID` for the Spotify diagnostic Optional file.
 
-After those values are set, a normal `v*` tag publishes the stable package to
-GitHub Releases and the Nexus Main file. A tag ending in `-diagnose`, such as
-`v1.1-diagnose`, builds the diagnostic Release package and uploads only to the
-Nexus Optional file. It does not change the stable Nexus download. For an
-untagged diagnostic build, run the workflow manually with
-`release_channel = diagnostic` and `publish_nexusmods = true`.
+A normal `v*` tag updates both stable Nexus files independently and archives
+the previous version of each. A tag ending in `-diagnose`, such as
+`v2.0-diagnose`, builds only the Spotify diagnostic package and updates only
+its diagnostic Nexus file. For an untagged diagnostic build, run the workflow
+manually with `release_channel = diagnostic` and
+`publish_nexusmods = true`.
 
 ## Credit
 

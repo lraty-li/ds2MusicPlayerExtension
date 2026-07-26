@@ -1,6 +1,8 @@
 param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
+    [ValidateSet("Base", "Spotify")]
+    [string]$Edition = "Base",
     [string]$OutputDir = "",
     [string]$PackageVersion = "",
     [switch]$SkipBuild,
@@ -12,15 +14,27 @@ param(
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+if ($Diagnostic -and $Edition -ne "Spotify") {
+    throw "Diagnostic packages are only supported for the Spotify edition."
+}
+
 $repoRoot = $PSScriptRoot
 $packageName = "DS2MusicPlayer"
+$archiveName = if ($Edition -eq "Spotify") {
+    "$packageName-Spotify"
+} else {
+    $packageName
+}
+$editionKey = $Edition.ToLowerInvariant()
+$buildKey = if ($Diagnostic) { "$editionKey-diag" } else { $editionKey }
+$spotifyConnect = ($Edition -eq "Spotify").ToString().ToLowerInvariant()
 $buildRoot = Join-Path $repoRoot "build\package"
 $stageRoot = Join-Path $buildRoot "stage"
 $gameRoot = Join-Path $stageRoot $packageName
 $scriptsDir = Join-Path $gameRoot "scripts"
 $extensionDir = Join-Path $stageRoot "browser-extension"
 $cacheDir = Join-Path $buildRoot "cache"
-$binDir = Join-Path $buildRoot "bin"
+$binDir = Join-Path $buildRoot "bin\$buildKey"
 $bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
 $spotifyHelperDir = Join-Path $repoRoot "spotify-webview2-loopback-poc"
 $spotifyHelperOutput =
@@ -77,7 +91,9 @@ function Find-MSBuild {
 function Invoke-Build([string]$Solution, [string]$ProjectOutDir) {
     $msbuild = Find-MSBuild
     New-Item -ItemType Directory -Path $ProjectOutDir -Force | Out-Null
-    $properties = "Configuration=$Configuration;Platform=$Platform;OutDir=$ProjectOutDir\"
+    $properties =
+        "Configuration=$Configuration;Platform=$Platform;" +
+        "OutDir=$ProjectOutDir\;Ds2SpotifyConnect=$spotifyConnect"
     if ($Diagnostic) {
         $properties += ";Ds2Diagnostic=true"
     }
@@ -193,7 +209,12 @@ function Copy-AsiLoader([string]$ZipPath) {
 }
 
 function Write-InstallReadme {
-    Copy-RequiredFile (Join-Path $repoRoot "packaging\README.txt") `
+    $readmeName = if ($Edition -eq "Spotify") {
+        "README.spotify.txt"
+    } else {
+        "README.txt"
+    }
+    Copy-RequiredFile (Join-Path $repoRoot "packaging\$readmeName") `
         (Join-Path $stageRoot "README.txt")
 }
 
@@ -215,14 +236,18 @@ if (-not $SkipBuild) {
         (Join-Path $binDir "asi")
     Invoke-Build (Join-Path $repoRoot "ds2_runtime_source_plugin\ds2_dll_music_resource.sln") `
         (Join-Path $binDir "audio")
-    Invoke-SpotifyHelperBuild
+    if ($Edition -eq "Spotify") {
+        Invoke-SpotifyHelperBuild
+    }
 }
 
 Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
     (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
 Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
     (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
-Copy-SpotifyHelper
+if ($Edition -eq "Spotify") {
+    Copy-SpotifyHelper
+}
 if (Assert-Bc7eDll $bc7eDll) {
     Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
 }
@@ -243,12 +268,13 @@ $stamp = if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
 if ($Diagnostic -and $stamp -notmatch "(?i)(^|[-_.])diag") {
     $stamp = "$stamp-diag"
 }
-$zipPath = Join-Path $OutputDir "$packageName-$stamp.zip"
+$zipPath = Join-Path $OutputDir "$archiveName-$stamp.zip"
 if (Test-Path $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
 Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $zipPath -Force
 if ($env:GITHUB_OUTPUT) {
     "zip_path=$zipPath" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding UTF8
+    "edition=$Edition" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding UTF8
 }
 Write-Host "PACKAGE_OK $zipPath"
