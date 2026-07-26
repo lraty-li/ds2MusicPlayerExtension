@@ -68,6 +68,17 @@ void ProbeAudioRing::Consume(uint32_t frames)
 {
     std::lock_guard lock(mutex_);
     const uint32_t available = AvailableLocked();
+    if (!primed_)
+    {
+        if (available < kPrimeFrames)
+        {
+            silenceFrames_ += frames;
+            ++underruns_;
+            TrackAvailableLocked(available);
+            return;
+        }
+        primed_ = true;
+    }
     const uint32_t copied = std::min(frames, available);
     for (uint32_t frame = 0; frame < copied; ++frame)
     {
@@ -86,6 +97,7 @@ void ProbeAudioRing::Consume(uint32_t frames)
     consumedFrames_ += copied;
     if (copied < frames)
     {
+        primed_ = false;
         silenceFrames_ += frames - copied;
         ++underruns_;
     }

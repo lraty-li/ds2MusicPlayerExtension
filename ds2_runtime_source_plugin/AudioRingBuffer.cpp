@@ -11,13 +11,14 @@ namespace
 constexpr uint32_t kSampleRate = 48000;
 constexpr uint32_t kRingFrames = kSampleRate * 2;
 constexpr uint32_t kRingChannels = 2;
-constexpr uint32_t kLatencyMaxFrames = kSampleRate / 10;
-constexpr uint32_t kLatencyTargetFrames = kSampleRate / 20;
+constexpr uint32_t kLatencyMaxFrames = kSampleRate / 2;
+constexpr uint32_t kLatencyTargetFrames = kSampleRate / 4;
 constexpr float kPcm16Scale = 1.0f / 32768.0f;
 
 float g_ring[kRingFrames * kRingChannels] = {};
 std::atomic<uint64_t> g_readFrame{0};
 std::atomic<uint64_t> g_writeFrame{0};
+std::atomic<bool> g_primed{false};
 std::atomic<uint32_t> g_minAvailableFrames{kRingFrames};
 std::atomic<uint32_t> g_maxAvailableFrames{0};
 std::atomic<uint64_t> g_pushFrames{0};
@@ -171,6 +172,18 @@ uint32_t Read(float* const* outputs, uint32_t frames, uint32_t channels)
     }
 
     const uint32_t available = ClampAvailable(read, write);
+    if (!g_primed.load(std::memory_order_relaxed))
+    {
+        if (available < kLatencyTargetFrames)
+        {
+            g_shortReads.fetch_add(1, std::memory_order_relaxed);
+            g_silenceFrames.fetch_add(frames, std::memory_order_relaxed);
+            g_underruns.fetch_add(1, std::memory_order_relaxed);
+            TrackAvailable(available);
+            return 0;
+        }
+        g_primed.store(true, std::memory_order_relaxed);
+    }
     const uint32_t copied = frames < available ? frames : available;
     for (uint32_t frame = 0; frame < copied; ++frame)
     {
@@ -189,6 +202,7 @@ uint32_t Read(float* const* outputs, uint32_t frames, uint32_t channels)
     g_readFramesCopied.fetch_add(copied, std::memory_order_relaxed);
     if (copied < frames)
     {
+        g_primed.store(false, std::memory_order_relaxed);
         g_shortReads.fetch_add(1, std::memory_order_relaxed);
         g_silenceFrames.fetch_add(frames - copied, std::memory_order_relaxed);
         g_underruns.fetch_add(1, std::memory_order_relaxed);

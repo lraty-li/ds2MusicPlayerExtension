@@ -25,13 +25,17 @@
     probe.report();
   }
 
-  async function attachMedia(record) {
+  async function attachMediaOnce(record) {
     if (record.graphState !== "none") return;
     record.graphState = "attaching";
     record.graphError = "";
     probe.report();
     try {
       const context = new AudioContext({ sampleRate: 48000 });
+      if (probe.desiredMode === "none" &&
+          typeof context.setSinkId === "function") {
+        await context.setSinkId({ type: "none" });
+      }
       const source = context.createMediaElementSource(record.element);
       const analyser = context.createAnalyser();
       analyser.fftSize = 2048;
@@ -60,6 +64,16 @@
     }
     probe.report();
   }
+
+  function attachMedia(record) {
+    if (!record.graphPromise) {
+      record.graphPromise = attachMediaOnce(record);
+    }
+    return record.graphPromise;
+  }
+
+  probe.prepareMediaPlayback = (record) =>
+    probe.desiredMode === "none" ? attachMedia(record) : null;
 
   probe.commandHandlers.set("attach-media", async () => {
     await Promise.all(

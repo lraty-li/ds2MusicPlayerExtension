@@ -208,12 +208,20 @@
     const nativePlay = prototype.play;
     const wrappedPlay = function (...args) {
       registerMedia(this);
-      const result = nativePlay.apply(this, args);
-      Promise.resolve(result).then(
-        () => probe.report(),
-        () => probe.report()
+      const start = () => {
+        const result = nativePlay.apply(this, args);
+        Promise.resolve(result).then(
+          () => probe.report(),
+          () => probe.report()
+        );
+        return result;
+      };
+      const preparation = probe.prepareMediaPlayback?.(
+        probe.mediaElements.get(this)
       );
-      return result;
+      return preparation
+        ? Promise.resolve(preparation).then(start)
+        : start();
     };
     Object.defineProperty(
       wrappedPlay, "__ds2AudioFrameProbe", { value: true }

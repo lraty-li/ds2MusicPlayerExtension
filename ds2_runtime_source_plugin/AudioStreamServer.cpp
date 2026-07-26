@@ -106,6 +106,9 @@ void LogStats(uint64_t packets, uint64_t frames, uint64_t drops,
 
 void HandleClient(SOCKET socket)
 {
+    const BOOL noDelay = TRUE;
+    setsockopt(socket, IPPROTO_TCP, TCP_NODELAY,
+        reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
     if (!WebSocketProtocol::Accept(socket)) return;
     Log("audio websocket connected");
     std::vector<uint8_t> payload(kMaxFrameBytes + 1);
@@ -184,6 +187,7 @@ bool BindListen(SOCKET listener)
 
 DWORD WINAPI ServerThread(LPVOID)
 {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     WSADATA wsa = {};
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 0;
     Log("audio websocket server thread started");

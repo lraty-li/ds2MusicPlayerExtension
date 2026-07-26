@@ -139,6 +139,13 @@ SOCKET ConnectLocal(uint16_t port, std::string& error)
         error = "socket failed";
         return INVALID_SOCKET;
     }
+    const BOOL noDelay = TRUE;
+    setsockopt(
+        socket,
+        IPPROTO_TCP,
+        TCP_NODELAY,
+        reinterpret_cast<const char*>(&noDelay),
+        sizeof(noDelay));
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);

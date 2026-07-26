@@ -7,7 +7,7 @@
 
 namespace
 {
-constexpr bool kEnableRuntimeLog = false;
+constexpr bool kEnableRuntimeLog = true;
 
 std::mutex g_logMutex;
 

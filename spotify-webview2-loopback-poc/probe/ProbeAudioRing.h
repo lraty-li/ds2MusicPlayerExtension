@@ -36,14 +36,15 @@ private:
 
     static constexpr uint32_t kChannels = 2;
     static constexpr uint32_t kRingFrames = 48000 * 2;
-    static constexpr uint32_t kPrimeFrames = 960;
-    static constexpr uint32_t kLatencyMaxFrames = 4800;
-    static constexpr uint32_t kLatencyTargetFrames = 2400;
+    static constexpr uint32_t kPrimeFrames = 48000 / 4;
+    static constexpr uint32_t kLatencyMaxFrames = 48000 / 2;
+    static constexpr uint32_t kLatencyTargetFrames = 48000 / 4;
 
     mutable std::mutex mutex_;
     std::vector<float> ring_;
     uint64_t readFrame_ = 0;
     uint64_t writeFrame_ = 0;
+    bool primed_ = false;
     uint32_t minAvailable_ = kRingFrames;
     uint32_t maxAvailable_ = 0;
     uint64_t pushedFrames_ = 0;
