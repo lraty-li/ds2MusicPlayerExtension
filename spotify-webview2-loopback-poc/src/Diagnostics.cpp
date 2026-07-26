@@ -118,6 +118,11 @@ void PocApp::HandleWebMessage(
         gameStreamClient_.RequestProbeControl(message.substr(14));
         PostGameStreamState();
     }
+    else if (message.starts_with(L"game-json:"))
+    {
+        gameStreamClient_.PushText(message.substr(10));
+        PostGameStreamState();
+    }
     else if (message == L"open-devtools" && webView_)
     {
         webView_->OpenDevToolsWindow();

@@ -47,11 +47,22 @@ void GameStreamClient::Impl::SetConnected(
         {
             ++connections_;
             packets_.clear();
+            textMessages_.clear();
+            if (!latestMetadata_.empty())
+            {
+                textMessages_.push_back(latestMetadata_);
+            }
+            if (!latestJacket_.empty())
+            {
+                textMessages_.push_back(latestJacket_);
+            }
             packetsSent_ = 0;
             framesSent_ = 0;
             pcmBytesSent_ = 0;
             droppedPackets_ = 0;
             sendErrors_ = 0;
+            textMessagesSent_ = 0;
+            droppedTextMessages_ = 0;
             maxQueueDepth_ = 0;
         }
     }
@@ -73,6 +84,29 @@ void GameStreamClient::Impl::RecordSendFailure()
     ++sendErrors_;
     connected_ = false;
     lastError_ = L"websocket send failed";
+}
+
+void GameStreamClient::Impl::RecordTextSent()
+{
+    std::lock_guard lock(mutex_);
+    ++textMessagesSent_;
+    lastError_.clear();
+}
+
+void GameStreamClient::Impl::RecordTextSendFailure(std::string message)
+{
+    std::lock_guard lock(mutex_);
+    if (textMessages_.size() < 12)
+    {
+        textMessages_.push_front(std::move(message));
+    }
+    else
+    {
+        ++droppedTextMessages_;
+    }
+    ++sendErrors_;
+    connected_ = false;
+    lastError_ = L"websocket text send failed";
 }
 
 void GameStreamClient::Impl::HandleControl(
@@ -110,6 +144,7 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
 {
     std::vector<uint8_t> packet;
     std::string diagnosticControl;
+    std::string textMessage;
     {
         std::unique_lock lock(mutex_);
         wake_.wait_for(
@@ -119,6 +154,7 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
             {
                 return stop_ ||
                     !diagnosticControls_.empty() ||
+                    !textMessages_.empty() ||
                     !packets_.empty();
             });
         if (stop_) return false;
@@ -127,6 +163,11 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
             diagnosticControl =
                 std::move(diagnosticControls_.front());
             diagnosticControls_.pop_front();
+        }
+        else if (!textMessages_.empty())
+        {
+            textMessage = std::move(textMessages_.front());
+            textMessages_.pop_front();
         }
         else if (!packets_.empty())
         {
@@ -145,6 +186,16 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
             RecordSendFailure();
             return false;
         }
+        return true;
+    }
+    if (!textMessage.empty())
+    {
+        if (!WebSocketWire::SendClientText(socket, textMessage))
+        {
+            RecordTextSendFailure(std::move(textMessage));
+            return false;
+        }
+        RecordTextSent();
         return true;
     }
     if (packet.empty()) return true;

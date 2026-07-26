@@ -9,6 +9,26 @@
 namespace
 {
 constexpr size_t kMaxQueuedPackets = 20;
+constexpr size_t kMaxQueuedTextMessages = 12;
+constexpr size_t kMaxTextMessageBytes = 4 * 1024 * 1024;
+
+std::string Utf8(std::wstring_view value)
+{
+    if (value.empty()) return {};
+    const int required = WideCharToMultiByte(
+        CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+        static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
+    if (required <= 0) return {};
+    std::string output(static_cast<size_t>(required), '\0');
+    if (WideCharToMultiByte(
+            CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+            static_cast<int>(value.size()), output.data(), required,
+            nullptr, nullptr) != required)
+    {
+        return {};
+    }
+    return output;
+}
 
 std::wstring JsonText(std::wstring_view text)
 {
@@ -49,6 +69,9 @@ void GameStreamClient::Impl::Stop()
     started_ = false;
     connected_ = false;
     packets_.clear();
+    textMessages_.clear();
+    latestMetadata_.clear();
+    latestJacket_.clear();
     pendingPcm_.clear();
 }
 
@@ -100,6 +123,38 @@ void GameStreamClient::Impl::Push(const DecodedPcmChunk& chunk)
     wake_.notify_one();
 }
 
+void GameStreamClient::Impl::PushText(std::wstring_view json)
+{
+    std::string message = Utf8(json);
+    std::lock_guard lock(mutex_);
+    if (message.empty() || message.size() > kMaxTextMessageBytes)
+    {
+        ++invalidChunks_;
+        lastError_ = L"invalid game text message";
+        return;
+    }
+
+    if (message.find("\"type\":\"metadata\"") != std::string::npos)
+    {
+        latestMetadata_ = message;
+        latestJacket_.clear();
+        textMessages_.clear();
+        ++metadataMessagesQueued_;
+    }
+    else if (message.find("\"type\":\"jacket\"") != std::string::npos)
+    {
+        latestJacket_ = message;
+        ++jacketMessagesQueued_;
+    }
+    if (textMessages_.size() >= kMaxQueuedTextMessages)
+    {
+        textMessages_.pop_front();
+        ++droppedTextMessages_;
+    }
+    textMessages_.push_back(std::move(message));
+    wake_.notify_one();
+}
+
 void GameStreamClient::Impl::RequestProbeControl(
     std::wstring_view command)
 {
@@ -133,6 +188,11 @@ std::wstring GameStreamClient::Impl::MetricsJson() const
          << L",\"droppedPackets\":" << droppedPackets_
          << L",\"sendErrors\":" << sendErrors_
          << L",\"invalidChunks\":" << invalidChunks_
+         << L",\"textQueueDepth\":" << textMessages_.size()
+         << L",\"textMessagesSent\":" << textMessagesSent_
+         << L",\"metadataMessagesQueued\":" << metadataMessagesQueued_
+         << L",\"jacketMessagesQueued\":" << jacketMessagesQueued_
+         << L",\"droppedTextMessages\":" << droppedTextMessages_
          << L",\"pauseCommands\":" << pauseCommands_
          << L",\"resumeCommands\":" << resumeCommands_
          << L",\"error\":\"" << JsonText(lastError_) << L"\"}";
@@ -159,6 +219,11 @@ void GameStreamClient::Stop()
 void GameStreamClient::Push(const DecodedPcmChunk& chunk)
 {
     impl_->Push(chunk);
+}
+
+void GameStreamClient::PushText(std::wstring_view json)
+{
+    impl_->PushText(json);
 }
 
 void GameStreamClient::RequestProbeControl(

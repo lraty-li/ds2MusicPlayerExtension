@@ -153,6 +153,22 @@ void ReceiveLoop(
             {
                 SendControl(client, "resume");
             }
+            else if (text.find("\"type\":\"metadata\"") !=
+                std::string::npos)
+            {
+                Log("PROBE_METADATA " + text);
+            }
+            else if (text.find("\"type\":\"jacket_status\"") !=
+                std::string::npos)
+            {
+                Log("PROBE_JACKET_STATUS " + text);
+            }
+            else if (text.find("\"type\":\"jacket\"") !=
+                std::string::npos)
+            {
+                Log("PROBE_JACKET messageBytes=" +
+                    std::to_string(text.size()));
+            }
         }
         else if (status == WebSocketWire::ReadStatus::Message &&
                  message.opcode == 0x2)

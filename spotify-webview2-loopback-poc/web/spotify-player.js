@@ -1,3 +1,8 @@
+import {
+  publishSpotifyTrack,
+  resetSpotifyMetadata
+} from "./spotify-metadata.js";
+
 let sdkPromise = null;
 
 export class SpotifyConnectPlayer {
@@ -8,6 +13,7 @@ export class SpotifyConnectPlayer {
     this.log = log;
     this.player = null;
     this.lastStateFingerprint = "";
+    this.lastTrackKey = "";
   }
 
   async prepareAndConnect() {
@@ -26,6 +32,8 @@ export class SpotifyConnectPlayer {
 
   disconnect() {
     if (this.player) this.player.disconnect();
+    this.lastTrackKey = "";
+    resetSpotifyMetadata();
     this.onStatus({ connect: "未连接", deviceId: "—" });
     this.onTrack("—");
   }
@@ -73,6 +81,12 @@ export class SpotifyConnectPlayer {
       }
       const track = state.track_window?.current_track;
       const artists = track?.artists?.map((artist) => artist.name).join(", ");
+      const trackKey = track?.uri || track?.id ||
+        `${track?.name || ""}\n${artists || ""}`;
+      if (track?.name && trackKey !== this.lastTrackKey) {
+        this.lastTrackKey = trackKey;
+        publishSpotifyTrack(track, this.log);
+      }
       const fingerprint = `${state.paused}:${track?.uri || ""}`;
       if (fingerprint !== this.lastStateFingerprint) {
         this.lastStateFingerprint = fingerprint;
