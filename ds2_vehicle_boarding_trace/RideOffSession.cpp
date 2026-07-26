@@ -15,6 +15,7 @@ std::atomic<uint64_t> g_deadline{0};
 std::atomic<uint32_t> g_cutInActionHash{0};
 std::atomic<bool> g_cutInFastForwarded{false};
 std::atomic<bool> g_finalizerForced{false};
+std::atomic<bool> g_nativeExitRequested{false};
 thread_local uintptr_t t_rideOffUpdate = 0;
 
 bool InWindow()
@@ -31,9 +32,11 @@ void Begin(uintptr_t rideOff)
     g_cutInActionHash.store(0, std::memory_order_relaxed);
     g_cutInFastForwarded.store(false, std::memory_order_relaxed);
     g_finalizerForced.store(false, std::memory_order_relaxed);
+    g_nativeExitRequested.store(false, std::memory_order_relaxed);
     if (!rideOff)
         return;
-    g_deadline.store(GetTickCount64() + kWindowMs, std::memory_order_relaxed);
+    const uint64_t now = GetTickCount64();
+    g_deadline.store(now + kWindowMs, std::memory_order_relaxed);
     g_id.fetch_add(1, std::memory_order_acq_rel);
     g_rideOff.store(rideOff, std::memory_order_release);
 }
@@ -59,10 +62,27 @@ bool MarkCutInFastForwarded(uint32_t actionHash)
         !g_cutInFastForwarded.exchange(true, std::memory_order_acq_rel);
 }
 
+bool IsActiveCutInAction(uint32_t actionHash)
+{
+    return actionHash && InWindow() &&
+        actionHash == g_cutInActionHash.load(std::memory_order_acquire);
+}
+
 bool MarkFinalizerForced()
 {
     return CurrentId() &&
         !g_finalizerForced.exchange(true, std::memory_order_acq_rel);
+}
+
+bool MarkNativeExitRequested()
+{
+    return InWindow() &&
+        !g_nativeExitRequested.exchange(true, std::memory_order_acq_rel);
+}
+
+uint32_t ActiveId()
+{
+    return InWindow() ? g_id.load(std::memory_order_acquire) : 0;
 }
 
 uintptr_t EnterUpdate(uintptr_t rideOff)

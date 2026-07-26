@@ -52,11 +52,13 @@ void AppendSnapshot(std::ostringstream& oss, uintptr_t rideOff)
 
 void __fastcall HookAnimState(uintptr_t animation, uint32_t state)
 {
+    const bool inRideOffCallback = RideOffSession::CurrentId() != 0;
     g_originalAnimState(animation, state);
     if (animation != g_activeAnimation.load(std::memory_order_acquire))
         return;
     std::ostringstream oss;
     oss << "RideOff animation state requested=" << state
+        << " callbackScope=" << (inRideOffCallback ? 1 : 0)
         << " elapsedMs=" << GetTickCount64() -
             g_enterTick.load(std::memory_order_relaxed);
     g_logger->Log(oss.str());
@@ -116,6 +118,28 @@ bool TryInstallAnimObserver(uintptr_t rideOff)
     return true;
 }
 
+void TryRequestNativeExit(uintptr_t rideOff)
+{
+    uintptr_t plugin = 0;
+    uint8_t current = 0;
+    uint8_t next = 0;
+    if (!VehicleSeatTrace::ReadValue(rideOff + 0x88, plugin) || !plugin ||
+        !VehicleSeatTrace::ReadValue(plugin + 0x118, current) ||
+        !VehicleSeatTrace::ReadValue(plugin + 0x11A, next) ||
+        current != 3 || next != 3 ||
+        !RideOffSession::MarkNativeExitRequested() ||
+        !VehicleSeatTrace::WriteValue<uint8_t>(plugin + 0x11A, 0)) {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "RideOff native Free-state exit requested"
+        << " elapsedMs=" << GetTickCount64() -
+            g_enterTick.load(std::memory_order_relaxed)
+        << " current=" << static_cast<uint32_t>(current)
+        << " next=" << static_cast<uint32_t>(next) << "->0";
+    g_logger->Log(oss.str());
+}
+
 int64_t __fastcall HookRideOffEnter(
     uintptr_t rideOff, uintptr_t a2, uintptr_t a3)
 {
@@ -157,6 +181,7 @@ int64_t __fastcall HookRideOffPresentation(
         VehicleSeatTrace::ReadValue(runtime + 0x2A0, runtimeMode);
         RideOffFinalizer::Force(runtime, runtimeMode == 3);
     }
+    TryRequestNativeExit(rideOff);
     RideOffSession::LeaveUpdate(previous);
     return result;
 }

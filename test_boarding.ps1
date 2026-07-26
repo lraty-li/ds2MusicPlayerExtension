@@ -3,13 +3,14 @@ $ErrorActionPreference = "Stop"
 $gameDir = "F:\SteamLibrary\steamapps\common\DEATH STRANDING 2 - ON THE BEACH"
 $logPath = Join-Path $gameDir "log.txt"
 $inputSource = Join-Path $PSScriptRoot "tools\BoardingTestInput.cs"
-Add-Type -Path $inputSource
 try {
     Add-Type -AssemblyName System.Drawing.Common -ErrorAction Stop
 }
 catch {
     Add-Type -AssemblyName System.Drawing
 }
+Add-Type -Path $inputSource -ReferencedAssemblies (
+    [System.Drawing.Bitmap].Assembly.Location)
 $SI = [BoardingTestInput]
 
 Write-Host "=== DS2 Fast Boarding Mod Test ==="
@@ -118,29 +119,6 @@ function Send-GameKey {
     Stop-FailedTest "could not focus DS2 for $Name"
 }
 
-function Capture-GameWindow {
-    param([string]$Path)
-    $bounds = $SI::GetWindowBounds($script:gameHwnd)
-    if (!$bounds) { return $false }
-    $width = $bounds[2] - $bounds[0]
-    $height = $bounds[3] - $bounds[1]
-    if ($width -le 0 -or $height -le 0) { return $false }
-    $bitmap = [System.Drawing.Bitmap]::new($width, $height)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    try {
-        $graphics.CopyFromScreen(
-            $bounds[0], $bounds[1], 0, 0,
-            [System.Drawing.Size]::new($width, $height),
-            [System.Drawing.CopyPixelOperation]::SourceCopy)
-        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
-    }
-    finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
-    }
-    return $true
-}
-
 Write-Host "Launching via Steam..."
 Start-Process "steam://rungameid/3280350"
 $game = $null
@@ -206,11 +184,23 @@ if (!(Wait-LogLine "RideOn Update vtable observer installed" 30000 `
         "RideOn Update vtable observer")) {
     Stop-FailedTest "RideOn Update vtable observer was not installed before boarding"
 }
+if (!(Wait-LogLine "FastRideOff pre-RideOff state bypass installed" 30000 `
+        "pre-RideOff state bypass")) {
+    Stop-FailedTest "pre-RideOff state bypass was not installed"
+}
 
+$captureDir = Join-Path $PSScriptRoot "artifacts\boarding"
+[void](New-Item -ItemType Directory -Force -Path $captureDir)
 $boarded = $false
+$boardingCapture = $null
 for ($attempt = 1; $attempt -le 3 -and !$boarded; $attempt++) {
     $startLine = (Get-LogLines).Count
-    Send-GameKey 0x21 "F (BOARD $attempt/3)"
+    $boardingCapture = $SI::KeyScanAndCapture(
+        $script:gameHwnd, 0x21, 60, $captureDir, "boarding")
+    if (!$boardingCapture) {
+        Stop-FailedTest "precise boarding capture failed"
+    }
+    Write-Host "  Captured precise boarding timeline: $boardingCapture"
     $boarded = Wait-LogLine "FastBoarding descriptor evaluated" 3000 `
         "left-front fast descriptor" $startLine
     if (!$boarded) {
@@ -219,7 +209,10 @@ for ($attempt = 1; $attempt -le 3 -and !$boarded; $attempt++) {
     }
 }
 if (!$boarded) { Stop-FailedTest "three BOARD inputs produced no RideOn event" }
-
+$rideOnLines = @(Get-LogLines | Select-Object -Skip $startLine)
+[System.IO.File]::WriteAllLines(
+    (Join-Path $boardingCapture "rideon_log.txt"),
+    [string[]]$rideOnLines)
 if (!(Wait-LogLine "complete=1" 2000 `
         "fast character descriptor completion" $startLine)) {
     Stop-FailedTest "character descriptor did not reach a valid fast result"
@@ -241,41 +234,31 @@ if (!(Wait-LogLine "DriveVtable original result=" 2000 `
     Stop-FailedTest "RideOn did not transition to Drive"
 }
 
-$captureDir = Join-Path $PSScriptRoot "artifacts\boarding"
-[void](New-Item -ItemType Directory -Force -Path $captureDir)
-foreach ($capture in @(
-    @{ Name = "drive_0200ms.png"; Delay = 0 },
-    @{ Name = "drive_0700ms.png"; Delay = 500 },
-    @{ Name = "drive_1700ms.png"; Delay = 1000 }
-)) {
-    if ($capture.Delay -gt 0) { Start-Sleep -Milliseconds $capture.Delay }
-    $capturePath = Join-Path $captureDir $capture.Name
-    if (Capture-GameWindow $capturePath) {
-        Write-Host "  Captured $capturePath"
-    }
-}
-
 Wait-GameSeconds "Fast Drive settle" 1
-[void](Capture-GameWindow (Join-Path $captureDir "drive_settled.png"))
 
 $dismountStartLine = (Get-LogLines).Count
-Send-GameKey 0x21 "F (DISMOUNT)"
-if (!(Wait-LogLine "RideOff animation state requested=1" 750 `
-        "accelerated RideOff completion" $dismountStartLine)) {
-    Stop-FailedTest "RideOff animation did not complete within 750ms"
-}
-$rideOffLine = Get-LogLines | Where-Object { $_.Contains("RideOff animation state requested=1") } | Select-Object -Last 1
-if ($rideOffLine -notmatch 'elapsedMs=(\d+)' -or [int]$Matches[1] -gt 750) { Stop-FailedTest "RideOff completion timing was invalid" }
-foreach ($capture in @(
-    @{ Name = "dismount_0200ms.png"; Delay = 200 },
-    @{ Name = "dismount_0700ms.png"; Delay = 500 },
-    @{ Name = "dismount_1700ms.png"; Delay = 1000 }
+$dismountCapture = $SI::KeyScanAndCapture(
+    $script:gameHwnd, 0x21, 60, $captureDir, "dismount")
+if (!$dismountCapture) { Stop-FailedTest "precise dismount capture failed" }
+Write-Host "  Captured precise dismount timeline: $dismountCapture"
+$rideOffLines = @(Get-LogLines | Select-Object -Skip $dismountStartLine)
+[System.IO.File]::WriteAllLines(
+    (Join-Path $dismountCapture "rideoff_log.txt"),
+    [string[]]$rideOffLines)
+$rideOffLines | Where-Object { $_ -match 'RideOff|CutIn|TruckSeat' } |
+    ForEach-Object { Write-Host "  $_" }
+foreach ($fragment in @(
+    "FastRideOff pre-RideOff operation-21 detach requested",
+    "FastRideOff pre-RideOff bypass complete current=0 next=0 flag=0"
 )) {
-    Start-Sleep -Milliseconds $capture.Delay
-    [void](Capture-GameWindow (Join-Path $captureDir $capture.Name))
+    if (!($rideOffLines | Where-Object { $_.Contains($fragment) })) {
+        Stop-FailedTest "missing pre-RideOff bypass evidence: $fragment"
+    }
 }
-Wait-GameSeconds "Native dismount settle" 5
-[void](Capture-GameWindow (Join-Path $captureDir "dismount1_settled.png"))
+if ($rideOffLines | Where-Object {
+        $_.Contains("RideOff Enter vtable original result=") }) {
+    Stop-FailedTest "RideOff OnEnter ran despite the pre-state bypass"
+}
 
 for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
     Write-Host "Quit sequence attempt $quitAttempt/3"
@@ -291,7 +274,7 @@ for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
 
     for ($i = 0; $i -lt 7; $i++) {
         if (!(Get-Process -Id $script:gamePid -ErrorAction SilentlyContinue)) {
-            Write-Host "=== PASS: fast boarding, Drive, dismount, and quit confirmed ==="
+            Write-Host "=== FLOW_PASS: state flow captured; inspect milestone frames for visual skip ==="
             exit 0
         }
         Start-Sleep 1

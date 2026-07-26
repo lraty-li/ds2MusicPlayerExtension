@@ -151,11 +151,14 @@ void __fastcall HookPlayback(uintptr_t camera, float frameDelta)
 void __fastcall HookDeactivate(uintptr_t camera)
 {
     PlaybackState before = {};
-    const bool relevant = ReadState(camera, before) && before.finished &&
+    const bool haveBefore = ReadState(camera, before);
+    const bool relevant = haveBefore && before.finished &&
         FastBoardingSession::IsActiveCutInSession(
             camera, before.actionHash);
+    const bool rideOff = haveBefore && before.finished &&
+        RideOffSession::IsActiveCutInAction(before.actionHash);
     g_originalDeactivate(camera);
-    if (!relevant)
+    if (!relevant && !rideOff)
         return;
     PlaybackState after = {};
     const bool clean = ReadState(camera, after) && !after.active &&
@@ -163,7 +166,8 @@ void __fastcall HookDeactivate(uintptr_t camera)
         after.actionHash == UINT32_MAX &&
         !after.flags && !after.switchPending;
     std::ostringstream oss;
-    oss << "FastBoarding CutIn Deactivate clean=" << (clean ? 1 : 0)
+    oss << (rideOff ? "RideOff" : "FastBoarding")
+        << " CutIn Deactivate clean=" << (clean ? 1 : 0)
         << " hash=0x" << std::hex << before.actionHash
         << " flags=0x" << before.flags << std::dec
         << " variant=" << before.variantIndex;

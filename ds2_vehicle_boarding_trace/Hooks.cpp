@@ -11,6 +11,7 @@
 #include "MoverRootMotionObserver.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
+#include "RideOffStateBypass.h"
 #include "RideOffVtableTrace.h"
 #include "TruckSeatTransitionObserver.h"
 
@@ -82,6 +83,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("FastBoarding CutIn wrapper failed");
     if (!MoverRootMotionObserver::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding Mover observer failed");
+    if (!RideOffStateBypass::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastRideOff pre-RideOff state bypass failed");
     if (!RideOffVtableTrace::TryInstall(gameModule, g_logger))
         g_logger.Log("RideOff vtable observer failed");
 

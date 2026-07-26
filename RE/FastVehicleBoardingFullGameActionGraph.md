@@ -40,11 +40,19 @@ Stage1 约有 29441 条指令且只有一个基本块；它只调用栈探测和
 - 同步状态 `+0x8` 是帧号；
 - 同步状态 `+0xC` 是瞬时标志；
 - 同步状态 `+0x10` / `+0x18` 是本帧区间端点；
-- `result+0x50` 是可选覆盖值；
+- `result+0x50` 是可选的同步区间重基准覆盖值；
 - 传入的 `scale` 用于传播帧区间。
 
 `0x1801D6834` 已命名为 `ActionGraphResult_MergeChannelsByMask`。它按掩码复制
-ActionGraphResult 的多个通道，其中 bit 2 调用同步传播函数。
+ActionGraphResult 的多个独立通道：bit `0x04` 调用同步区间传播函数，bit `0x08`
+复制 sync-map 指针，bit `0x20` 则单独复制 `timeState+0x0E reachedEnd` 和一组
+result 元数据。同步区间传播函数本身不复制 `reachedEnd`。
+
+`ActionGraphResult_PropagateSyncFrame` 对 `result+0x50` 的消费已经精确闭合：只有来源
+值非负且目标 `result+0x54` gate 有效时才把它复制到目标；遇到 frame generation
+不连续或已有覆盖值时，以 `max(result+0x50, 0)` 作为新区间起点，连续帧且该值为负
+才沿用上一帧终点。因此 `+0x50` 是同步区间重基准覆盖，不是 descriptor duration、
+`evaluationEndSeconds(+0x4C)` 或空间位移。
 
 左前方上车运行时的同步传播全部使用 `scale=1.0`。玩家子图的典型区间为：
 
@@ -120,7 +128,8 @@ syncDuration=0.00834168
 
 四个 caller 均属于 `0x183605C47` 开始的同一个生成子图函数。反汇编确认，这些
 调用本身仍是候选结果选择与复制：先比较 2 或 3 个候选的同步距离，再以 mask
-`0x73` 复制完整结果。
+`0x73` 复制 count/items、alternate items、duration/结束元数据和 payload，但不复制
+来源同步区间或 sync-map；它不是“完整时间状态”复制。
 
 候选结果来自两个图状态槽：
 
@@ -138,6 +147,15 @@ qword_1884D1FF8(outputResult, descriptor, 0, xmm9)
 对应 call site 为 `0x183607111` 与 `0x183607AB0`，descriptor 分别来自父对象
 `+0x2730` 与 `+0x2710`。因此 `qword_1884D1FF8` 与这两个 descriptor 构成当前
 已验证的动画结果生成边界；后续 merge 只选择和保留其结果。
+
+这些生成结果在外层动态表中还会经过一个独立宿主边界。fullgame 的通用动态表求值器
+在完成各个步长 `0xB8` 的条目后调用运行时槽
+`ActionGraphDynamicTable_PostEvaluate_Ptr`；初始化器以哈希 `0x49589132` 解析该槽。
+三个调用点确认其 ABI 为
+`PostEvaluate(dynamicTable, deltaSeconds, outputResult)`；其中一个通用 helper
+会在该槽返回后立即把其临时 ActionGraphResult 以 `0x73` 向上合并，另一个随后才清理
+动态表状态。它的实现不在 fullgame 文件中，所以叶 evaluator 或 `0x73` merge 的日志
+不能代替该宿主边界的输入/输出结论。
 
 运行时 scratch 地址与静态槽位初始化的交叉计算确认，左前方路径实际选中的是：
 

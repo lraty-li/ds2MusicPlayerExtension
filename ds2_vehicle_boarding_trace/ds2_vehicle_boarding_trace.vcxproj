@@ -141,6 +141,8 @@
     <!--<ClInclude Include="SeatActionProgressTrace.h" />-->
     <!--<ClInclude Include="SeatStateTrace.h" />-->
     <ClInclude Include="SeatTransitionTrace.h" />
+    <ClInclude Include="TruckBoardingSuppressor.h" />
+    <ClInclude Include="TruckRideOffSuppressor.h" />
     <ClInclude Include="TruckSeatTransitionObserver.h" />
     <!--<ClInclude Include="RideOnUpdateTrace.h" />-->
     <ClInclude Include="RideOnVtableDiscovery.h" />
@@ -148,6 +150,7 @@
     <ClInclude Include="RideOffDescriptorTrace.h" />
     <ClInclude Include="RideOffFinalizer.h" />
     <ClInclude Include="RideOffSession.h" />
+    <ClInclude Include="RideOffStateBypass.h" />
     <ClInclude Include="RideOffVtableTrace.h" />
     <ClInclude Include="VehicleSnapshot.h" />
     <ClInclude Include="VtableLocator.h" />
@@ -179,6 +182,8 @@
     <!--<ClCompile Include="SeatActionProgressTrace.cpp" />-->
     <!--<ClCompile Include="SeatStateTrace.cpp" />-->
     <ClCompile Include="SeatTransitionTrace.cpp" />
+    <ClCompile Include="TruckBoardingSuppressor.cpp" />
+    <ClCompile Include="TruckRideOffSuppressor.cpp" />
     <ClCompile Include="TruckSeatTransitionObserver.cpp" />
     <!--<ClCompile Include="RideOnUpdateTrace.cpp" />-->
     <ClCompile Include="RideOnVtableDiscovery.cpp" />
@@ -186,6 +191,7 @@
     <ClCompile Include="RideOffDescriptorTrace.cpp" />
     <ClCompile Include="RideOffFinalizer.cpp" />
     <ClCompile Include="RideOffSession.cpp" />
+    <ClCompile Include="RideOffStateBypass.cpp" />
     <ClCompile Include="RideOffVtableTrace.cpp" />
     <ClCompile Include="VehicleSnapshot.cpp" />
     <ClCompile Include="VtableLocator.cpp" />

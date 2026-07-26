@@ -2,6 +2,9 @@
 #include "TruckSeatTransitionObserver.h"
 
 #include "FastBoardingSession.h"
+#include "RideOffSession.h"
+#include "TruckBoardingSuppressor.h"
+#include "TruckRideOffSuppressor.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
@@ -30,7 +33,6 @@ std::atomic<bool> g_started{false};
 std::atomic<uintptr_t> g_vtable{0};
 std::atomic<uintptr_t> g_boundTruck{0};
 std::atomic<uint32_t> g_boundSession{0};
-std::atomic<uint32_t> g_suppressedSession{0};
 const Logger* g_logger = nullptr;
 TruckUpdateFn g_original34 = nullptr;
 TruckUpdateFn g_original35 = nullptr;
@@ -59,60 +61,22 @@ bool ReadSnapshot(uintptr_t truck, SeatSnapshot& state)
     return true;
 }
 
-bool CompareExchangeRequest(
-    uintptr_t address, int32_t expected, int32_t desired)
-{
-    __try {
-        return InterlockedCompareExchange(
-            reinterpret_cast<volatile LONG*>(address),
-            static_cast<LONG>(desired), static_cast<LONG>(expected)) ==
-            expected;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 bool IsBoardingRequest(int32_t state)
 {
     return state >= 3 && state <= 6;
 }
 
-bool TryCancelBoardingRequest(uintptr_t truck, const SeatSnapshot& state)
-{
-    if (!FastBoardingSession::AllComponentsReady() ||
-        state.currentState != 0 ||
-        !IsBoardingRequest(state.requestedState) ||
-        !state.controller || !state.controllerPlayback ||
-        state.controllerPlaybackState != 2) {
-        return false;
-    }
-
-    if (!CompareExchangeRequest(
-            truck + 0x1314, state.requestedState, -1))
-        return false;
-
-    const uint32_t session = FastBoardingSession::CurrentSessionId();
-    if (g_suppressedSession.exchange(
-            session, std::memory_order_acq_rel) != session) {
-        std::ostringstream oss;
-        oss << "FastBoarding TruckSeat boarding request suppressed"
-            << " session=" << session
-            << " truck=" << VehicleSeatTrace::Hex(truck)
-            << " current=" << state.currentState
-            << " request=" << state.requestedState
-            << " playbackState="
-            << static_cast<uint32_t>(state.controllerPlaybackState);
-        g_logger->Log(oss.str());
-    }
-    return true;
-}
-
-bool IsBoundTruck(uintptr_t truck)
+bool IsRelevantTruck(uintptr_t truck)
 {
     const uint32_t session = g_boundSession.load(std::memory_order_acquire);
-    return truck && truck == g_boundTruck.load(std::memory_order_acquire) &&
-        session && session == FastBoardingSession::CurrentSessionId() &&
+    if (!truck ||
+        truck != g_boundTruck.load(std::memory_order_acquire) || !session) {
+        return false;
+    }
+    const bool activeBoarding =
+        session == FastBoardingSession::CurrentSessionId() &&
         FastBoardingSession::ActiveRideOn() != 0;
+    return activeBoarding || RideOffSession::ActiveId() != 0;
 }
 
 bool DiscreteChanged(
@@ -144,15 +108,21 @@ void ObserveUpdate(
     uintptr_t truck, float frameDelta)
 {
     SeatSnapshot before = {};
-    const bool relevant = IsBoundTruck(truck) && ReadSnapshot(truck, before);
-    if (relevant && TryCancelBoardingRequest(truck, before))
-        ReadSnapshot(truck, before);
+    const bool relevant =
+        IsRelevantTruck(truck) && ReadSnapshot(truck, before);
+    if (relevant) {
+        const bool suppressed =
+            TruckBoardingSuppressor::TrySuppress(truck, *g_logger) ||
+            TruckRideOffSuppressor::TrySuppress(truck, *g_logger);
+        if (suppressed)
+            ReadSnapshot(truck, before);
+    }
     original(truck, frameDelta);
     if (!relevant)
         return;
 
     SeatSnapshot after = {};
-    if (!IsBoundTruck(truck) || !ReadSnapshot(truck, after))
+    if (!IsRelevantTruck(truck) || !ReadSnapshot(truck, after))
         return;
     if (DiscreteChanged(before, after))
         LogStateChange(slot, before, after);
@@ -226,7 +196,7 @@ bool PrepareProcessAttach(uintptr_t rideOn)
         SeatSnapshot state = {};
         if (!ReadSnapshot(truck, state))
             return false;
-        TryCancelBoardingRequest(truck, state);
+        TruckBoardingSuppressor::TrySuppress(truck, *g_logger);
         if (!ReadSnapshot(truck, state))
             return false;
         return !IsBoardingRequest(state.currentState) &&
@@ -238,7 +208,7 @@ bool PrepareProcessAttach(uintptr_t rideOn)
     SeatSnapshot state = {};
     if (!ReadSnapshot(truck, state))
         return false;
-    TryCancelBoardingRequest(truck, state);
+    TruckBoardingSuppressor::TrySuppress(truck, *g_logger);
     if (!ReadSnapshot(truck, state))
         return false;
     return !IsBoardingRequest(state.currentState) &&
