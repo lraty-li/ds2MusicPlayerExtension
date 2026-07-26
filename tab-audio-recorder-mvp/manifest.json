@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "DS2 Tab Audio Recorder MVP",
   "description": "Capture the active tab audio and stream PCM to the DS2 runtime plugin.",
-  "version": "1.0",
+  "version": "1.1.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "activeTab",

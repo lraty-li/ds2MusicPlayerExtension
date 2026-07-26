@@ -115,6 +115,15 @@ void PublishFrames(uint64_t endWrite)
 
 namespace AudioRingBuffer
 {
+void Clear()
+{
+    const uint64_t write = g_writeFrame.load(std::memory_order_acquire);
+    g_readFrame.store(write, std::memory_order_release);
+    g_primed.store(false, std::memory_order_relaxed);
+    g_minAvailableFrames.store(0, std::memory_order_relaxed);
+    g_maxAvailableFrames.store(0, std::memory_order_relaxed);
+}
+
 void PushPcm16(const uint8_t* pcm, uint32_t frames, uint16_t channels)
 {
     if (!pcm || frames == 0 || channels == 0) return;

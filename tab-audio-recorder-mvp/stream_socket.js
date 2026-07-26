@@ -1,10 +1,17 @@
 const PACKET_VERSION_FLOAT32 = 2;
 const SAMPLE_FORMAT_FLOAT32 = 2;
 const AUDIO_HEADER_BYTES = 32;
+const SOURCE_ID = "chrome-tab-capture";
+const SOURCE_KIND = "tab_capture";
+const RECLAIM_SILENCE_CHUNKS = 20;
 
 let socket = null;
 let sequence = 0n;
 let streamSocketClosedCallback = null;
+let sourceOwned = false;
+let sourcePreempted = false;
+let reclaimSilentChunks = 0;
+let reclaimArmed = false;
 
 function setStreamSocketClosedCallback(callback) {
   streamSocketClosedCallback = typeof callback === "function" ? callback : null;
@@ -54,6 +61,12 @@ function attachStreamSocket(ws, onTextMessage) {
   };
   socket.onclose = () => handleSocketClosed(ws);
   socket.onerror = () => handleSocketClosed(ws);
+  sendSourceHello();
+  if (sourcePreempted) {
+    notifySourceState("source-preempted");
+  } else {
+    claimStreamSource("capture_started");
+  }
 }
 
 function closeStreamSocket() {
@@ -67,6 +80,7 @@ function closeStreamSocket() {
     ws.close();
   } catch (_) {
   }
+  resetStreamSourceState();
 }
 
 function handleSocketClosed(ws) {
@@ -82,6 +96,7 @@ function handleSocketClosed(ws) {
   } catch (_) {
   }
   socket = null;
+  resetStreamSourceState();
   if (streamSocketClosedCallback) {
     streamSocketClosedCallback();
   }
@@ -102,6 +117,83 @@ function sendJsonPayload(payload) {
     handleSocketClosed(socket);
     return false;
   }
+}
+
+function sendSourceHello() {
+  return sendJsonPayload({
+    type: "source_hello",
+    sourceId: SOURCE_ID,
+    sourceKind: SOURCE_KIND,
+    label: "Chrome tabCapture"
+  });
+}
+
+function claimStreamSource(reason) {
+  const sent = sendJsonPayload({
+    type: "source_claim",
+    sourceId: SOURCE_ID,
+    sourceKind: SOURCE_KIND,
+    reason: String(reason || "explicit_playback")
+  });
+  if (!sent) return false;
+  sourceOwned = true;
+  sourcePreempted = false;
+  reclaimSilentChunks = 0;
+  reclaimArmed = false;
+  notifySourceState("source-active");
+  if (typeof refreshMetadataForSourceClaim === "function") {
+    refreshMetadataForSourceClaim();
+  }
+  return true;
+}
+
+function markStreamSourcePreempted() {
+  sourceOwned = false;
+  sourcePreempted = true;
+  reclaimSilentChunks = 0;
+  reclaimArmed = false;
+  notifySourceState("source-preempted");
+}
+
+function resetStreamSourceState(clearPreempted = false) {
+  sourceOwned = false;
+  if (clearPreempted) sourcePreempted = false;
+  reclaimSilentChunks = 0;
+  reclaimArmed = false;
+}
+
+function beginStreamSource() {
+  resetStreamSourceState(true);
+}
+
+function isStreamSourceOwned() {
+  return sourceOwned;
+}
+
+function notifySourceState(type) {
+  try {
+    const tabId = typeof getTargetTabId === "function"
+      ? getTargetTabId()
+      : null;
+    chrome.runtime.sendMessage({ type, tabId });
+  } catch (_) {
+  }
+}
+
+function observeStreamAudio(audio) {
+  if (sourceOwned || !(audio instanceof ArrayBuffer)) return;
+  const samples = new Float32Array(audio);
+  let peak = 0;
+  for (let index = 0; index < samples.length; index++) {
+    peak = Math.max(peak, Math.abs(samples[index]));
+  }
+  if (peak <= 0.0001) {
+    reclaimSilentChunks++;
+    if (reclaimSilentChunks >= RECLAIM_SILENCE_CHUNKS) reclaimArmed = true;
+    return;
+  }
+  if (reclaimArmed) claimStreamSource("audio_resumed");
+  reclaimSilentChunks = 0;
 }
 
 function sendMetadata(metadata) {
@@ -128,6 +220,7 @@ function sendAudioChunk(message, sampleRate) {
   }
 
   const audio = message.audio;
+  observeStreamAudio(audio);
   const frameCount = message.frames;
   const packet = new ArrayBuffer(AUDIO_HEADER_BYTES + audio.byteLength);
   const view = new DataView(packet);

@@ -39,6 +39,11 @@ async function stopCaptureHost() {
   }
 }
 
+async function claimCaptureHost() {
+  const response = await chrome.runtime.sendMessage({ type: "claim-source" });
+  return !!(response && response.ok);
+}
+
 async function ensureOffscreenDocument() {
   const status = await readCaptureHostStatus();
   if (status.exists) return;

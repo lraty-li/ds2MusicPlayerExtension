@@ -14,6 +14,7 @@ export class SpotifyConnectPlayer {
     this.player = null;
     this.lastStateFingerprint = "";
     this.lastTrackKey = "";
+    this.lastPlaying = null;
   }
 
   async prepareAndConnect() {
@@ -33,6 +34,7 @@ export class SpotifyConnectPlayer {
   disconnect() {
     if (this.player) this.player.disconnect();
     this.lastTrackKey = "";
+    this.updateSourcePlaying(false);
     resetSpotifyMetadata();
     this.onStatus({ connect: "未连接", deviceId: "—" });
     this.onTrack("—");
@@ -75,6 +77,7 @@ export class SpotifyConnectPlayer {
     });
     this.player.addListener("player_state_changed", (state) => {
       if (!state) {
+        this.updateSourcePlaying(false);
         this.onTrack("尚未转移播放");
         this.log("player_state_changed state=null");
         return;
@@ -87,6 +90,7 @@ export class SpotifyConnectPlayer {
         this.lastTrackKey = trackKey;
         publishSpotifyTrack(track, this.log);
       }
+      this.updateSourcePlaying(!state.paused);
       const fingerprint = `${state.paused}:${track?.uri || ""}`;
       if (fingerprint !== this.lastStateFingerprint) {
         this.lastStateFingerprint = fingerprint;
@@ -116,6 +120,15 @@ export class SpotifyConnectPlayer {
         this.log(`${type}：${message}`);
       });
     }
+  }
+
+  updateSourcePlaying(playing) {
+    if (this.lastPlaying === playing) return;
+    this.lastPlaying = playing;
+    window.chrome?.webview?.postMessage(
+      `game-source-playing:${playing ? "1" : "0"}`
+    );
+    this.log(`Spotify 音源状态：${playing ? "claim" : "idle"}`);
   }
 
   async connect(withActivation) {

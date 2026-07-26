@@ -22,6 +22,17 @@ Chrome/Edge tabCapture
 
 当前扩展处于受控模式：没有 popup 测试界面，点击扩展图标只负责开始/停止推流；暂停/恢复由游戏状态通过 WebSocket 控制。
 
+## 与 Spotify Connect 共存
+
+扩展和 Spotify WebView2 Helper 可以同时连接游戏。扩展开始捕获时发送
+`source_claim`；Spotify 真正开始播放时也会发送自己的 `source_claim`。
+游戏只消费最后声明来源的 PCM、曲名和封面，并在切换时清空旧缓冲、暂停
+旧来源。
+
+扩展被 Spotify 抢占后角标显示 `STBY`，捕获连接仍保留。之后捕获 tab
+从静音恢复为有声时会自动重新声明；也可以点击 `STBY` 状态的扩展图标，
+显式抢占并恢复网页。自动重连本身不会触发抢占，避免两个来源来回争夺。
+
 ## 游戏暂停同步
 
 runtime DLL 会通过同一条 WebSocket 向扩展发送控制消息：

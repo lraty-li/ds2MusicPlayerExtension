@@ -153,6 +153,11 @@ void ReceiveLoop(
             {
                 SendControl(client, "resume");
             }
+            else if (text.find("\"type\":\"source_") !=
+                std::string::npos)
+            {
+                Log("PROBE_SOURCE " + text);
+            }
             else if (text.find("\"type\":\"metadata\"") !=
                 std::string::npos)
             {

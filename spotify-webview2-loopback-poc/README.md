@@ -23,6 +23,11 @@ Spotify Web Playback SDK
 Windows Process Loopback 只在可见诊断模式中运行，作为接管前后的对照
 观测；隐藏 helper 不启动这条采集路径。
 
+Helper 连接游戏后先注册为 `spotify_connect` 来源，但不会仅因连接成功而
+抢占 tabCapture。只有 Spotify SDK 从暂停/非活跃状态进入真实播放时才发送
+`source_claim`；被 tabCapture 抢占时，游戏会沿原反向控制通道暂停本实例。
+再次通过 Spotify Connect 播放后会重新声明，并重发缓存的曲名与封面。
+
 ## 运行模式
 
 - 不带参数启动：显示完整诊断窗口，可配合独立 probe 验证，不启动游戏；

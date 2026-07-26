@@ -65,6 +65,7 @@
     <ClCompile Include="src\FrameAudioProbe.cpp" />
     <ClCompile Include="src\GameAudioProtocol.cpp" />
     <ClCompile Include="src\GameStreamClient.cpp" />
+    <ClCompile Include="src\GameStreamControl.cpp" />
     <ClCompile Include="src\GameStreamSetup.cpp" />
     <ClCompile Include="src\GameStreamWorker.cpp" />
     <ClCompile Include="src\HostState.cpp" />

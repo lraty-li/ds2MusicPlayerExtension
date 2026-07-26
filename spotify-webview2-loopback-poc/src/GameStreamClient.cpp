@@ -73,6 +73,10 @@ void GameStreamClient::Impl::Stop()
     latestMetadata_.clear();
     latestJacket_.clear();
     pendingPcm_.clear();
+    sourcePlaying_ = false;
+    sourceClaimed_ = false;
+    helloPending_ = false;
+    claimPending_ = false;
 }
 
 void GameStreamClient::Impl::Push(const DecodedPcmChunk& chunk)
@@ -81,6 +85,7 @@ void GameStreamClient::Impl::Push(const DecodedPcmChunk& chunk)
         static_cast<uint64_t>(chunk.frames) *
         chunk.channels * sizeof(int16_t);
     std::lock_guard lock(mutex_);
+    if (!sourceClaimed_) return;
     if (chunk.sampleRate != GameAudioProtocol::kSampleRate ||
         chunk.channels != GameAudioProtocol::kChannels ||
         expectedBytes != chunk.bytes.size())
@@ -146,12 +151,38 @@ void GameStreamClient::Impl::PushText(std::wstring_view json)
         latestJacket_ = message;
         ++jacketMessagesQueued_;
     }
+    if (!sourceClaimed_) return;
     if (textMessages_.size() >= kMaxQueuedTextMessages)
     {
         textMessages_.pop_front();
         ++droppedTextMessages_;
     }
     textMessages_.push_back(std::move(message));
+    wake_.notify_one();
+}
+
+void GameStreamClient::Impl::SetSourcePlaying(bool playing)
+{
+    std::lock_guard lock(mutex_);
+    sourcePlaying_ = playing;
+    if (playing)
+    {
+        sourceClaimed_ = true;
+        claimPending_ = true;
+        textMessages_.clear();
+        if (!latestMetadata_.empty())
+        {
+            textMessages_.push_back(latestMetadata_);
+        }
+        if (!latestJacket_.empty())
+        {
+            textMessages_.push_back(latestJacket_);
+        }
+    }
+    else
+    {
+        claimPending_ = false;
+    }
     wake_.notify_one();
 }
 
@@ -176,6 +207,10 @@ std::wstring GameStreamClient::Impl::MetricsJson() const
          << L",\"endpoint\":\"ws://127.0.0.1:47832\""
          << L",\"connected\":"
          << (connected_ ? L"true" : L"false")
+         << L",\"sourcePlaying\":"
+         << (sourcePlaying_ ? L"true" : L"false")
+         << L",\"sourceClaimed\":"
+         << (sourceClaimed_ ? L"true" : L"false")
          << L",\"sourceStreamId\":\""
          << JsonText(sourceStreamId_) << L"\""
          << L",\"connectAttempts\":" << connectAttempts_
@@ -224,6 +259,11 @@ void GameStreamClient::Push(const DecodedPcmChunk& chunk)
 void GameStreamClient::PushText(std::wstring_view json)
 {
     impl_->PushText(json);
+}
+
+void GameStreamClient::SetSourcePlaying(bool playing)
+{
+    impl_->SetSourcePlaying(playing);
 }
 
 void GameStreamClient::RequestProbeControl(

@@ -15,6 +15,7 @@ public:
     void Stop();
     void Push(const DecodedPcmChunk& chunk);
     void PushText(std::wstring_view json);
+    void SetSourcePlaying(bool playing);
     void RequestProbeControl(std::wstring_view command);
     std::wstring MetricsJson() const;
 
@@ -37,6 +38,10 @@ private:
     bool started_ = false;
     bool stop_ = false;
     bool connected_ = false;
+    bool sourcePlaying_ = false;
+    bool sourceClaimed_ = false;
+    bool helloPending_ = false;
+    bool claimPending_ = false;
     std::deque<std::vector<uint8_t>> packets_;
     std::deque<std::string> textMessages_;
     std::deque<std::string> diagnosticControls_;

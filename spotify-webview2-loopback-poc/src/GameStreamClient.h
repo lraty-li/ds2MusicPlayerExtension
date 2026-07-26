@@ -30,6 +30,7 @@ public:
     void Stop();
     void Push(const DecodedPcmChunk& chunk);
     void PushText(std::wstring_view json);
+    void SetSourcePlaying(bool playing);
     void RequestProbeControl(std::wstring_view command);
     std::wstring MetricsJson() const;
 

@@ -27,8 +27,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({
       active: isAudioGraphActive(),
       connected: isStreamSocketOpen(),
+      owned: isStreamSourceOwned(),
       tabId: targetTabId
     });
+    return true;
+  }
+
+  if (message.type === "claim-source") {
+    sendResponse({ ok: claimStreamSource("capture_reselected") });
     return true;
   }
 
@@ -47,6 +53,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function startStream(message) {
   stopStream(false);
+  beginStreamSource();
   const token = ++streamToken;
   streamUrl = message.streamUrl;
   targetTabId = message.tabId;
@@ -110,6 +117,9 @@ function handleSocketMessage(data) {
   }
 
   if (message && message.type === "control") {
+    if (message.reason === "source_preempted") {
+      markStreamSourcePreempted();
+    }
     chrome.runtime.sendMessage({
       type: "browser-control",
       tabId: targetTabId,
@@ -129,6 +139,7 @@ function stopStream(notify = true) {
   }
   stopAudioGraph();
   closeStreamSocket();
+  resetStreamSourceState(true);
 
   streamUrl = null;
   targetTabId = null;

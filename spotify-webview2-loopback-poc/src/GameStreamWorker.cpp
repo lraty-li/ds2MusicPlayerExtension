@@ -10,6 +10,12 @@ namespace
 {
 constexpr uint16_t kGameStreamPort = 47832;
 constexpr auto kRetryDelay = std::chrono::milliseconds(500);
+constexpr char kSourceHello[] =
+    "{\"type\":\"source_hello\",\"sourceId\":\"spotify-webview2\","
+    "\"sourceKind\":\"spotify_connect\",\"label\":\"Spotify Connect\"}";
+constexpr char kSourceClaim[] =
+    "{\"type\":\"source_claim\",\"sourceId\":\"spotify-webview2\","
+    "\"sourceKind\":\"spotify_connect\",\"reason\":\"playback_started\"}";
 
 std::wstring Widen(std::string_view text)
 {
@@ -48,11 +54,13 @@ void GameStreamClient::Impl::SetConnected(
             ++connections_;
             packets_.clear();
             textMessages_.clear();
-            if (!latestMetadata_.empty())
+            helloPending_ = true;
+            claimPending_ = sourceClaimed_;
+            if (sourceClaimed_ && !latestMetadata_.empty())
             {
                 textMessages_.push_back(latestMetadata_);
             }
-            if (!latestJacket_.empty())
+            if (sourceClaimed_ && !latestJacket_.empty())
             {
                 textMessages_.push_back(latestJacket_);
             }
@@ -109,41 +117,11 @@ void GameStreamClient::Impl::RecordTextSendFailure(std::string message)
     lastError_ = L"websocket text send failed";
 }
 
-void GameStreamClient::Impl::HandleControl(
-    uint8_t opcode,
-    const std::vector<uint8_t>& payload)
-{
-    if (opcode != 0x1) return;
-    const std::string text(payload.begin(), payload.end());
-    GameStreamEvent event{};
-    {
-        std::lock_guard lock(mutex_);
-        if (text.find("\"command\"") == std::string::npos)
-        {
-            return;
-        }
-        if (text.find("\"pause\"") != std::string::npos)
-        {
-            ++pauseCommands_;
-            event = GameStreamEvent::Pause;
-        }
-        else if (text.find("\"resume\"") != std::string::npos)
-        {
-            ++resumeCommands_;
-            event = GameStreamEvent::Resume;
-        }
-        else
-        {
-            return;
-        }
-    }
-    Notify(event);
-}
-
 bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
 {
     std::vector<uint8_t> packet;
     std::string diagnosticControl;
+    std::string protocolMessage;
     std::string textMessage;
     {
         std::unique_lock lock(mutex_);
@@ -153,12 +131,24 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
             [this]
             {
                 return stop_ ||
+                    helloPending_ ||
+                    claimPending_ ||
                     !diagnosticControls_.empty() ||
                     !textMessages_.empty() ||
                     !packets_.empty();
             });
         if (stop_) return false;
-        if (!diagnosticControls_.empty())
+        if (helloPending_)
+        {
+            helloPending_ = false;
+            protocolMessage = kSourceHello;
+        }
+        else if (claimPending_)
+        {
+            claimPending_ = false;
+            protocolMessage = kSourceClaim;
+        }
+        else if (!diagnosticControls_.empty())
         {
             diagnosticControl =
                 std::move(diagnosticControls_.front());
@@ -176,6 +166,16 @@ bool GameStreamClient::Impl::SendNext(UINT_PTR socketValue)
         }
     }
     const SOCKET socket = static_cast<SOCKET>(socketValue);
+    if (!protocolMessage.empty())
+    {
+        if (!WebSocketWire::SendClientText(socket, protocolMessage))
+        {
+            RecordSendFailure();
+            return false;
+        }
+        RecordTextSent();
+        return true;
+    }
     if (!diagnosticControl.empty())
     {
         const std::string request =
