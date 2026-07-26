@@ -208,6 +208,8 @@ function logSnapshot(prefix) {
     `graphs=${state.attachedMedia}/${state.graphErrors}, ` +
     `directRms=${state.directRms.toFixed(7)}, ` +
     `directPeak=${state.directPeak.toFixed(7)}, ` +
+    `pcm=${state.pcmBridgeState}/${state.pcmBridgeMethod || "none"}, ` +
+    `pcmChunks=${state.pcmChunks}, ` +
     `desired=${state.desiredMode}, trackedSilent=${state.trackedSilent}`
   );
 }

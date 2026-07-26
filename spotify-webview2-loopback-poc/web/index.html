@@ -10,10 +10,10 @@
   <main class="shell">
     <header class="hero">
       <p class="eyebrow">完全脱离游戏 · 无扩展 · 不保存 PCM</p>
-      <h1>WebView2 Spotify Connect + 进程回环</h1>
+      <h1>WebView2 Spotify Connect + Direct PCM</h1>
       <p class="lede">
-        这个独立程序只验证 Connect、EME、自动播放和 Windows Process Loopback。
-        它不会启动或连接游戏，也尚未实现手机二维码授权。
+        这个独立程序验证 Connect、EME、自动播放、Direct Web Audio PCM 和
+        原生连续分块。它不会启动或连接游戏，也尚未实现手机二维码授权。
       </p>
     </header>
 
@@ -79,7 +79,7 @@
         </div>
       </dl>
       <div class="actions">
-        <button id="attach-media-graph">接管媒体到 Web Audio</button>
+        <button id="attach-media-graph">接管媒体并启动 PCM 桥接</button>
         <button id="set-silent-sink">本实例切到 silent sink</button>
         <button id="restore-page-sink" class="secondary">恢复本实例默认输出</button>
         <button id="refresh-audio-probe" class="ghost">刷新对象探针</button>
@@ -88,14 +88,44 @@
         当前页面音频对象使用默认输出
       </p>
       <p class="hint">
-        先播放 Spotify 并确认 Process Loopback 非零，再接管媒体；接管后先确认
-        Direct RMS 非零，最后才切到 silent sink。接管不可撤销，重启 PoC 才能复原。
+        先播放 Spotify，再接管媒体；接管会同时启动连续 PCM 分块。确认原生接收
+        通过后再切到 silent sink。接管不可撤销，重启 PoC 才能复原。
       </p>
     </section>
 
     <section class="card">
       <div class="section-heading">
         <span class="step">3</span>
+        <div>
+          <h2>连续 PCM → 原生 C++</h2>
+          <p>优先由 AudioWorklet 分块；WebMessage/Base64 只用于本阶段传输验证。</p>
+        </div>
+      </div>
+
+      <dl class="facts four">
+        <div><dt>Frame 发送</dt><dd id="pcm-frame-state">等待媒体接管</dd></div>
+        <div><dt>音频线程实现</dt><dd id="pcm-method">—</dd></div>
+        <div><dt>Web 累计</dt><dd id="pcm-web-chunks">0 块 · 0 帧</dd></div>
+        <div><dt>原生状态</dt><dd id="pcm-native-state">等待数据</dd></div>
+        <div><dt>原生格式</dt><dd id="pcm-native-format">—</dd></div>
+        <div><dt>原生累计</dt><dd id="pcm-native-total">0 块 · 0 帧</dd></div>
+        <div><dt>最近吞吐量</dt><dd id="pcm-throughput">—</dd></div>
+        <div><dt>连续性</dt><dd id="pcm-continuity">—</dd></div>
+        <div><dt>原生 RMS</dt><dd id="pcm-native-rms">0.0000000</dd></div>
+        <div><dt>原生 Peak</dt><dd id="pcm-native-peak">0.0000000</dd></div>
+        <div><dt>滚动校验值</dt><dd id="pcm-checksum">—</dd></div>
+      </dl>
+      <p id="pcm-bridge-verdict" class="verdict idle">
+        等待连续 PCM 到达原生 C++
+      </p>
+      <p id="pcm-bridge-detail" class="hint">
+        原生端只校验并立即丢弃样本，不写 WAV，也不连接游戏。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">4</span>
         <div>
           <h2>Spotify PKCE 授权</h2>
           <p>本轮用嵌入页完成一次本机授权；二维码中继明确后置。</p>
@@ -124,7 +154,7 @@
 
     <section class="card">
       <div class="section-heading">
-        <span class="step">4</span>
+        <span class="step">5</span>
         <div>
           <h2>从 Spotify Connect 选择这个设备</h2>
           <p>授权后会自动注册，不需要点击页面；手动激活按钮只用于诊断自动播放失败。</p>
@@ -146,7 +176,7 @@
 
     <section class="card">
       <div class="section-heading">
-        <span class="step">5</span>
+        <span class="step">6</span>
         <div>
           <h2>PCM 判定</h2>
           <p>只计算数值并立即丢弃样本，不写 WAV，不通过网络发送 PCM。</p>

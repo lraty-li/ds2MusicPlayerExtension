@@ -63,6 +63,8 @@
     <ClCompile Include="src\Diagnostics.cpp" />
     <ClCompile Include="src\FrameAudioProbe.cpp" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\PcmChunkCodec.cpp" />
+    <ClCompile Include="src\PcmStreamReceiver.cpp" />
     <ClCompile Include="src\PocApp.cpp" />
     <ClCompile Include="src\PocConfig.cpp" />
     <ClCompile Include="src\ProcessLoopbackCapture.cpp" />
@@ -72,6 +74,8 @@
   <ItemGroup>
     <ClInclude Include="src\AudioSessionMute.h" />
     <ClInclude Include="src\CaptureMetrics.h" />
+    <ClInclude Include="src\PcmChunkCodec.h" />
+    <ClInclude Include="src\PcmStreamReceiver.h" />
     <ClInclude Include="src\PocApp.h" />
     <ClInclude Include="src\PocConfig.h" />
     <ClInclude Include="src\ProcessLoopbackCapture.h" />

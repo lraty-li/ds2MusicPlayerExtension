@@ -12,6 +12,7 @@ namespace
 {
 constexpr wchar_t kStartUrl[] = L"https://appassets.example/index.html";
 constexpr wchar_t kProbeScript[] = L"frame-audio-probe-injected.js";
+constexpr wchar_t kPcmBridgeScript[] = L"frame-pcm-bridge-injected.js";
 constexpr wchar_t kGraphScript[] = L"frame-media-graph-injected.js";
 
 HRESULT LoadUtf8File(
@@ -68,9 +69,15 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
     }
 
     std::wstring probeScript;
+    std::wstring pcmBridgeScript;
     std::wstring graphScript;
     const std::filesystem::path webFolder(webFolder_);
     HRESULT result = LoadUtf8File(webFolder / kProbeScript, probeScript);
+    if (SUCCEEDED(result))
+    {
+        result = LoadUtf8File(
+            webFolder / kPcmBridgeScript, pcmBridgeScript);
+    }
     if (SUCCEEDED(result))
     {
         result = LoadUtf8File(webFolder / kGraphScript, graphScript);
@@ -80,6 +87,8 @@ HRESULT PocApp::InstallFrameAudioProbeAndNavigate()
         ShowFailure(L"Load frame audio probe scripts", result);
         return result;
     }
+    probeScript += L"\n";
+    probeScript += pcmBridgeScript;
     probeScript += L"\n";
     probeScript += graphScript;
 

@@ -28,6 +28,31 @@ export function buildProbeState(frameReports, requestedMode) {
   const directWindows = maximum(
     media.map(({ directWindows }) => directWindows)
   );
+  const bridgeMedia = media.filter(
+    ({ pcmBridgeState }) => pcmBridgeState &&
+      pcmBridgeState !== "idle"
+  );
+  const bridgeErrors = bridgeMedia.filter(
+    ({ pcmBridgeState }) => pcmBridgeState === "error"
+  );
+  const bridgeStreaming = bridgeMedia.filter(
+    ({ pcmBridgeState }) => pcmBridgeState === "streaming"
+  );
+  const pcmChunks = maximum(
+    bridgeMedia.map(({ pcmChunks }) => pcmChunks)
+  );
+  const pcmFrames = maximum(
+    bridgeMedia.map(({ pcmFrames }) => pcmFrames)
+  );
+  const pcmBridgeMethod =
+    bridgeMedia.find(({ pcmBridgeMethod }) => pcmBridgeMethod)
+      ?.pcmBridgeMethod || "";
+  const pcmBridgeError =
+    bridgeErrors.find(({ pcmBridgeError }) => pcmBridgeError)
+      ?.pcmBridgeError || "";
+  const pcmBridgeNote =
+    bridgeMedia.find(({ pcmBridgeNote }) => pcmBridgeNote)
+      ?.pcmBridgeNote || "";
   const expectedFrames = 1 + document.querySelectorAll("iframe").length;
   const coverageComplete = frames.length >= expectedFrames;
   const allFramesApplied =
@@ -49,6 +74,16 @@ export function buildProbeState(frameReports, requestedMode) {
     directPeak,
     directNonzero,
     directWindows,
+    pcmBridgeState: bridgeErrors.length > 0
+      ? "error"
+      : bridgeStreaming.length > 0
+        ? "streaming"
+        : bridgeMedia[0]?.pcmBridgeState || "idle",
+    pcmBridgeMethod,
+    pcmBridgeNote,
+    pcmBridgeError,
+    pcmChunks,
+    pcmFrames,
     directHasPcm:
       attachedMedia > 0 &&
       directWindows >= 3 &&
@@ -83,6 +118,8 @@ export function formatFrameDetails(frames) {
       frame.media.filter((item) => item.playing).length;
     const graph = frame.media.map((item) =>
       `${item.graphState} rms=${Number(item.directRms || 0).toFixed(5)}` +
+      ` pcm=${item.pcmBridgeState || "idle"}` +
+      `${item.pcmBridgeMethod ? `/${item.pcmBridgeMethod}` : ""}` +
       `${item.graphError ? ` ${item.graphError}` : ""}`
     ).join(", ") || "graph=none";
     return `${frame.isTop ? "top" : "frame"} ${frame.origin} · ` +
@@ -97,8 +134,22 @@ export function frameFingerprint(state) {
       ({ id, state: value, sink, error }) => ({ id, value, sink, error })
     ),
     media: state.media.map(
-      ({ id, playing, graphState, graphError }) => ({
-        id, playing, graphState, graphError
+      ({
+        id,
+        playing,
+        graphState,
+        graphError,
+        pcmBridgeState,
+        pcmBridgeMethod,
+        pcmBridgeError
+      }) => ({
+        id,
+        playing,
+        graphState,
+        graphError,
+        pcmBridgeState,
+        pcmBridgeMethod,
+        pcmBridgeError
       })
     ),
     trackedSilent: state.trackedSilent
@@ -110,11 +161,17 @@ export function formatFrameLog(state) {
   const playing = state.media.filter(({ playing: value }) => value).length;
   const attached =
     state.media.filter(({ graphState }) => graphState === "attached").length;
+  const pcm = state.media.find(
+    ({ pcmBridgeState }) => pcmBridgeState &&
+      pcmBridgeState !== "idle"
+  );
   return `FRAME_PROBE ${state.isTop ? "top" : "child"} ` +
     `origin=${state.origin} contexts=${state.contexts.length} ` +
     `sinks=${sinks} media=${state.media.length}/${playing} ` +
     `graphs=${attached} desired=${state.desiredMode} ` +
-    `silent=${state.trackedSilent}`;
+    `silent=${state.trackedSilent} ` +
+    `pcm=${pcm?.pcmBridgeState || "idle"}` +
+    `${pcm?.pcmBridgeMethod ? `/${pcm.pcmBridgeMethod}` : ""}`;
 }
 
 export function maximum(values) {

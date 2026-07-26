@@ -1,17 +1,24 @@
-# Spotify Connect WebView2 + Process Loopback PoC
+# Spotify Connect WebView2 + Direct PCM PoC
 
 这是完全脱离游戏的最小验证程序。它不加载浏览器扩展、不连接游戏、不写入
 Spotify PCM，也不实现二维码中继。
 
-它只验证这条链路：
+当前验证的最终候选链路：
 
 ```text
 Spotify Web Playback SDK
   → 独立 Win32 WebView2 宿主
-  → Windows Process Loopback（WebView2 Browser PID 进程树）
-  → RMS / Peak / 非零比例
+  → HTMLMediaElement
+  → MediaElementAudioSourceNode
+  → AudioWorklet（失败时显式回退 ScriptProcessor）
+  → 约 100 ms 的 48 kHz / 双声道 / PCM16 分块
+  → WebMessage + Base64（仅 PoC）
+  → 原生 C++ 连续性、吞吐量、RMS、Peak、滚动校验
   → 丢弃 PCM
 ```
+
+Windows Process Loopback 仍并行保留，作为接管前后的对照观测，不再是最终
+候选 PCM 来源。
 
 ## 当前明确不做
 
@@ -89,8 +96,9 @@ Data Folder：
 ```
 
 同一目录中的 `standalone-telemetry.log` 保存当前一次运行的 SDK 页面事件、
-宿主静音状态以及每 500 ms 的原始捕获指标。每次启动会清空旧日志，避免不同
-实验混在一起。
+宿主静音状态、每 500 ms 的 Process Loopback 指标，以及约每秒一次的原生
+Direct PCM 接收统计。每次启动会清空旧日志，避免不同实验混在一起。原始
+PCM 分块不会写入日志或磁盘。
 
 ## 验证顺序
 
@@ -106,10 +114,16 @@ Loopback 捕获点之前切断 PCM。原生宿主通过
 只有 frame 覆盖完整时才允许判定通过。
 
 Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直接创建
-`AudioContext`。点击“接管媒体到 Web Audio”会调用
-`createMediaElementSource()`，把媒体接到 `AnalyserNode` 和新
-`AudioContext`。界面同时显示 Direct RMS/Peak 与原生 Process Loopback，
-用于判断受保护媒体是否允许通过 Web Audio 读取。
+`AudioContext`。点击“接管媒体并启动 PCM 桥接”会调用
+`createMediaElementSource()`，把媒体接到新 `AudioContext`，并在
+`AnalyserNode` 前插入 PCM tap。tap 优先运行在 AudioWorklet 音频线程，每
+4800 帧发送一个 PCM16 双声道分块；如果当前文档策略不允许加载 Worklet
+模块，界面会明确显示 `ScriptProcessor fallback`。
+
+分块由 Spotify 子 frame 传给本地顶层页面，再以字符串 WebMessage 交给原生
+C++。原生端验证格式、序号缺口、乱序、吞吐量与样本统计，计算滚动校验值后
+立即丢弃数据。Base64 是本阶段便于排错的传输，不代表最终游戏内实现；进入
+集成阶段后应替换为共享内存环形缓冲区。
 
 自动化诊断可使用 `F8` 直接切换本地 WebAudio 音调、`F9` 切换宿主静音、
 `F10` 滚动到 PCM 指标、`F11` 滚动到日志。F8 不伪造用户手势，因此也能
@@ -123,12 +137,14 @@ Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直
 3. 在手机或桌面 Spotify 的设备列表选择
    `Death Stranding 2 Helper PoC`。
 4. 播放一首完整曲目，确认曲目信息更新且 PCM 持续非零。
-5. 点击“接管媒体到 Web Audio”，等待至少三秒。
-6. 若 Direct RMS、Peak 持续非零，再点击“本实例切到 silent sink”。
-7. 确认桌面无声，同时 Direct PCM 仍持续非零。
+5. 点击“接管媒体并启动 PCM 桥接”，等待至少三秒。
+6. 确认音频线程实现、Web 累计和原生累计都在增长。
+7. 确认原生判定为“持续收到完整 PCM”，且缺口、乱序、无效块均为零。
+8. 再点击“本实例切到 silent sink”。
+9. 确认桌面无声，同时 Direct PCM 与原生累计仍持续增长。
 
 “手动激活并重连”只用于诊断。如果只有点击它之后才能播放，说明当前无感冷启动
-目标尚未通过。“接管媒体到 Web Audio”不可撤销，重复实验需重启 PoC。
+目标尚未通过。“接管媒体并启动 PCM 桥接”不可撤销，重复实验需重启 PoC。
 
 ## Go / No-Go
 
@@ -140,6 +156,8 @@ Go 至少要求：
 - 真实 Spotify 曲目能被 Process Loopback 捕获为连续非零 PCM；
 - 媒体接管后的 Direct PCM 持续非零；
 - silent sink 后桌面无声且 Direct PCM 仍非零；
+- 原生 C++ 连续收到 PCM16 分块，吞吐量约为 48,000 帧/秒；
+- 分块序号缺口、乱序和无效块均为零；
 - 其他程序出声不会进入本 PoC 的指标。
 
 任何一项失败都应停留在 standalone 阶段调查，不需要启动游戏。

@@ -2,6 +2,7 @@
 
 #include "AudioSessionMute.h"
 #include "CaptureMetrics.h"
+#include "PcmStreamReceiver.h"
 #include "ProcessLoopbackCapture.h"
 #include "WebView2.h"
 
@@ -65,4 +66,5 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;
     Microsoft::WRL::ComPtr<ProcessLoopbackCapture> capture_;
     AudioSessionMuteController sessionMuteController_;
+    PcmStreamReceiver pcmStreamReceiver_;
 };

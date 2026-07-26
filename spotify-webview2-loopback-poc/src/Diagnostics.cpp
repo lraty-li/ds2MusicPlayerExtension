@@ -62,7 +62,15 @@ void PocApp::HandleWebMessage(
     }
     const std::wstring message(rawMessage);
     CoTaskMemFree(rawMessage);
-    if (message == L"toggle-mute")
+    std::wstring pcmMetrics;
+    if (pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
+    {
+        if (!pcmMetrics.empty())
+        {
+            PostJson(pcmMetrics);
+        }
+    }
+    else if (message == L"toggle-mute")
     {
         ToggleMute();
     }

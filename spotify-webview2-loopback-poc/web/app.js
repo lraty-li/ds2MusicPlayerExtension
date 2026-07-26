@@ -10,6 +10,7 @@ import {
 } from "./auth.js";
 import { initializeAudioOutputProbe } from "./audio-output-probe.js";
 import { initializeHostProbe } from "./host-probe.js";
+import { initializeNativePcmBridge } from "./native-pcm-bridge.js";
 import { SpotifyConnectPlayer } from "./spotify-player.js";
 
 const byId = (id) => document.getElementById(id);
@@ -30,6 +31,7 @@ async function initialize() {
   byId("redirect-uri").value = redirectUri();
   bindActions();
   initializeHostProbe(log);
+  initializeNativePcmBridge(log);
   initializeAudioOutputProbe(log);
   if (configuredClientId) log("已从 config.json 自动加载 Client ID");
 

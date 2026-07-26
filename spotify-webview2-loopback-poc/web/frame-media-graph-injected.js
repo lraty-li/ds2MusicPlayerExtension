@@ -36,11 +36,14 @@
       const analyser = context.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0;
-      source.connect(analyser);
+      const pcmTap = await probe.createPcmTap(context, record);
+      source.connect(pcmTap);
+      pcmTap.connect(analyser);
       analyser.connect(context.destination);
       record.graph = {
         context,
         source,
+        pcmTap,
         analyser,
         samples: new Float32Array(analyser.fftSize),
         timer: 0

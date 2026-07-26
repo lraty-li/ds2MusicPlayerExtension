@@ -54,7 +54,13 @@
       directRms: record.directRms,
       directPeak: record.directPeak,
       directNonzero: record.directNonzero,
-      directWindows: record.directWindows
+      directWindows: record.directWindows,
+      pcmBridgeState: record.bridge?.state || "idle",
+      pcmBridgeMethod: record.bridge?.method || "",
+      pcmBridgeNote: record.bridge?.note || "",
+      pcmBridgeError: record.bridge?.error || "",
+      pcmChunks: record.bridge?.sentChunks || 0,
+      pcmFrames: record.bridge?.sentFrames || 0
     }));
     const noneContexts =
       contexts.filter((item) => item.sink === "none").length;
@@ -182,7 +188,8 @@
       directRms: 0,
       directPeak: 0,
       directNonzero: 0,
-      directWindows: 0
+      directWindows: 0,
+      bridge: null
     };
     probe.mediaElements.set(element, record);
     for (const name of ["play", "playing", "pause", "ended", "emptied"]) {
