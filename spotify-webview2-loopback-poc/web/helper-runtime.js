@@ -51,9 +51,7 @@ async function initialize() {
     await prepareWidevine();
     post("helper-status:widevine=ready");
   } catch (error) {
-    post(`helper-status:widevine=error:${safeText(error.name)}`);
-    post("helper-player-error");
-    return;
+    post(`helper-status:widevine=unavailable:${safeText(error.name)}`);
   }
   spotifyPlayer = createPlayer();
   try {
@@ -115,13 +113,18 @@ async function prepareWidevine() {
       }]
     }]
   );
-  await Promise.race([
-    request,
-    new Promise((_, reject) => window.setTimeout(
+  let timeoutId = 0;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(
       () => reject(new DOMException("Widevine timeout", "TimeoutError")),
       10_000
-    ))
-  ]);
+    );
+  });
+  try {
+    await Promise.race([request, timeout]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function safeText(value) {
