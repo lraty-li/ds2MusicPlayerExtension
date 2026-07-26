@@ -170,6 +170,10 @@ function isStreamSourceOwned() {
   return sourceOwned;
 }
 
+function isStreamSourcePreempted() {
+  return sourcePreempted;
+}
+
 function notifySourceState(type) {
   try {
     const tabId = typeof getTargetTabId === "function"

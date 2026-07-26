@@ -65,7 +65,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function toggleStream(tabId) {
   const status = await readCaptureHostStatus();
-  if (status.active && status.owned === false) {
+  if (status.active && status.preempted === true) {
     await reclaimActiveStream(status.tabId);
     return;
   }

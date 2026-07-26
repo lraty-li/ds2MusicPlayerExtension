@@ -28,6 +28,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       active: isAudioGraphActive(),
       connected: isStreamSocketOpen(),
       owned: isStreamSourceOwned(),
+      preempted: isStreamSourcePreempted(),
       tabId: targetTabId
     });
     return true;

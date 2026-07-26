@@ -32,6 +32,10 @@ vm.runInContext(
   context
 );
 context.attachStreamSocket(socket, () => {});
+if (!context.isStreamSourceOwned() ||
+    context.isStreamSourcePreempted()) {
+  throw new Error("initial source state is invalid");
+}
 
 const hello = JSON.parse(sent[0]);
 const initialClaim = JSON.parse(sent[1]);
@@ -45,6 +49,10 @@ if (initialClaim.type !== "source_claim" ||
 }
 
 context.markStreamSourcePreempted();
+if (context.isStreamSourceOwned() ||
+    !context.isStreamSourcePreempted()) {
+  throw new Error("preempted source state is invalid");
+}
 context.closeStreamSocket();
 context.attachStreamSocket(socket, () => {});
 const reconnectHello = JSON.parse(sent[2]);

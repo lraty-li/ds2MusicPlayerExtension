@@ -1,9 +1,9 @@
 
 # DS2MusicPlayer
 
-DS2MusicPlayer adds a special music-player track to Death Stranding 2. When the
-track is played in game, audio is streamed from a Chrome/Edge tab through a
-runtime Wwise SourcePlugin.
+DS2MusicPlayer adds a special music-player track to Death Stranding 2. Audio can
+come from either a Chrome/Edge tab or a Spotify Connect device backed by the
+official Spotify Web Playback SDK.
 
 ## Preview
 
@@ -27,7 +27,9 @@ Copy the contents of the extracted `DS2MusicPlayer` folder into the game root:
 The game root is the folder that contains the game executable. `version.dll` is
 the ASI loader, and the ASI plus audio DLL must stay in the `scripts` folder.
 
-Load the browser extension:
+### Optional browser tab playback
+
+To use browser-tab playback, load the optional browser extension:
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable Developer mode.
@@ -65,9 +67,13 @@ On the first run without a saved PKCE authorization, the helper window appears
 for authorization. Later runs stay hidden. In Spotify's device picker, select
 `Death Stranding 2`; Spotify audio then streams into the special in-game track.
 
-Use either the browser extension or Spotify Connect for a playback session, not
-both at once. The game pause/resume state controls the selected Spotify Connect
-device; Spotify-side controls do not change the game player's state.
+The browser extension and Spotify helper may remain connected together. The
+most recent explicit playback action owns the stream: starting Spotify preempts
+and pauses the captured tab; resuming the captured tab reclaims it.
+Reconnection alone does not claim ownership.
+
+The game pause/resume state controls the active source. Spotify-side controls
+do not change the game player's state.
 
 ## Building a release package
 
