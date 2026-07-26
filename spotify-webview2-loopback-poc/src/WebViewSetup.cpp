@@ -1,5 +1,6 @@
 #include "PocApp.h"
 #include "PocConfig.h"
+#include "WebView2EnvironmentOptions.h"
 
 #include <KnownFolders.h>
 #include <ShlObj.h>
@@ -12,7 +13,6 @@ using Microsoft::WRL::ComPtr;
 namespace
 {
 constexpr wchar_t kVirtualHost[] = L"appassets.example";
-constexpr wchar_t kStartUrl[] = L"https://appassets.example/index.html";
 constexpr wchar_t kHostOrigin[] = L"https://appassets.example";
 constexpr wchar_t kSdkOrigin[] = L"https://sdk.scdn.co";
 
@@ -47,6 +47,8 @@ void PocApp::InitializeWebView()
     webFolder_ = (executableFolder / L"web").wstring();
     configuredClientId_ =
         LoadSpotifyClientId(executableFolder / L"config.json");
+    configuredProxyServer_ =
+        LoadProxyServer(executableFolder / L"config.json");
     userDataFolder_ = PersistentUserDataFolder();
     if (!std::filesystem::exists(
         std::filesystem::path(webFolder_) / L"index.html"))
@@ -59,6 +61,17 @@ void PocApp::InitializeWebView()
         ShowFailure(L"Create WebView2 user data folder", E_FAIL);
         return;
     }
+    ResetTelemetry();
+    AppendTelemetry(
+        "SESSION",
+        configuredClientId_.empty()
+            ? L"config_client_id=missing"
+            : L"config_client_id=loaded");
+    AppendTelemetry(
+        "SESSION",
+        configuredProxyServer_.empty()
+            ? L"proxy_server=system"
+            : L"proxy_server=" + configuredProxyServer_);
 
     LPWSTR version = nullptr;
     const HRESULT versionResult =
@@ -74,10 +87,29 @@ void PocApp::InitializeWebView()
         return;
     }
 
+    auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
+    if (!options)
+    {
+        ShowFailure(L"Create WebView2 environment options", E_OUTOFMEMORY);
+        return;
+    }
+    if (!configuredProxyServer_.empty())
+    {
+        const std::wstring arguments =
+            L"--proxy-server=" + configuredProxyServer_;
+        const HRESULT optionResult =
+            options->put_AdditionalBrowserArguments(arguments.c_str());
+        if (FAILED(optionResult))
+        {
+            ShowFailure(L"Configure WebView2 proxy", optionResult);
+            return;
+        }
+    }
+
     const HRESULT result = CreateCoreWebView2EnvironmentWithOptions(
         nullptr,
         userDataFolder_.c_str(),
-        nullptr,
+        options.Get(),
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [this](HRESULT error, ICoreWebView2Environment* environment)
             {
@@ -135,13 +167,7 @@ HRESULT PocApp::OnControllerCreated(
     ConfigureAutoplay();
     ResizeWebView();
     StartCapture();
-    std::wstring startUrl = kStartUrl;
-    if (!configuredClientId_.empty())
-    {
-        startUrl += L"?client_id=";
-        startUrl += configuredClientId_;
-    }
-    return webView_->Navigate(startUrl.c_str());
+    return InstallFrameAudioProbeAndNavigate();
 }
 
 void PocApp::ConfigureWebView()

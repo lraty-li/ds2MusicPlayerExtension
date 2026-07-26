@@ -22,7 +22,7 @@
         <span class="step">1</span>
         <div>
           <h2>先排除 Spotify：本地音调与静音矩阵</h2>
-          <p>捕获在宿主启动后自动开始，目标是 helper 本身及全部 WebView2 子进程。</p>
+          <p>捕获在宿主启动后自动开始，目标是 WebView2 Browser PID 及其进程树。</p>
         </div>
       </div>
 
@@ -30,27 +30,72 @@
         <div><dt>WebView2 Runtime</dt><dd id="runtime-version">等待宿主</dd></div>
         <div><dt>Helper PID</dt><dd id="helper-pid">—</dd></div>
         <div><dt>Browser PID</dt><dd id="browser-pid">—</dd></div>
+        <div><dt>Capture Target PID</dt><dd id="capture-target-pid">—</dd></div>
+        <div><dt>WebView2 代理</dt><dd id="proxy-state">—</dd></div>
         <div><dt>EME</dt><dd id="eme-state">探测中</dd></div>
         <div><dt>Process Loopback</dt><dd id="capture-state">等待宿主</dd></div>
         <div><dt>页面音频状态</dt><dd id="doc-audio">—</dd></div>
-        <div><dt>宿主静音</dt><dd id="muted-state">—</dd></div>
+        <div><dt>WebView2 内部静音</dt><dd id="muted-state">—</dd></div>
+        <div><dt>Windows 会话静音</dt><dd id="session-muted-state">—</dd></div>
         <div><dt>目标格式</dt><dd>48 kHz · 2 ch · PCM16</dd></div>
       </dl>
 
       <div class="actions">
         <button id="test-tone">播放本地 440 Hz 音调</button>
-        <button id="toggle-mute" class="secondary">静音宿主</button>
+        <button id="toggle-session-mute" class="secondary">
+          静音 Windows 音频会话
+        </button>
+        <button id="toggle-mute" class="ghost">WebView2 内部静音（对照）</button>
         <button id="open-devtools" class="ghost">打开开发者工具</button>
       </div>
       <p class="hint">
-        先确认可听状态下 RMS 非零，再点击“静音宿主”。理想结果是桌面无声，但 RMS
-        继续非零；否则最终仍需独立输出端点或虚拟音频设备。
+        WebView2 内部静音和 Windows 会话静音均已证实会切断 PCM，这两个按钮
+        只保留作对照，不再作为候选实现。
       </p>
     </section>
 
     <section class="card">
       <div class="section-heading">
         <span class="step">2</span>
+        <div>
+          <h2>全 frame 实例级音频出口探针</h2>
+          <p>原生宿主在每个文档解析前注入，覆盖顶层页面和 Spotify 子 frame。</p>
+        </div>
+      </div>
+
+      <dl class="facts four">
+        <div><dt>setSinkId 支持</dt><dd id="audio-sink-support">探测中</dd></div>
+        <div><dt>AudioContext</dt><dd id="audio-context-count">0</dd></div>
+        <div><dt>媒体元素</dt><dd id="media-element-count">0</dd></div>
+        <div><dt>Frame 覆盖</dt><dd id="child-frame-count">0/1 已回报</dd></div>
+        <div><dt>请求的出口</dt><dd id="audio-sink-mode">默认</dd></div>
+        <div><dt>Web Audio 接管</dt><dd id="media-graph-state">0 已接管 · 0 失败</dd></div>
+        <div><dt>Direct RMS</dt><dd id="direct-rms">0.0000000</dd></div>
+        <div><dt>Direct Peak</dt><dd id="direct-peak">0.0000000</dd></div>
+        <div><dt>Direct 非零比例</dt><dd id="direct-nonzero">0.000%</dd></div>
+        <div class="wide">
+          <dt>各 frame 音频状态</dt>
+          <dd id="audio-context-detail">等待原生预注入脚本回报</dd>
+        </div>
+      </dl>
+      <div class="actions">
+        <button id="attach-media-graph">接管媒体到 Web Audio</button>
+        <button id="set-silent-sink">本实例切到 silent sink</button>
+        <button id="restore-page-sink" class="secondary">恢复本实例默认输出</button>
+        <button id="refresh-audio-probe" class="ghost">刷新对象探针</button>
+      </div>
+      <p id="audio-probe-result" class="status neutral">
+        当前页面音频对象使用默认输出
+      </p>
+      <p class="hint">
+        先播放 Spotify 并确认 Process Loopback 非零，再接管媒体；接管后先确认
+        Direct RMS 非零，最后才切到 silent sink。接管不可撤销，重启 PoC 才能复原。
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <span class="step">3</span>
         <div>
           <h2>Spotify PKCE 授权</h2>
           <p>本轮用嵌入页完成一次本机授权；二维码中继明确后置。</p>
@@ -79,7 +124,7 @@
 
     <section class="card">
       <div class="section-heading">
-        <span class="step">3</span>
+        <span class="step">4</span>
         <div>
           <h2>从 Spotify Connect 选择这个设备</h2>
           <p>授权后会自动注册，不需要点击页面；手动激活按钮只用于诊断自动播放失败。</p>
@@ -101,7 +146,7 @@
 
     <section class="card">
       <div class="section-heading">
-        <span class="step">4</span>
+        <span class="step">5</span>
         <div>
           <h2>PCM 判定</h2>
           <p>只计算数值并立即丢弃样本，不写 WAV，不通过网络发送 PCM。</p>

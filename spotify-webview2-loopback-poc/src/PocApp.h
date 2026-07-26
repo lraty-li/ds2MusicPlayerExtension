@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioSessionMute.h"
 #include "CaptureMetrics.h"
 #include "ProcessLoopbackCapture.h"
 #include "WebView2.h"
@@ -27,16 +28,21 @@ private:
         HRESULT result, ICoreWebView2Environment* environment);
     HRESULT OnControllerCreated(
         HRESULT result, ICoreWebView2Controller* controller);
+    HRESULT InstallFrameAudioProbeAndNavigate();
     void ConfigureWebView();
     void ConfigureAutoplay();
     void StartCapture();
     void ResizeWebView();
     void ToggleMute();
+    void ToggleSessionMute();
     void ExecuteDiagnosticScript(const wchar_t* script);
     void HandleWebMessage(ICoreWebView2WebMessageReceivedEventArgs* args);
     void PostHostState();
     void PostMetrics(const CaptureMetrics& metrics);
     void PostJson(const std::wstring& json);
+    void ResetTelemetry();
+    void AppendTelemetry(
+        const char* source, const std::wstring& payload);
     void ShowFailure(const wchar_t* stage, HRESULT result);
     void Shutdown();
 
@@ -44,8 +50,12 @@ private:
     bool shuttingDown_ = false;
     bool webContentReady_ = false;
     HRESULT captureResult_ = E_PENDING;
+    HRESULT sessionMuteResult_ = S_OK;
     UINT32 browserProcessId_ = 0;
+    UINT32 captureTargetProcessId_ = 0;
+    UINT32 sessionMuteCount_ = 0;
     std::wstring configuredClientId_;
+    std::wstring configuredProxyServer_;
     std::wstring runtimeVersion_;
     std::wstring webFolder_;
     std::wstring userDataFolder_;
@@ -54,4 +64,5 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;
     Microsoft::WRL::ComPtr<ProcessLoopbackCapture> capture_;
+    AudioSessionMuteController sessionMuteController_;
 };

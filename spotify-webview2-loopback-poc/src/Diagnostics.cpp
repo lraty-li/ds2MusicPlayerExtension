@@ -35,6 +35,23 @@ void PocApp::ToggleMute()
     }
 }
 
+void PocApp::ToggleSessionMute()
+{
+    if (sessionMuteController_.IsMuted())
+    {
+        sessionMuteResult_ = sessionMuteController_.Restore();
+        sessionMuteCount_ = 0;
+    }
+    else
+    {
+        const AudioSessionMuteResult outcome =
+            sessionMuteController_.Mute(browserProcessId_);
+        sessionMuteResult_ = outcome.result;
+        sessionMuteCount_ = outcome.sessionCount;
+    }
+    PostHostState();
+}
+
 void PocApp::HandleWebMessage(
     ICoreWebView2WebMessageReceivedEventArgs* args)
 {
@@ -49,6 +66,10 @@ void PocApp::HandleWebMessage(
     {
         ToggleMute();
     }
+    else if (message == L"toggle-session-mute")
+    {
+        ToggleSessionMute();
+    }
     else if (message == L"request-host-state")
     {
         PostHostState();
@@ -56,5 +77,9 @@ void PocApp::HandleWebMessage(
     else if (message == L"open-devtools" && webView_)
     {
         webView_->OpenDevToolsWindow();
+    }
+    else if (message.starts_with(L"web-log:"))
+    {
+        AppendTelemetry("WEB", message.substr(8));
     }
 }

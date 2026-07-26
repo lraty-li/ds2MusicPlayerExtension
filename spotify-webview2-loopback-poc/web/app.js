@@ -8,6 +8,7 @@ import {
   redirectUri,
   saveClientId
 } from "./auth.js";
+import { initializeAudioOutputProbe } from "./audio-output-probe.js";
 import { initializeHostProbe } from "./host-probe.js";
 import { SpotifyConnectPlayer } from "./spotify-player.js";
 
@@ -29,6 +30,7 @@ async function initialize() {
   byId("redirect-uri").value = redirectUri();
   bindActions();
   initializeHostProbe(log);
+  initializeAudioOutputProbe(log);
   if (configuredClientId) log("已从 config.json 自动加载 Client ID");
 
   try {
@@ -141,6 +143,7 @@ function setAuthStatus(text, kind) {
 }
 
 function log(message) {
+  window.chrome?.webview?.postMessage(`web-log:${message}`);
   const output = byId("log");
   const lines = `${output.textContent}[${new Date().toLocaleTimeString()}] ${message}\n`
     .split("\n")

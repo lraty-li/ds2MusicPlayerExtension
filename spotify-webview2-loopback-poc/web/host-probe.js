@@ -5,9 +5,24 @@ let oscillator = null;
 let gainNode = null;
 let consecutiveNonzero = 0;
 let consecutiveMutedSilence = 0;
+let capturedBeforeMute = false;
+let pageSinkState = { desiredMode: "default", trackedSilent: false };
 
 export function initializeHostProbe(log) {
+  window.addEventListener("poc-audio-output-state", ({ detail }) => {
+    const suppressionChanged =
+      pageSinkState.trackedSilent !== !!detail?.trackedSilent ||
+      pageSinkState.desiredMode !== detail?.desiredMode;
+    pageSinkState = detail || pageSinkState;
+    if (suppressionChanged) {
+      consecutiveNonzero = 0;
+      consecutiveMutedSilence = 0;
+    }
+  });
   byId("toggle-mute").addEventListener("click", () => post("toggle-mute"));
+  byId("toggle-session-mute").addEventListener(
+    "click", () => post("toggle-session-mute")
+  );
   byId("open-devtools").addEventListener("click", () => post("open-devtools"));
   byId("test-tone").addEventListener("click", () => {
     toggleTone(log).catch((error) => log(`本地音调失败：${error.message}`));
@@ -33,18 +48,37 @@ function post(command) {
 
 function renderHostState(state) {
   hostState = state;
+  const outputSuppressed = isOutputSuppressed();
+  if (!outputSuppressed && !state.documentPlayingAudio) {
+    capturedBeforeMute = false;
+  }
   setText("runtime-version", state.runtime || "—");
   setText("helper-pid", state.helperPid || "—");
   setText("browser-pid", state.browserPid || "—");
-  setText("muted-state", state.muted ? "是（桌面应无声）" : "否（桌面可听）");
+  setText("capture-target-pid", state.captureTargetPid || "—");
+  setText("proxy-state", state.proxyServer || "系统代理");
+  setText("muted-state", state.muted ? "是（会切断 PCM）" : "否");
+  setText(
+    "session-muted-state",
+    state.sessionMuted
+      ? `是 · ${state.sessionMuteCount || 0} 个会话`
+      : Number(state.sessionMuteResult || 0) === 0
+        ? "否"
+        : `失败 · ${formatHresult(state.sessionMuteResult)}`
+  );
   setText("doc-audio", state.documentPlayingAudio ? "正在播放" : "未播放");
   setText(
     "capture-state",
     state.captureActive
-      ? "运行中 · helper 进程树"
+      ? "运行中 · WebView2 浏览器进程树"
       : `未运行 · HRESULT ${formatHresult(state.captureResult)}`
   );
-  byId("toggle-mute").textContent = state.muted ? "取消宿主静音" : "静音宿主";
+  byId("toggle-mute").textContent =
+    state.muted ? "取消 WebView2 内部静音" : "WebView2 内部静音（对照）";
+  byId("toggle-session-mute").textContent =
+    state.sessionMuted ? "恢复 Windows 音频会话" : "静音 Windows 音频会话";
+  byId("toggle-mute").disabled = !!state.sessionMuted;
+  byId("toggle-session-mute").disabled = !!state.muted;
 }
 
 function renderMetrics(metrics) {
@@ -52,9 +86,13 @@ function renderMetrics(metrics) {
   const peak = Number(metrics.peak || 0);
   const ratio = Number(metrics.nonzeroRatio || 0);
   const hasPcm = peak > 0.0001 && ratio > 0.001;
+  const outputSuppressed = isOutputSuppressed();
+  if (!outputSuppressed && hostState.documentPlayingAudio && hasPcm) {
+    capturedBeforeMute = true;
+  }
   consecutiveNonzero = hasPcm ? consecutiveNonzero + 1 : 0;
   consecutiveMutedSilence =
-    hostState.muted && hostState.documentPlayingAudio && !hasPcm
+    outputSuppressed && hostState.documentPlayingAudio && !hasPcm
       ? consecutiveMutedSilence + 1
       : 0;
 
@@ -70,19 +108,41 @@ function renderMetrics(metrics) {
   if (Number(metrics.error || 0) !== 0) {
     verdict("进程回环捕获失败", "fail",
       `HRESULT ${formatHresult(metrics.error)}`);
-  } else if (hostState.muted && consecutiveNonzero >= 3) {
-    verdict("关键通过：宿主静音后仍有连续 PCM", "pass",
-      "这证明桌面不重复出声与进程回环可以同时成立。");
-  } else if (consecutiveMutedSilence >= 3) {
+  } else if (pageSinkState.trackedSilent && pageSinkState.directHasPcm) {
+    verdict("关键通过：silent sink 后直接 PCM 仍连续非零", "pass",
+      `Web Audio RMS ${Number(pageSinkState.directRms || 0).toFixed(7)}；` +
+      "Process Loopback 是否归零不再决定可行性。");
+  } else if (outputSuppressed && consecutiveNonzero >= 3) {
+    const method = suppressionMethod();
+    verdict("关键通过：输出静音后仍有连续 PCM", "pass",
+      `${method}下桌面无声，但进程回环仍取得 PCM。`);
+  } else if (consecutiveMutedSilence >= 3 && capturedBeforeMute) {
     verdict("关键失败：宿主静音后 PCM 同时归零", "fail",
-      "若真实 Spotify 也如此，就需要独立音频端点或虚拟音频设备。");
+      "同一播放流在静音前存在 PCM，静音后消失。");
+  } else if (consecutiveMutedSilence >= 3) {
+    verdict("静音前未捕获到有效 PCM", "fail",
+      "当前不能归因于静音；请先修复捕获目标或音频进程覆盖范围。");
   } else if (consecutiveNonzero >= 3) {
     verdict("已持续捕获到 48 kHz 双声道 PCM", "running",
-      "下一步点击“静音宿主”，观察 PCM 是否继续非零。");
+      "现在可应用 AudioContext silent sink，观察 PCM 是否继续非零。");
   } else {
     verdict("捕获运行中，等待页面产生声音", "idle",
       "可先使用本地 440 Hz 音调排除 Spotify/DRM 变量。");
   }
+}
+
+function isOutputSuppressed() {
+  return !!(
+    hostState.muted ||
+    hostState.sessionMuted ||
+    pageSinkState.trackedSilent
+  );
+}
+
+function suppressionMethod() {
+  if (pageSinkState.trackedSilent) return "AudioContext silent sink";
+  if (hostState.sessionMuted) return "Windows 音频会话静音";
+  return "WebView2 内部静音";
 }
 
 async function toggleTone(log) {

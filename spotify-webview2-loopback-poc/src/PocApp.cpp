@@ -180,7 +180,9 @@ void PocApp::StartCapture()
         PostHostState();
         return;
     }
-    captureResult_ = capture_->Start(GetCurrentProcessId(), window_);
+    captureTargetProcessId_ =
+        browserProcessId_ != 0 ? browserProcessId_ : GetCurrentProcessId();
+    captureResult_ = capture_->Start(captureTargetProcessId_, window_);
     PostHostState();
 }
 
@@ -199,8 +201,19 @@ void PocApp::PostHostState()
     json << L"{\"type\":\"host-state\""
          << L",\"helperPid\":" << GetCurrentProcessId()
          << L",\"browserPid\":" << browserProcessId_
+         << L",\"captureTargetPid\":" << captureTargetProcessId_
          << L",\"runtime\":\"" << runtimeVersion_ << L"\""
+         << L",\"proxyServer\":\""
+         << (configuredProxyServer_.empty()
+                ? L"系统代理"
+                : configuredProxyServer_)
+         << L"\""
          << L",\"muted\":" << (muted ? L"true" : L"false")
+         << L",\"sessionMuted\":"
+         << (sessionMuteController_.IsMuted() ? L"true" : L"false")
+         << L",\"sessionMuteCount\":" << sessionMuteCount_
+         << L",\"sessionMuteResult\":"
+         << static_cast<uint32_t>(sessionMuteResult_)
          << L",\"documentPlayingAudio\":"
          << (playing ? L"true" : L"false")
          << L",\"captureActive\":"
@@ -234,6 +247,7 @@ void PocApp::PostMetrics(const CaptureMetrics& metrics)
 
 void PocApp::PostJson(const std::wstring& json)
 {
+    AppendTelemetry("HOST", json);
     if (webView_ && webContentReady_)
     {
         webView_->PostWebMessageAsJson(json.c_str());
@@ -257,6 +271,7 @@ void PocApp::Shutdown()
     }
     shuttingDown_ = true;
     webContentReady_ = false;
+    sessionMuteController_.Restore();
     if (capture_)
     {
         capture_->Stop();

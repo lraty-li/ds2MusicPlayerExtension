@@ -59,14 +59,18 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
+    <ClCompile Include="src\AudioSessionMute.cpp" />
     <ClCompile Include="src\Diagnostics.cpp" />
+    <ClCompile Include="src\FrameAudioProbe.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\PocApp.cpp" />
     <ClCompile Include="src\PocConfig.cpp" />
     <ClCompile Include="src\ProcessLoopbackCapture.cpp" />
+    <ClCompile Include="src\Telemetry.cpp" />
     <ClCompile Include="src\WebViewSetup.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\AudioSessionMute.h" />
     <ClInclude Include="src\CaptureMetrics.h" />
     <ClInclude Include="src\PocApp.h" />
     <ClInclude Include="src\PocConfig.h" />
