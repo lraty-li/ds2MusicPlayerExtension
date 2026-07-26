@@ -2,212 +2,162 @@
 
 #include "AudioStreamServer.h"
 
-#include "AudioPacketProtocol.h"
 #include "AudioRingBuffer.h"
-#include "BrowserJacket.h"
+#include "AudioSourceArbiter.h"
+#include "AudioStreamClient.h"
 #include "BrowserMetadata.h"
 #include "PluginLog.h"
-#include "WebSocketProtocol.h"
 
 #include <ws2tcpip.h>
 
-#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
-#include <mutex>
 #include <vector>
 
 namespace
 {
 constexpr uint16_t kPort = 47832;
 constexpr uint32_t kMaxFrameBytes = 4 * 1024 * 1024;
+constexpr size_t kMaxClients = 8;
 
-std::mutex g_socketMutex;
 HANDLE g_thread = nullptr;
 HANDLE g_stopEvent = nullptr;
-SOCKET g_listenSocket = INVALID_SOCKET;
-SOCKET g_clientSocket = INVALID_SOCKET;
 
-void Log(const char* text)
+uint16_t ResolvePort()
 {
-    PluginLog::Write(text);
+    char text[16] = {};
+    const DWORD length = GetEnvironmentVariableA(
+        "DS2_AUDIO_STREAM_PORT", text, sizeof(text));
+    if (!length || length >= sizeof(text)) return kPort;
+    char* end = nullptr;
+    const unsigned long value = strtoul(text, &end, 10);
+    if (end == text || *end || !value || value > 65535) return kPort;
+    return static_cast<uint16_t>(value);
 }
 
 bool ShouldStop()
 {
-    return g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+    return g_stopEvent &&
+        WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
 }
 
-void CloseSocket(SOCKET& socket)
-{
-    if (socket != INVALID_SOCKET)
-    {
-        shutdown(socket, SD_BOTH);
-        closesocket(socket);
-        socket = INVALID_SOCKET;
-    }
-}
-
-void ReplaceSocket(SOCKET& target, SOCKET socket)
-{
-    std::lock_guard<std::mutex> lock(g_socketMutex);
-    target = socket;
-}
-
-void CloseOwnedSocket(SOCKET& target, SOCKET& socket)
-{
-    bool owned = false;
-    {
-        std::lock_guard<std::mutex> lock(g_socketMutex);
-        owned = target == socket;
-        if (owned) target = INVALID_SOCKET;
-    }
-    if (owned) CloseSocket(socket);
-    else socket = INVALID_SOCKET;
-}
-
-void PushPacket(const AudioPacketProtocol::Packet& packet)
-{
-    if (packet.format == AudioPacketProtocol::SampleFormat::Float32)
-    {
-        AudioRingBuffer::PushFloat32(packet.payload, packet.frames, packet.channels);
-        return;
-    }
-    AudioRingBuffer::PushPcm16(packet.payload, packet.frames, packet.channels);
-}
-
-void LogStats(uint64_t packets, uint64_t frames, uint64_t drops,
-    uint32_t maxPacketGapMs)
-{
-    const AudioRingBuffer::Stats stats = AudioRingBuffer::SnapshotStats(true);
-    char line[512] = {};
-    sprintf_s(line,
-        "audio stats packets=%llu frames=%llu drops=%llu packetGapMaxMs=%u "
-        "buffered=%u min=%u max=%u underruns=%llu lockMisses=%llu "
-        "shortReads=%llu silenceFrames=%llu read=%llu/%llu pushed=%llu "
-        "trimmed=%llu overwritten=%llu",
-        static_cast<unsigned long long>(packets),
-        static_cast<unsigned long long>(frames),
-        static_cast<unsigned long long>(drops),
-        maxPacketGapMs,
-        stats.availableFrames,
-        stats.minAvailableFrames,
-        stats.maxAvailableFrames,
-        static_cast<unsigned long long>(stats.underruns),
-        static_cast<unsigned long long>(stats.lockMisses),
-        static_cast<unsigned long long>(stats.shortReads),
-        static_cast<unsigned long long>(stats.silenceFrames),
-        static_cast<unsigned long long>(stats.readFramesCopied),
-        static_cast<unsigned long long>(stats.readFramesRequested),
-        static_cast<unsigned long long>(stats.pushFrames),
-        static_cast<unsigned long long>(stats.trimmedFrames),
-        static_cast<unsigned long long>(stats.overwrittenFrames));
-    Log(line);
-}
-
-void HandleClient(SOCKET socket)
-{
-    if (!WebSocketProtocol::Accept(socket)) return;
-    Log("audio websocket connected");
-    std::vector<uint8_t> payload(kMaxFrameBytes + 1);
-    uint64_t packets = 0;
-    uint64_t frames = 0;
-    uint64_t drops = 0;
-    uint64_t lastSeq = UINT64_MAX;
-    uint64_t lastLogTick = GetTickCount64();
-    uint64_t lastPacketTick = 0;
-    uint32_t maxPacketGapMs = 0;
-    AudioRingBuffer::SnapshotStats(true);
-    while (!ShouldStop())
-    {
-        uint32_t payloadBytes = 0;
-        uint8_t opcode = 0;
-        if (!WebSocketProtocol::ReadFrame(socket, payload.data(),
-            kMaxFrameBytes, payloadBytes, opcode)) break;
-        if (payloadBytes == 0) continue;
-        if (opcode == 0x1)
-        {
-            payload[payloadBytes] = 0;
-            const char* text = reinterpret_cast<const char*>(payload.data());
-            BrowserJacket::UpdateStatusFromJson(text);
-            BrowserJacket::UpdateFromJson(text);
-            BrowserMetadata::UpdateFromJson(text);
-            continue;
-        }
-        if (opcode != 0x2) continue;
-
-        AudioPacketProtocol::Packet packet = {};
-        if (!AudioPacketProtocol::TryParse(payload.data(), payloadBytes, packet)) continue;
-
-        const uint64_t now = GetTickCount64();
-        if (lastPacketTick != 0)
-        {
-            const uint64_t gap = now - lastPacketTick;
-            if (gap > maxPacketGapMs)
-            {
-                maxPacketGapMs = static_cast<uint32_t>(gap);
-            }
-        }
-        lastPacketTick = now;
-
-        if (lastSeq != UINT64_MAX && packet.sequence != lastSeq + 1)
-        {
-            drops += packet.sequence > lastSeq ? packet.sequence - lastSeq - 1 : 1;
-        }
-        lastSeq = packet.sequence;
-        ++packets;
-        frames += packet.frames;
-        PushPacket(packet);
-
-        if (PluginLog::Enabled() && now - lastLogTick >= 5000)
-        {
-            LogStats(packets, frames, drops, maxPacketGapMs);
-            maxPacketGapMs = 0;
-            lastLogTick = now;
-        }
-    }
-    Log("audio websocket disconnected");
-}
-
-bool BindListen(SOCKET listener)
+bool BindListen(SOCKET listener, uint16_t port)
 {
     BOOL reuse = TRUE;
     setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
         reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+    return bind(listener, reinterpret_cast<sockaddr*>(&address),
+        sizeof(address)) == 0 && listen(listener, SOMAXCONN) == 0;
+}
 
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(kPort);
-    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-    return bind(listener, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0 &&
-        listen(listener, 1) == 0;
+void AcceptClient(SOCKET listener, std::vector<AudioStreamClient>& clients)
+{
+    SOCKET socket = accept(listener, nullptr, nullptr);
+    if (socket == INVALID_SOCKET) return;
+    if (clients.size() >= kMaxClients)
+    {
+        closesocket(socket);
+        PluginLog::Write("audio websocket rejected: client limit");
+        return;
+    }
+    AudioStreamClient client;
+    if (AudioStreamClientIo::Accept(client, socket, kMaxFrameBytes))
+    {
+        clients.push_back(std::move(client));
+    }
+}
+
+void ProcessClients(fd_set& readable,
+    std::vector<AudioStreamClient>& clients)
+{
+    for (size_t index = clients.size(); index-- > 0;)
+    {
+        AudioStreamClient& client = clients[index];
+        if (!FD_ISSET(client.socket, &readable)) continue;
+        if (AudioStreamClientIo::ReadAndProcess(client, kMaxFrameBytes))
+        {
+            continue;
+        }
+        AudioStreamClientIo::Close(client);
+        clients.erase(clients.begin() + index);
+    }
+}
+
+void CloseClients(std::vector<AudioStreamClient>& clients)
+{
+    for (AudioStreamClient& client : clients)
+    {
+        AudioStreamClientIo::Close(client);
+    }
+    clients.clear();
+}
+
+void Serve(SOCKET listener)
+{
+    std::vector<AudioStreamClient> clients;
+    while (!ShouldStop())
+    {
+        fd_set readable;
+        FD_ZERO(&readable);
+        FD_SET(listener, &readable);
+        for (const AudioStreamClient& client : clients)
+        {
+            FD_SET(client.socket, &readable);
+        }
+        timeval timeout = {};
+        timeout.tv_usec = 200000;
+        const int selected = select(0, &readable, nullptr, nullptr, &timeout);
+        if (selected == SOCKET_ERROR)
+        {
+            if (ShouldStop()) break;
+            PluginLog::Write("audio websocket select failed");
+            break;
+        }
+        if (!selected) continue;
+        if (FD_ISSET(listener, &readable))
+        {
+            AcceptClient(listener, clients);
+        }
+        ProcessClients(readable, clients);
+    }
+    CloseClients(clients);
 }
 
 DWORD WINAPI ServerThread(LPVOID)
 {
-    WSADATA wsa = {};
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 0;
-    Log("audio websocket server thread started");
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    WSADATA winsock = {};
+    if (WSAStartup(MAKEWORD(2, 2), &winsock) != 0) return 0;
+    AudioSourceArbiter::Reset();
+    PluginLog::Write("audio websocket server thread started");
+    const uint16_t port = ResolvePort();
+
     while (!ShouldStop())
     {
         SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (listener == INVALID_SOCKET) break;
-        ReplaceSocket(g_listenSocket, listener);
-        if (!BindListen(listener))
+        AudioSourceArbiter::SetListener(listener);
+        if (!BindListen(listener, port))
         {
-            Log("audio websocket listen failed");
-            CloseOwnedSocket(g_listenSocket, listener);
+            PluginLog::Write("audio websocket listen failed");
+            AudioSourceArbiter::CloseListener(listener);
             Sleep(1000);
             continue;
         }
-        Log("audio websocket listening on 127.0.0.1:47832");
-        SOCKET client = accept(listener, nullptr, nullptr);
-        CloseOwnedSocket(g_listenSocket, listener);
-        if (client == INVALID_SOCKET) continue;
-        ReplaceSocket(g_clientSocket, client);
-        HandleClient(client);
-        CloseOwnedSocket(g_clientSocket, client);
+        char line[128] = {};
+        sprintf_s(line,
+            "audio websocket listening on 127.0.0.1:%u multi-source",
+            port);
+        PluginLog::Write(line);
+        Serve(listener);
+        AudioSourceArbiter::CloseListener(listener);
+        if (!ShouldStop()) Sleep(250);
     }
-    Log("audio websocket server thread stopped");
+    PluginLog::Write("audio websocket server thread stopped");
     WSACleanup();
     return 0;
 }
@@ -225,11 +175,7 @@ void Start()
 void Stop()
 {
     if (g_stopEvent) SetEvent(g_stopEvent);
-    {
-        std::lock_guard<std::mutex> lock(g_socketMutex);
-        CloseSocket(g_clientSocket);
-        CloseSocket(g_listenSocket);
-    }
+    AudioSourceArbiter::Shutdown();
     if (g_thread)
     {
         WaitForSingleObject(g_thread, 2000);
@@ -250,16 +196,7 @@ uint32_t Read(float* const* outputs, uint32_t frames, uint32_t channels)
 
 bool SendControl(const char* json)
 {
-    SOCKET client = INVALID_SOCKET;
-    {
-        std::lock_guard<std::mutex> lock(g_socketMutex);
-        client = g_clientSocket;
-    }
-    if (client == INVALID_SOCKET || !json)
-    {
-        return false;
-    }
-    return WebSocketProtocol::SendTextFrame(client, json);
+    return AudioSourceArbiter::SendControl(json);
 }
 
 int ReadMetadataTitle(char* output, uint32_t outputBytes)
@@ -267,8 +204,10 @@ int ReadMetadataTitle(char* output, uint32_t outputBytes)
     return BrowserMetadata::ReadTitle(output, outputBytes);
 }
 
-int ReadMetadata(char* title, uint32_t titleBytes, char* artist, uint32_t artistBytes)
+int ReadMetadata(char* title, uint32_t titleBytes,
+    char* artist, uint32_t artistBytes)
 {
-    return BrowserMetadata::Read(title, titleBytes, artist, artistBytes);
+    return BrowserMetadata::Read(
+        title, titleBytes, artist, artistBytes);
 }
 }

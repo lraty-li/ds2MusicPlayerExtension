@@ -5,5 +5,5 @@
 namespace Hooks
 {
 DWORD WINAPI InitThread(LPVOID);
-void Shutdown();
+void Shutdown(bool processTerminating);
 } // namespace Hooks

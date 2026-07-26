@@ -7,7 +7,7 @@
 
 namespace
 {
-constexpr bool kEnableRuntimeLog = false;
+constexpr bool kEnableRuntimeLog = true;
 
 std::mutex g_logMutex;
 
@@ -26,6 +26,35 @@ std::wstring GetLogPath()
     result += L"ds2_dll_music_resource.log";
     return result;
 }
+
+HANDLE OpenLogFile(DWORD access, DWORD creation)
+{
+    HANDLE file = CreateFileW(
+        GetLogPath().c_str(),
+        access,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        creation,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (file != INVALID_HANDLE_VALUE) return file;
+
+    wchar_t currentDirectory[MAX_PATH] = {};
+    if (!GetCurrentDirectoryW(MAX_PATH, currentDirectory))
+    {
+        return INVALID_HANDLE_VALUE;
+    }
+    std::wstring fallback = currentDirectory;
+    fallback += L"\\ds2_dll_music_resource.log";
+    return CreateFileW(
+        fallback.c_str(),
+        access,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        creation,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+}
 }
 
 namespace PluginLog
@@ -40,14 +69,9 @@ void Write(const char* text)
     if (!kEnableRuntimeLog) return;
 
     std::lock_guard<std::mutex> lock(g_logMutex);
-    HANDLE file = CreateFileW(
-        GetLogPath().c_str(),
+    HANDLE file = OpenLogFile(
         FILE_APPEND_DATA,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr,
-        OPEN_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        nullptr);
+        OPEN_ALWAYS);
     if (file == INVALID_HANDLE_VALUE)
     {
         return;
@@ -71,14 +95,9 @@ void Reset()
     if (!kEnableRuntimeLog) return;
 
     std::lock_guard<std::mutex> lock(g_logMutex);
-    HANDLE file = CreateFileW(
-        GetLogPath().c_str(),
+    HANDLE file = OpenLogFile(
         GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        nullptr);
+        CREATE_ALWAYS);
     if (file != INVALID_HANDLE_VALUE)
     {
         CloseHandle(file);

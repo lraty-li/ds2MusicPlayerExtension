@@ -21,6 +21,12 @@
     <ClInclude Include="AudioRingBuffer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="AudioSourceArbiter.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioStreamClient.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="AudioStreamServer.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -54,6 +60,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="AudioRingBuffer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioSourceArbiter.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioStreamClient.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="AudioStreamServer.cpp">

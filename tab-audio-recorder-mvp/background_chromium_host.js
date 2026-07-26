@@ -7,14 +7,28 @@ async function readCaptureHostStatus() {
     documentUrls: [documentUrl]
   });
   if (contexts.length === 0) {
-    return { exists: false, active: false, connected: false, tabId: null };
+    return {
+      exists: false,
+      active: false,
+      connected: false,
+      owned: false,
+      preempted: false,
+      tabId: null
+    };
   }
 
   try {
     const status = await chrome.runtime.sendMessage({ type: "get-status" });
     return Object.assign({ exists: true }, status);
   } catch (_) {
-    return { exists: true, active: false, connected: false, tabId: null };
+    return {
+      exists: true,
+      active: false,
+      connected: false,
+      owned: false,
+      preempted: false,
+      tabId: null
+    };
   }
 }
 
@@ -37,6 +51,11 @@ async function stopCaptureHost() {
     await chrome.runtime.sendMessage({ type: "stop-stream" });
   } catch (_) {
   }
+}
+
+async function claimCaptureHost() {
+  const response = await chrome.runtime.sendMessage({ type: "claim-source" });
+  return !!(response && response.ok);
 }
 
 async function ensureOffscreenDocument() {

@@ -22,6 +22,12 @@ $extensionDir = Join-Path $stageRoot "browser-extension"
 $cacheDir = Join-Path $buildRoot "cache"
 $binDir = Join-Path $buildRoot "bin"
 $bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
+$spotifyHelperDir = Join-Path $repoRoot "spotify-webview2-loopback-poc"
+$spotifyHelperOutput =
+    Join-Path $repoRoot "build\spotify-webview2-loopback-poc\Release"
+$spotifyHelperExe =
+    Join-Path $spotifyHelperOutput "DS2SpotifyWebView2Helper.exe"
+$spotifyHelperPackageDir = Join-Path $scriptsDir "DS2SpotifyHelper"
 $asiLoaderUrl =
     "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/download/x64-latest/version-x64.zip"
 
@@ -133,6 +139,33 @@ function Copy-BrowserExtension {
     }
 }
 
+function Invoke-SpotifyHelperBuild {
+    $buildScript = Join-Path $spotifyHelperDir "build.ps1"
+    if (-not (Test-Path $buildScript)) {
+        throw "Spotify WebView2 helper build script is missing: $buildScript"
+    }
+    & $buildScript -SkipProbe
+    if ($LASTEXITCODE -ne 0) {
+        throw "Spotify WebView2 helper build failed"
+    }
+}
+
+function Copy-SpotifyHelper {
+    Copy-RequiredFile $spotifyHelperExe `
+        (Join-Path $spotifyHelperPackageDir "DS2SpotifyWebView2Helper.exe")
+    Copy-RequiredFile (Join-Path $spotifyHelperDir "config.release.json") `
+        (Join-Path $spotifyHelperPackageDir "config.json")
+    $sourceWeb = Join-Path $spotifyHelperOutput "web"
+    $destinationWeb = Join-Path $spotifyHelperPackageDir "web"
+    if (-not (Test-Path (Join-Path $sourceWeb "index.html"))) {
+        throw "Spotify helper web assets are missing: $sourceWeb"
+    }
+    New-Item -ItemType Directory -Path $destinationWeb -Force | Out-Null
+    Get-ChildItem -LiteralPath $sourceWeb -File | ForEach-Object {
+        Copy-RequiredFile $_.FullName (Join-Path $destinationWeb $_.Name)
+    }
+}
+
 function Get-AsiLoaderZip {
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
     $zip = Join-Path $cacheDir "version-x64.zip"
@@ -182,12 +215,14 @@ if (-not $SkipBuild) {
         (Join-Path $binDir "asi")
     Invoke-Build (Join-Path $repoRoot "ds2_runtime_source_plugin\ds2_dll_music_resource.sln") `
         (Join-Path $binDir "audio")
+    Invoke-SpotifyHelperBuild
 }
 
 Copy-RequiredFile (Join-Path $binDir "asi\Ds2MusicPlayerExtend.asi") `
     (Join-Path $scriptsDir "Ds2MusicPlayerExtend.asi")
 Copy-RequiredFile (Join-Path $binDir "audio\ds2_dll_music_resource.dll") `
     (Join-Path $scriptsDir "ds2_dll_music_resource.dll")
+Copy-SpotifyHelper
 if (Assert-Bc7eDll $bc7eDll) {
     Copy-RequiredFile $bc7eDll (Join-Path $scriptsDir "ds2_jacket_bc7e.dll")
 }

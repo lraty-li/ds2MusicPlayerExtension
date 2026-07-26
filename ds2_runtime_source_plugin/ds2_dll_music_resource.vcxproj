@@ -152,6 +152,8 @@
   <ItemGroup>
     <ClInclude Include="AudioPacketProtocol.h" />
     <ClInclude Include="AudioRingBuffer.h" />
+    <ClInclude Include="AudioSourceArbiter.h" />
+    <ClInclude Include="AudioStreamClient.h" />
     <ClInclude Include="AudioStreamServer.h" />
     <ClInclude Include="BrowserJacket.h" />
     <ClInclude Include="BrowserMetadata.h" />
@@ -165,6 +167,8 @@
   <ItemGroup>
     <ClCompile Include="AudioPacketProtocol.cpp" />
     <ClCompile Include="AudioRingBuffer.cpp" />
+    <ClCompile Include="AudioSourceArbiter.cpp" />
+    <ClCompile Include="AudioStreamClient.cpp" />
     <ClCompile Include="AudioStreamServer.cpp" />
     <ClCompile Include="BrowserJacket.cpp" />
     <ClCompile Include="BrowserMetadata.cpp" />

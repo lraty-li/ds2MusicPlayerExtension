@@ -1,9 +1,9 @@
 
 # DS2MusicPlayer
 
-DS2MusicPlayer adds a special music-player track to Death Stranding 2. When the
-track is played in game, audio is streamed from a Chrome/Edge tab through a
-runtime Wwise SourcePlugin.
+DS2MusicPlayer adds a special music-player track to Death Stranding 2. Audio can
+come from either a Chrome/Edge tab or a Spotify Connect device backed by the
+official Spotify Web Playback SDK.
 
 ## Preview
 
@@ -19,12 +19,17 @@ Copy the contents of the extracted `DS2MusicPlayer` folder into the game root:
 <GameRoot>\version.dll
 <GameRoot>\scripts\Ds2MusicPlayerExtend.asi
 <GameRoot>\scripts\ds2_dll_music_resource.dll
+<GameRoot>\scripts\DS2SpotifyHelper\DS2SpotifyWebView2Helper.exe
+<GameRoot>\scripts\DS2SpotifyHelper\config.json
+<GameRoot>\scripts\DS2SpotifyHelper\web\
 ```
 
 The game root is the folder that contains the game executable. `version.dll` is
 the ASI loader, and the ASI plus audio DLL must stay in the `scripts` folder.
 
-Load the browser extension:
+### Optional browser tab playback
+
+To use browser-tab playback, load the optional browser extension:
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable Developer mode.
@@ -49,6 +54,27 @@ the game-side controls. Chrome may reject a cold `play()` request until the page
 has received user interaction; after that first manual start, DS2 can take over
 pause/resume synchronization.
 
+## Spotify Connect
+
+The ASI starts the packaged WebView2 helper as an external process. During
+playback its tool window remains visible to WebView2 but is positioned outside
+the virtual desktop and excluded from the taskbar and Alt-Tab. The helper is
+placed in a kill-on-close job, so it exits with the game even after a crash.
+Its silent Web Audio sink belongs only to this helper and does not mute the
+user's Edge browser sessions.
+
+On the first run without a saved PKCE authorization, the helper window appears
+for authorization. Later runs stay hidden. In Spotify's device picker, select
+`Death Stranding 2`; Spotify audio then streams into the special in-game track.
+
+The browser extension and Spotify helper may remain connected together. The
+most recent explicit playback action owns the stream: starting Spotify preempts
+and pauses the captured tab; resuming the captured tab reclaims it.
+Reconnection alone does not claim ownership.
+
+The game pause/resume state controls the active source. Spotify-side controls
+do not change the game player's state.
+
 ## Building a release package
 
 Run from the repository root:
@@ -71,9 +97,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\package-release.ps1 -Packa
 
 This produces `dist\DS2MusicPlayer-v0.1.0.zip`.
 
-The script builds the ASI and runtime audio DLL, downloads `version.dll` from
-Ultimate ASI Loader, copies the browser extension files, and writes a bilingual
-`README.txt` into the package.
+The script builds the ASI, runtime audio DLL, and WebView2 Spotify helper,
+downloads `version.dll` from Ultimate ASI Loader, copies the browser extension
+files, and writes a bilingual `README.txt` into the package.
 
 ## GitHub Releases
 

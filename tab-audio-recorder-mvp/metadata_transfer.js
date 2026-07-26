@@ -20,6 +20,13 @@ function stopMetadataPolling() {
   jacketInFlight = "";
 }
 
+function refreshMetadataForSourceClaim() {
+  lastMetadataKey = "";
+  lastJacketSuccessKey = "";
+  jacketInFlight = "";
+  collectAndSendMetadata();
+}
+
 async function collectAndSendMetadata() {
   const tabId = getTargetTabId();
   if (!isStreamSocketOpen() || typeof tabId !== "number") return;

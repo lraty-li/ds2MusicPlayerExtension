@@ -36,6 +36,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.status = "streaming";
       setBadge("PCM", "#0057b8");
     }
+  } else if (message.type === "source-preempted") {
+    state.streaming = true;
+    state.tabId = typeof message.tabId === "number" ? message.tabId : state.tabId;
+    state.status = "standby";
+    setBadge("STBY", "#6b4f8a");
+  } else if (message.type === "source-active") {
+    state.streaming = true;
+    state.tabId = typeof message.tabId === "number" ? message.tabId : state.tabId;
+    state.status = "streaming";
+    setBadge("PCM", "#0057b8");
   } else if (message.type === "read-metadata") {
     const tabId = typeof message.tabId === "number" ? message.tabId : state.tabId;
     readBrowserMetadata(tabId)
@@ -55,11 +65,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function toggleStream(tabId) {
   const status = await readCaptureHostStatus();
+  if (status.active && status.preempted === true) {
+    await reclaimActiveStream(status.tabId);
+    return;
+  }
   if (state.streaming || status.active) {
     await stopActiveStream();
     return;
   }
   await startStream(tabId);
+}
+
+async function reclaimActiveStream(tabId) {
+  if (!await claimCaptureHost()) {
+    throw new Error("source claim failed");
+  }
+  state.streaming = true;
+  state.tabId = typeof tabId === "number" ? tabId : state.tabId;
+  state.status = "streaming";
+  await runBrowserControl({
+    command: "resume",
+    reason: "source_reselected",
+    tabId: state.tabId
+  });
+  setBadge("PCM", "#0057b8");
 }
 
 function scheduleBrowserControl(message) {
