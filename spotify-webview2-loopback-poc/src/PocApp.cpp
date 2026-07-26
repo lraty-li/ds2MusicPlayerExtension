@@ -220,6 +220,13 @@ void PocApp::PostHostState()
          << (capture_ && capture_->IsRunning() ? L"true" : L"false")
          << L",\"captureResult\":"
          << static_cast<uint32_t>(captureResult_)
+         << L",\"sharedRingReady\":"
+         << (pcmSharedRing_.IsReady() ? L"true" : L"false")
+         << L",\"sharedRingResult\":"
+         << static_cast<uint32_t>(sharedRingResult_)
+         << L",\"sharedRingPostResult\":"
+         << static_cast<uint32_t>(sharedRingPostResult_)
+         << L",\"sharedRingPostCount\":" << sharedRingPostCount_
          << L"}";
     PostJson(json.str());
 }
@@ -281,6 +288,7 @@ void PocApp::Shutdown()
     {
         controller_->Close();
     }
+    pcmSharedRing_.Close();
     webView_.Reset();
     controller_.Reset();
     environment_.Reset();

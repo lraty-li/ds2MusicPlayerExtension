@@ -134,6 +134,7 @@ HRESULT PocApp::OnEnvironmentCreated(
         return result;
     }
     environment_ = environment;
+    InitializeSharedPcmRing(environment);
     return environment_->CreateCoreWebView2Controller(
         window_,
         Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
@@ -179,6 +180,7 @@ void PocApp::ConfigureWebView()
         settings->put_IsStatusBarEnabled(FALSE);
         settings->put_AreDevToolsEnabled(TRUE);
     }
+    ConfigureSharedPcmFrames();
 
     ComPtr<ICoreWebView2_3> localContent;
     if (SUCCEEDED(webView_.As(&localContent)))

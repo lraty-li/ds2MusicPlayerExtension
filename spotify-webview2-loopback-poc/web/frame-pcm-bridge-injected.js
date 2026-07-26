@@ -27,16 +27,37 @@
     const bridge = record.bridge;
     try {
       const sequence = bridge.nextSequence++;
-      window.top.postMessage({
-        channel: probe.channel,
-        type: "pcm-chunk",
-        streamId: bridge.streamId,
-        sequence,
-        sampleRate: rate,
-        channels,
+      const ringResult = probe.writeSharedPcmChunk?.(
+        record,
+        buffer,
         frames,
-        payload: encodeBase64(buffer)
-      }, "*");
+        rate,
+        channels,
+        sequence
+      ) || "unavailable";
+      if (ringResult === "dropped") {
+        bridge.transport = "shared-ring";
+        bridge.ringDrops++;
+        if (bridge.ringDrops === 1 || bridge.ringDrops % 10 === 0) {
+          probe.report();
+        }
+        return;
+      }
+      if (ringResult === "sent") {
+        bridge.transport = "shared-ring";
+      } else {
+        bridge.transport = "base64-webmessage";
+        window.top.postMessage({
+          channel: probe.channel,
+          type: "pcm-chunk",
+          streamId: bridge.streamId,
+          sequence,
+          sampleRate: rate,
+          channels,
+          frames,
+          payload: encodeBase64(buffer)
+        }, "*");
+      }
       bridge.sentChunks++;
       bridge.sentFrames += frames;
       bridge.state = "streaming";
@@ -193,10 +214,14 @@ registerProcessor("${WORKLET_NAME}", Ds2PcmTap);
     record.bridge = {
       state: "starting",
       method: "",
+      transport: probe.sharedPcmRing
+        ? "shared-ring"
+        : "base64-webmessage",
       note: "",
       error: "",
       streamId: `${probe.frameId}-${record.id}-${Date.now()}`,
       nextSequence: 0,
+      ringDrops: 0,
       sentChunks: 0,
       sentFrames: 0
     };

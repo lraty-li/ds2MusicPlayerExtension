@@ -98,15 +98,20 @@
         <span class="step">3</span>
         <div>
           <h2>连续 PCM → 原生 C++</h2>
-          <p>优先由 AudioWorklet 分块；WebMessage/Base64 只用于本阶段传输验证。</p>
+          <p>AudioWorklet 写入 WebView2 共享内存环，仅用小型消息通知原生消费。</p>
         </div>
       </div>
 
       <dl class="facts four">
+        <div><dt>原生共享内存</dt><dd id="pcm-shared-host">等待宿主</dd></div>
+        <div><dt>Frame 映射</dt><dd id="pcm-frame-ring">尚未映射</dd></div>
         <div><dt>Frame 发送</dt><dd id="pcm-frame-state">等待媒体接管</dd></div>
         <div><dt>音频线程实现</dt><dd id="pcm-method">—</dd></div>
+        <div><dt>Web 传输</dt><dd id="pcm-transport">—</dd></div>
+        <div><dt>环形缓冲丢块</dt><dd id="pcm-ring-drops">0</dd></div>
         <div><dt>Web 累计</dt><dd id="pcm-web-chunks">0 块 · 0 帧</dd></div>
         <div><dt>原生状态</dt><dd id="pcm-native-state">等待数据</dd></div>
+        <div><dt>原生传输</dt><dd id="pcm-native-transport">—</dd></div>
         <div><dt>原生格式</dt><dd id="pcm-native-format">—</dd></div>
         <div><dt>原生累计</dt><dd id="pcm-native-total">0 块 · 0 帧</dd></div>
         <div><dt>最近吞吐量</dt><dd id="pcm-throughput">—</dd></div>
@@ -119,7 +124,8 @@
         等待连续 PCM 到达原生 C++
       </p>
       <p id="pcm-bridge-detail" class="hint">
-        原生端只校验并立即丢弃样本，不写 WAV，也不连接游戏。
+        共享环含 64 个约 100 ms 的槽位。Base64/WebMessage 只作为失败回退；
+        原生端仍只校验并立即丢弃样本，不写 WAV，也不连接游戏。
       </p>
     </section>
 

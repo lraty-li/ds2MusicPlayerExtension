@@ -37,30 +37,41 @@ bool PcmStreamReceiver::HandleMessage(
         return false;
     }
 
-    const ULONGLONG now = GetTickCount64();
     DecodedPcmChunk chunk;
     std::wstring decodeError;
     if (!DecodePcmChunk(message, chunk, decodeError))
     {
-        ++invalidChunks_;
-        lastError_ = decodeError;
-        metricsJson = BuildMetricsJson(now, false);
-        ResetInterval(now);
+        RecordInvalidChunk(
+            L"base64-webmessage", decodeError, metricsJson);
         return true;
     }
+    HandleChunk(
+        chunk, L"base64-webmessage", metricsJson);
+    return true;
+}
 
+void PcmStreamReceiver::HandleChunk(
+    const DecodedPcmChunk& chunk,
+    std::wstring_view transport,
+    std::wstring& metricsJson)
+{
+    metricsJson.clear();
+    const ULONGLONG now = GetTickCount64();
     if (streamId_ != chunk.streamId)
     {
         ResetStream(
-            chunk.streamId, chunk.sampleRate, chunk.channels, now);
+            chunk.streamId,
+            transport,
+            chunk.sampleRate,
+            chunk.channels,
+            now);
     }
+    transport_.assign(transport);
     if (sampleRate_ != chunk.sampleRate || channels_ != chunk.channels)
     {
-        ++invalidChunks_;
-        lastError_ = L"format-changed";
-        metricsJson = BuildMetricsJson(now, false);
-        ResetInterval(now);
-        return true;
+        RecordInvalidChunk(
+            transport, L"format-changed", metricsJson);
+        return;
     }
 
     if (totalChunks_ > 0)
@@ -110,16 +121,30 @@ bool PcmStreamReceiver::HandleMessage(
         metricsJson = BuildMetricsJson(now, warmingUp);
         ResetInterval(now);
     }
-    return true;
+}
+
+void PcmStreamReceiver::RecordInvalidChunk(
+    std::wstring_view transport,
+    std::wstring_view error,
+    std::wstring& metricsJson)
+{
+    const ULONGLONG now = GetTickCount64();
+    transport_.assign(transport);
+    ++invalidChunks_;
+    lastError_.assign(error);
+    metricsJson = BuildMetricsJson(now, false);
+    ResetInterval(now);
 }
 
 void PcmStreamReceiver::ResetStream(
     std::wstring_view streamId,
+    std::wstring_view transport,
     uint32_t sampleRate,
     uint32_t channels,
     ULONGLONG now)
 {
     streamId_.assign(streamId);
+    transport_.assign(transport);
     sampleRate_ = sampleRate;
     channels_ = channels;
     expectedSequence_ = 0;
@@ -168,6 +193,7 @@ std::wstring PcmStreamReceiver::BuildMetricsJson(
          << L"{\"type\":\"pcm-bridge-metrics\""
          << L",\"active\":" << (!streamId_.empty() ? L"true" : L"false")
          << L",\"streamId\":\"" << JsonText(streamId_) << L"\""
+         << L",\"transport\":\"" << JsonText(transport_) << L"\""
          << L",\"sampleRate\":" << sampleRate_
          << L",\"channels\":" << channels_
          << L",\"lastSequence\":" << lastSequence_

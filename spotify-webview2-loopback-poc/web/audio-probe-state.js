@@ -53,6 +53,18 @@ export function buildProbeState(frameReports, requestedMode) {
   const pcmBridgeNote =
     bridgeMedia.find(({ pcmBridgeNote }) => pcmBridgeNote)
       ?.pcmBridgeNote || "";
+  const pcmTransport =
+    bridgeMedia.find(({ pcmTransport }) => pcmTransport)
+      ?.pcmTransport || "";
+  const pcmRingDrops = maximum(
+    bridgeMedia.map(({ pcmRingDrops }) => pcmRingDrops)
+  );
+  const sharedRingFrames = frames.filter(
+    ({ sharedRingReady }) => sharedRingReady
+  ).length;
+  const sharedRingError =
+    frames.find(({ sharedRingError }) => sharedRingError)
+      ?.sharedRingError || "";
   const expectedFrames = 1 + document.querySelectorAll("iframe").length;
   const coverageComplete = frames.length >= expectedFrames;
   const allFramesApplied =
@@ -82,6 +94,10 @@ export function buildProbeState(frameReports, requestedMode) {
     pcmBridgeMethod,
     pcmBridgeNote,
     pcmBridgeError,
+    pcmTransport,
+    pcmRingDrops,
+    sharedRingFrames,
+    sharedRingError,
     pcmChunks,
     pcmFrames,
     directHasPcm:
@@ -120,6 +136,7 @@ export function formatFrameDetails(frames) {
       `${item.graphState} rms=${Number(item.directRms || 0).toFixed(5)}` +
       ` pcm=${item.pcmBridgeState || "idle"}` +
       `${item.pcmBridgeMethod ? `/${item.pcmBridgeMethod}` : ""}` +
+      `${item.pcmTransport ? `/${item.pcmTransport}` : ""}` +
       `${item.graphError ? ` ${item.graphError}` : ""}`
     ).join(", ") || "graph=none";
     return `${frame.isTop ? "top" : "frame"} ${frame.origin} · ` +
@@ -141,7 +158,9 @@ export function frameFingerprint(state) {
         graphError,
         pcmBridgeState,
         pcmBridgeMethod,
-        pcmBridgeError
+        pcmBridgeError,
+        pcmTransport,
+        pcmRingDrops
       }) => ({
         id,
         playing,
@@ -149,9 +168,13 @@ export function frameFingerprint(state) {
         graphError,
         pcmBridgeState,
         pcmBridgeMethod,
-        pcmBridgeError
+        pcmBridgeError,
+        pcmTransport,
+        pcmRingDrops
       })
     ),
+    sharedRingReady: state.sharedRingReady,
+    sharedRingError: state.sharedRingError,
     trackedSilent: state.trackedSilent
   });
 }
@@ -170,8 +193,10 @@ export function formatFrameLog(state) {
     `sinks=${sinks} media=${state.media.length}/${playing} ` +
     `graphs=${attached} desired=${state.desiredMode} ` +
     `silent=${state.trackedSilent} ` +
+    `ring=${state.sharedRingReady ? "ready" : "none"} ` +
     `pcm=${pcm?.pcmBridgeState || "idle"}` +
-    `${pcm?.pcmBridgeMethod ? `/${pcm.pcmBridgeMethod}` : ""}`;
+    `${pcm?.pcmBridgeMethod ? `/${pcm.pcmBridgeMethod}` : ""}` +
+    `${pcm?.pcmTransport ? `/${pcm.pcmTransport}` : ""}`;
 }
 
 export function maximum(values) {

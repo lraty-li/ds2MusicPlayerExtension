@@ -2,6 +2,7 @@
 
 #include "AudioSessionMute.h"
 #include "CaptureMetrics.h"
+#include "PcmSharedRing.h"
 #include "PcmStreamReceiver.h"
 #include "ProcessLoopbackCapture.h"
 #include "WebView2.h"
@@ -32,6 +33,11 @@ private:
     HRESULT InstallFrameAudioProbeAndNavigate();
     void ConfigureWebView();
     void ConfigureAutoplay();
+    void InitializeSharedPcmRing(
+        ICoreWebView2Environment* environment);
+    void ConfigureSharedPcmFrames();
+    void WatchSharedPcmFrame(ICoreWebView2Frame* frame);
+    void PostSharedPcmRingToFrame(ICoreWebView2Frame2* frame);
     void StartCapture();
     void ResizeWebView();
     void ToggleMute();
@@ -51,10 +57,13 @@ private:
     bool shuttingDown_ = false;
     bool webContentReady_ = false;
     HRESULT captureResult_ = E_PENDING;
+    HRESULT sharedRingResult_ = E_PENDING;
+    HRESULT sharedRingPostResult_ = E_PENDING;
     HRESULT sessionMuteResult_ = S_OK;
     UINT32 browserProcessId_ = 0;
     UINT32 captureTargetProcessId_ = 0;
     UINT32 sessionMuteCount_ = 0;
+    UINT32 sharedRingPostCount_ = 0;
     std::wstring configuredClientId_;
     std::wstring configuredProxyServer_;
     std::wstring runtimeVersion_;
@@ -66,5 +75,6 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;
     Microsoft::WRL::ComPtr<ProcessLoopbackCapture> capture_;
     AudioSessionMuteController sessionMuteController_;
+    PcmSharedRing pcmSharedRing_;
     PcmStreamReceiver pcmStreamReceiver_;
 };

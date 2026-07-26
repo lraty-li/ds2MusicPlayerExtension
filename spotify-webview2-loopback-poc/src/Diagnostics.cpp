@@ -63,7 +63,26 @@ void PocApp::HandleWebMessage(
     const std::wstring message(rawMessage);
     CoTaskMemFree(rawMessage);
     std::wstring pcmMetrics;
-    if (pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
+    DecodedPcmChunk ringChunk;
+    std::wstring ringError;
+    if (pcmSharedRing_.HandleCommit(message, ringChunk, ringError))
+    {
+        if (ringError.empty())
+        {
+            pcmStreamReceiver_.HandleChunk(
+                ringChunk, L"shared-ring", pcmMetrics);
+        }
+        else
+        {
+            pcmStreamReceiver_.RecordInvalidChunk(
+                L"shared-ring", ringError, pcmMetrics);
+        }
+        if (!pcmMetrics.empty())
+        {
+            PostJson(pcmMetrics);
+        }
+    }
+    else if (pcmStreamReceiver_.HandleMessage(message, pcmMetrics))
     {
         if (!pcmMetrics.empty())
         {

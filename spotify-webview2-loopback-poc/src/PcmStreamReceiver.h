@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PcmChunkCodec.h"
+
 #include <Windows.h>
 
 #include <cstdint>
@@ -12,10 +14,19 @@ public:
     bool HandleMessage(
         std::wstring_view message,
         std::wstring& metricsJson);
+    void HandleChunk(
+        const DecodedPcmChunk& chunk,
+        std::wstring_view transport,
+        std::wstring& metricsJson);
+    void RecordInvalidChunk(
+        std::wstring_view transport,
+        std::wstring_view error,
+        std::wstring& metricsJson);
 
 private:
     void ResetStream(
         std::wstring_view streamId,
+        std::wstring_view transport,
         uint32_t sampleRate,
         uint32_t channels,
         ULONGLONG now);
@@ -25,6 +36,7 @@ private:
     void ResetInterval(ULONGLONG now);
 
     std::wstring streamId_;
+    std::wstring transport_;
     std::wstring lastError_;
     uint32_t sampleRate_ = 0;
     uint32_t channels_ = 0;

@@ -30,8 +30,8 @@ async function initialize() {
   byId("client-id").value = loadClientId();
   byId("redirect-uri").value = redirectUri();
   bindActions();
-  initializeHostProbe(log);
   initializeNativePcmBridge(log);
+  initializeHostProbe(log);
   initializeAudioOutputProbe(log);
   if (configuredClientId) log("已从 config.json 自动加载 Client ID");
 

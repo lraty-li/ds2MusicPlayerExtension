@@ -2,6 +2,7 @@ const CHANNEL = "ds2-audio-frame-probe-v1";
 const byId = (id) => document.getElementById(id);
 let frameState = {};
 let nativeMetrics = {};
+let hostState = {};
 let logMessage = () => {};
 let lastVerdict = "";
 let installed = false;
@@ -17,6 +18,11 @@ export function initializeNativePcmBridge(log) {
     renderVerdict();
   });
   window.chrome?.webview?.addEventListener("message", ({ data }) => {
+    if (data?.type === "host-state") {
+      hostState = data;
+      renderHostRingState();
+      renderVerdict();
+    }
     if (data?.type !== "pcm-bridge-metrics") return;
     nativeMetrics = data;
     renderNativeMetrics();
@@ -25,7 +31,18 @@ export function initializeNativePcmBridge(log) {
 }
 
 function relayPcmChunk({ data }) {
-  if (data?.channel !== CHANNEL || data.type !== "pcm-chunk") return;
+  if (data?.channel !== CHANNEL) return;
+  if (data.type === "pcm-ring-commit") {
+    if (!validRingCommit(data) || !window.chrome?.webview) return;
+    window.chrome.webview.postMessage([
+      "pcm-ring-v1",
+      data.streamId,
+      data.sequence,
+      data.slot
+    ].join("|"));
+    return;
+  }
+  if (data.type !== "pcm-chunk") return;
   if (!validChunkEnvelope(data) || !window.chrome?.webview) return;
   window.chrome.webview.postMessage([
     "pcm-v1",
@@ -36,6 +53,18 @@ function relayPcmChunk({ data }) {
     data.frames,
     data.payload
   ].join("|"));
+}
+
+function validRingCommit(data) {
+  return (
+    typeof data.streamId === "string" &&
+    /^[a-z0-9._-]{1,96}$/i.test(data.streamId) &&
+    Number.isSafeInteger(data.sequence) &&
+    data.sequence >= 0 &&
+    Number.isSafeInteger(data.slot) &&
+    data.slot >= 0 &&
+    data.slot < 1024
+  );
 }
 
 function validChunkEnvelope(data) {
@@ -72,10 +101,32 @@ function renderFrameState() {
       : "—"
   );
   setText(
+    "pcm-frame-ring",
+    frameState.sharedRingFrames > 0
+      ? `${frameState.sharedRingFrames} 个 frame 已映射`
+      : frameState.sharedRingError || "尚未映射"
+  );
+  setText("pcm-transport", frameState.pcmTransport || "—");
+  setText("pcm-ring-drops", frameState.pcmRingDrops || 0);
+  setText(
     "pcm-web-chunks",
     `${Number(frameState.pcmChunks || 0).toLocaleString()} 块 · ` +
     `${Number(frameState.pcmFrames || 0).toLocaleString()} 帧`
   );
+}
+
+function renderHostRingState() {
+  if (hostState.sharedRingReady) {
+    setText(
+      "pcm-shared-host",
+      `已创建 · 已投递 ${hostState.sharedRingPostCount || 0} 次`
+    );
+  } else {
+    setText(
+      "pcm-shared-host",
+      `不可用 · HRESULT ${formatHresult(hostState.sharedRingResult)}`
+    );
+  }
 }
 
 function renderNativeMetrics() {
@@ -89,6 +140,10 @@ function renderNativeMetrics() {
     metrics.sampleRate
       ? `${metrics.sampleRate} Hz · ${metrics.channels} ch · PCM16`
       : "—"
+  );
+  setText(
+    "pcm-native-transport",
+    metrics.transport || "—"
   );
   setText(
     "pcm-native-total",
@@ -112,6 +167,14 @@ function renderNativeMetrics() {
 }
 
 function renderVerdict() {
+  if (hostState.sharedRingReady === false) {
+    verdict(
+      "原生共享缓冲区不可用",
+      "fail",
+      `HRESULT ${formatHresult(hostState.sharedRingResult)}`
+    );
+    return;
+  }
   if (frameState.pcmBridgeState === "error") {
     verdict(
       "Web PCM 桥接失败",
@@ -139,11 +202,13 @@ function renderVerdict() {
     return;
   }
   if (Number(nativeMetrics.sequenceGaps || 0) > 0 ||
-      Number(nativeMetrics.outOfOrder || 0) > 0) {
+      Number(nativeMetrics.outOfOrder || 0) > 0 ||
+      Number(frameState.pcmRingDrops || 0) > 0) {
     verdict(
       "PCM 流发生不连续",
       "fail",
-      `缺口 ${nativeMetrics.sequenceGaps}，乱序 ${nativeMetrics.outOfOrder}`
+      `缺口 ${nativeMetrics.sequenceGaps}，乱序 ${nativeMetrics.outOfOrder}，` +
+      `环形缓冲丢块 ${frameState.pcmRingDrops || 0}`
     );
     return;
   }
@@ -157,11 +222,21 @@ function renderVerdict() {
   }
   if (nativeMetrics.continuous &&
       nativeMetrics.throughputOk &&
-      nativeMetrics.hasPcm) {
+      nativeMetrics.hasPcm &&
+      nativeMetrics.transport === "shared-ring") {
     verdict(
-      "关键通过：原生 C++ 持续收到完整 PCM",
+      "关键通过：共享内存环持续送达完整 PCM",
       "pass",
-      "序号连续、吞吐量符合 48 kHz 双声道 PCM16，且样本非零。"
+      "无 Base64 音频负载；序号连续、吞吐量正确且样本非零。"
+    );
+    return;
+  }
+  if (nativeMetrics.continuous &&
+      nativeMetrics.transport !== "shared-ring") {
+    verdict(
+      "PCM 正常，但仍在使用 Base64 回退",
+      "fail",
+      "共享缓冲区没有被 Spotify frame 接管。"
     );
     return;
   }
@@ -197,6 +272,10 @@ function formatBytes(value) {
   return bytes >= 1024
     ? `${(bytes / 1024).toFixed(1)} KiB`
     : `${bytes.toFixed(0)} B`;
+}
+
+function formatHresult(value) {
+  return `0x${Number(value || 0).toString(16).padStart(8, "0")}`;
 }
 
 function setText(id, value) {

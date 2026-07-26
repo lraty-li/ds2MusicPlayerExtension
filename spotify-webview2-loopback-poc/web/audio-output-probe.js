@@ -209,6 +209,8 @@ function logSnapshot(prefix) {
     `directRms=${state.directRms.toFixed(7)}, ` +
     `directPeak=${state.directPeak.toFixed(7)}, ` +
     `pcm=${state.pcmBridgeState}/${state.pcmBridgeMethod || "none"}, ` +
+    `transport=${state.pcmTransport || "none"}, ` +
+    `ringFrames=${state.sharedRingFrames}, ringDrops=${state.pcmRingDrops}, ` +
     `pcmChunks=${state.pcmChunks}, ` +
     `desired=${state.desiredMode}, trackedSilent=${state.trackedSilent}`
   );

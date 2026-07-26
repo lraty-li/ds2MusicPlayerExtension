@@ -59,6 +59,8 @@
       pcmBridgeMethod: record.bridge?.method || "",
       pcmBridgeNote: record.bridge?.note || "",
       pcmBridgeError: record.bridge?.error || "",
+      pcmTransport: record.bridge?.transport || "",
+      pcmRingDrops: record.bridge?.ringDrops || 0,
       pcmChunks: record.bridge?.sentChunks || 0,
       pcmFrames: record.bridge?.sentFrames || 0
     }));
@@ -73,6 +75,8 @@
       isTop: window === window.top,
       origin: location.origin,
       desiredMode: probe.desiredMode,
+      sharedRingReady: !!probe.sharedPcmRing,
+      sharedRingError: probe.sharedRingError || "",
       contextSetSinkSupported:
         typeof window.AudioContext?.prototype?.setSinkId === "function",
       mediaSetSinkSupported:

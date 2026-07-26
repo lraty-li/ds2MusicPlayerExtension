@@ -12,7 +12,8 @@ Spotify Web Playback SDK
   → MediaElementAudioSourceNode
   → AudioWorklet（失败时显式回退 ScriptProcessor）
   → 约 100 ms 的 48 kHz / 双声道 / PCM16 分块
-  → WebMessage + Base64（仅 PoC）
+  → WebView2 SharedBuffer 环形缓冲区
+  → 小型 WebMessage 仅通知原生消费槽位
   → 原生 C++ 连续性、吞吐量、RMS、Peak、滚动校验
   → 丢弃 PCM
 ```
@@ -28,7 +29,8 @@ Windows Process Loopback 仍并行保留，作为接管前后的对照观测，�
 - 不部署公网 OAuth rendezvous；
 - 不隐藏 WebView2 窗口。
 
-这些内容都要等本 PoC 的 EME、自动播放、受保护音频捕获和静音矩阵通过之后再做。
+本轮只验证独立宿主中的 Connect、受保护音频、Direct PCM、共享内存传输与
+无声输出，不扩大到游戏集成。
 
 ## 环境
 
@@ -120,10 +122,16 @@ Spotify SDK 当前实测使用子 frame 内的 `HTMLMediaElement`，而不是直
 4800 帧发送一个 PCM16 双声道分块；如果当前文档策略不允许加载 Worklet
 模块，界面会明确显示 `ScriptProcessor fallback`。
 
-分块由 Spotify 子 frame 传给本地顶层页面，再以字符串 WebMessage 交给原生
-C++。原生端验证格式、序号缺口、乱序、吞吐量与样本统计，计算滚动校验值后
-立即丢弃数据。Base64 是本阶段便于排错的传输，不代表最终游戏内实现；进入
-集成阶段后应替换为共享内存环形缓冲区。
+原生宿主通过 `CreateSharedBuffer` 建立 64 槽环形缓冲区。每个槽可容纳一个
+19,200 字节的 PCM 分块；只有确认 frame 的 origin 精确等于
+`https://sdk.scdn.co` 后，才以读写权限把缓冲区投递给该 frame。音频分块直接
+写入共享槽位，校验值和提交标记最后写入，再通过小型 WebMessage 通知原生
+消费。原生端验证槽位版本、格式、序号、长度、提交标记和 FNV32 校验，随后
+统计吞吐量、RMS、Peak 与滚动校验并释放槽位；原始 PCM 不写入磁盘。
+
+旧的 WebMessage + Base64 路径只保留为兼容性诊断回退。正式判定要求界面和
+原生日志都显示 `transport=shared-ring`；发生 Base64 回退或 ring drop 会明确
+判定失败。
 
 自动化诊断可使用 `F8` 直接切换本地 WebAudio 音调、`F9` 切换宿主静音、
 `F10` 滚动到 PCM 指标、`F11` 滚动到日志。F8 不伪造用户手势，因此也能
@@ -138,7 +146,7 @@ C++。原生端验证格式、序号缺口、乱序、吞吐量与样本统计�
    `Death Stranding 2 Helper PoC`。
 4. 播放一首完整曲目，确认曲目信息更新且 PCM 持续非零。
 5. 点击“接管媒体并启动 PCM 桥接”，等待至少三秒。
-6. 确认音频线程实现、Web 累计和原生累计都在增长。
+6. 确认原生共享内存、frame 映射均为就绪，传输显示 `shared-ring`。
 7. 确认原生判定为“持续收到完整 PCM”，且缺口、乱序、无效块均为零。
 8. 再点击“本实例切到 silent sink”。
 9. 确认桌面无声，同时 Direct PCM 与原生累计仍持续增长。
@@ -157,7 +165,21 @@ Go 至少要求：
 - 媒体接管后的 Direct PCM 持续非零；
 - silent sink 后桌面无声且 Direct PCM 仍非零；
 - 原生 C++ 连续收到 PCM16 分块，吞吐量约为 48,000 帧/秒；
+- PCM 传输为 `shared-ring`，没有 Base64 回退和 ring drop；
 - 分块序号缺口、乱序和无效块均为零；
 - 其他程序出声不会进入本 PoC 的指标。
 
 任何一项失败都应停留在 standalone 阶段调查，不需要启动游戏。
+
+## 本轮实测结果
+
+2026-07-26 的独立 PoC 实测已满足上述关键条件：
+
+- WebView2 共享缓冲区创建成功，并只投递给 Spotify SDK frame；
+- 有声阶段持续以 48,000 帧/秒、192,000 字节/秒接收双声道 PCM16；
+- 切换 silent sink 后，Process Loopback 回到
+  `RMS 0.0000146 / Peak 0.0000305` 的静默基线；
+- 同期 Direct PCM 仍为非零，例如
+  `RMS 0.2600084 / Peak 1.0000000`；
+- 累计 1,411 个共享内存分块时，序号缺口、乱序和无效块仍全部为零；
+- 全程传输类型仅为 `shared-ring`，未回退 Base64。
