@@ -89,12 +89,12 @@ public:
                 CustomJacketInstaller::TryApply(object, *g_logger);
             }
         }
-        DynamicTrackTitleSync::ApplyPendingOnGameThread();
+        DynamicTrackTitleSync::ApplyTitlePendingOnGameThread();
     }
 
     virtual void OnBeforeUnloadGroup(const RawArray* objects)
     {
-        DynamicTrackTitleSync::ApplyPendingOnGameThread();
+        DynamicTrackTitleSync::ApplyTitlePendingOnGameThread();
         if (!objects || !objects->entries)
         {
             return;
@@ -114,7 +114,7 @@ public:
 
     virtual void OnLoadAssetGroup(const RawArray*)
     {
-        DynamicTrackTitleSync::ApplyPendingOnGameThread();
+        DynamicTrackTitleSync::ApplyTitlePendingOnGameThread();
     }
 };
 

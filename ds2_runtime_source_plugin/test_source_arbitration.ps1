@@ -31,6 +31,12 @@ public static class SourceArbitrationNative
         StringBuilder artist,
         UInt32 artistBytes);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int ReadPlaybackState(
+        out UInt32 version,
+        out Int32 known,
+        out Int32 paused);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public delegate int SendControl(string json);
 }
@@ -165,8 +171,13 @@ try {
         $module,
         "DS2AudioStreamSendBrowserControl"
     )
+    $stateAddress = [SourceArbitrationNative]::GetProcAddress(
+        $module,
+        "DS2AudioStreamReadPlaybackState"
+    )
     if ($readAddress -eq [IntPtr]::Zero -or
-        $controlAddress -eq [IntPtr]::Zero) {
+        $controlAddress -eq [IntPtr]::Zero -or
+        $stateAddress -eq [IntPtr]::Zero) {
         throw "required export missing"
     }
     $reader = [Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer(
@@ -178,11 +189,23 @@ try {
             $controlAddress,
             [SourceArbitrationNative+SendControl]
         )
+    $readState =
+        [Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer(
+            $stateAddress,
+            [SourceArbitrationNative+ReadPlaybackState]
+        )
 
     $spotify = Connect-Source
     Send-Text $spotify '{"type":"source_hello","sourceId":"spotify","sourceKind":"spotify_connect"}'
     Send-Text $spotify '{"type":"metadata","title":"Spotify Paused","artist":"Connect","paused":true}'
     Assert-Metadata $reader "[PAUSED] Spotify Paused" "Connect"
+    [UInt32]$pausedVersion = 0
+    [Int32]$known = 0
+    [Int32]$paused = 0
+    if ($readState.Invoke([ref]$pausedVersion, [ref]$known, [ref]$paused) -ne 1 -or
+        $pausedVersion -eq 0 -or $known -ne 1 -or $paused -ne 1) {
+        throw "paused playback state export mismatch"
+    }
 
     if ($sendControl.Invoke(
         '{"type":"control","command":"resume","reason":"test_connected"}'
@@ -195,6 +218,17 @@ try {
     }
     Send-Text $spotify '{"type":"metadata","title":"Spotify Paused","artist":"Connect","paused":false}'
     Assert-Metadata $reader "Spotify Paused" "Connect"
+    [UInt32]$playingVersion = 0
+    if ($readState.Invoke([ref]$playingVersion, [ref]$known, [ref]$paused) -ne 1 -or
+        $playingVersion -le $pausedVersion -or $known -ne 1 -or $paused -ne 0) {
+        throw "playing playback state export mismatch"
+    }
+    Send-Text $spotify '{"type":"metadata","title":"Spotify Renamed","artist":"Connect","paused":false}'
+    [UInt32]$renamedVersion = 0
+    $readState.Invoke([ref]$renamedVersion, [ref]$known, [ref]$paused) | Out-Null
+    if ($renamedVersion -ne $playingVersion) {
+        throw "metadata-only change advanced playback state version"
+    }
 
     $tab = Connect-Source
     Send-Text $tab '{"type":"source_hello","sourceId":"tab","sourceKind":"tab_capture"}'

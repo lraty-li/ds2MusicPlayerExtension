@@ -7,4 +7,5 @@ namespace DynamicTrackTitleSync
 void Reset();
 void Start(void* track, void* album, const Logger& logger);
 void ApplyPendingOnGameThread();
+void ApplyTitlePendingOnGameThread();
 }

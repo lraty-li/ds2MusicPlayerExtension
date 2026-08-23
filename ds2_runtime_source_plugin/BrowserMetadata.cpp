@@ -19,6 +19,7 @@ char g_artist[kTitleBytes] = {};
 char g_trackKey[kTrackKeyBytes] = {};
 bool g_hasPausedState = false;
 bool g_paused = false;
+uint32_t g_playbackStateVersion = 0;
 
 const char* FindJsonStringValue(const char* json, const char* key)
 {
@@ -130,11 +131,19 @@ void UpdateFromJson(const char* json)
         {
             return;
         }
+        const bool playbackStateChanged =
+            g_hasPausedState != hasPausedState ||
+            (hasPausedState && g_paused != paused);
         strcpy_s(g_title, title);
         strcpy_s(g_artist, artist);
         strcpy_s(g_trackKey, trackKey);
         g_hasPausedState = hasPausedState;
         g_paused = paused;
+        if (playbackStateChanged)
+        {
+            ++g_playbackStateVersion;
+            if (!g_playbackStateVersion) ++g_playbackStateVersion;
+        }
     }
 
     char line[1152] = {};
@@ -170,5 +179,14 @@ int Read(char* title, uint32_t titleBytes, char* artist, uint32_t artistBytes)
     CopyDisplayTitle(title, titleBytes);
     strcpy_s(artist, artistBytes, g_artist);
     return g_title[0] ? 1 : 0;
+}
+
+int ReadPlaybackState(uint32_t* version, int* known, int* paused)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (version) *version = g_playbackStateVersion;
+    if (known) *known = g_hasPausedState ? 1 : 0;
+    if (paused) *paused = g_paused ? 1 : 0;
+    return g_playbackStateVersion ? 1 : 0;
 }
 }

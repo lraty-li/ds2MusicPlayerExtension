@@ -129,6 +129,8 @@
     <ClInclude Include="CustomJacketInternal.h" />
     <ClInclude Include="CustomJacketInstaller.h" />
     <ClInclude Include="DynamicTrackTitleSync.h" />
+    <ClInclude Include="ExternalPlaybackStatePolicy.h" />
+    <ClInclude Include="ExternalPlaybackStateSync.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="GameLayout.h" />
     <ClInclude Include="GameThreadDispatcher.h" />
@@ -175,6 +177,7 @@
     <ClCompile Include="CustomJacketInstaller.cpp" />
     <ClCompile Include="CustomJacketPixelBufferClone.cpp" />
     <ClCompile Include="DynamicTrackTitleSync.cpp" />
+    <ClCompile Include="ExternalPlaybackStateSync.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="GameThreadDispatcher.cpp" />
     <ClCompile Include="GameSymbols.cpp" />

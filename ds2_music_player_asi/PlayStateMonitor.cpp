@@ -3,6 +3,8 @@
 #include "PlayStateMonitor.h"
 
 #include "DynamicTrackTitleSync.h"
+#include "ExternalPlaybackStateSync.h"
+#include "GameLayout.h"
 #include "HookUtils.h"
 #include "PatternScan.h"
 #include "RuntimeEntryTitleRefresh.h"
@@ -14,9 +16,6 @@
 namespace
 {
 constexpr uint32_t kPatchBytes = 13;
-constexpr uint32_t kStateOffset = 0x1910;
-constexpr uint32_t kCurrentRuntimeOffset = 0x1918;
-constexpr uint32_t kCurrentTrackIdOffset = 0x1924;
 
 const char* kSetPlayStatePattern =
     "40 57 48 83 EC 20 0F B6 81 10 19 00 00 48 8B F9 "
@@ -30,6 +29,7 @@ enum class BrowserPauseReason : uint8_t
     None,
     AutoBlock,
     Manual,
+    External,
 };
 
 Logger* g_logger = nullptr;
@@ -133,6 +133,8 @@ void SendBrowserControl(const char* command, const char* reason)
 
 void HandleExternalStateChange(uint8_t oldState, uint8_t finalState)
 {
+    const bool applyingExternal =
+        ExternalPlaybackStateSync::IsApplying();
     if (oldState == 1 && finalState == 3)
     {
         g_browserPauseReason = BrowserPauseReason::AutoBlock;
@@ -151,14 +153,26 @@ void HandleExternalStateChange(uint8_t oldState, uint8_t finalState)
     }
     else if (oldState == 1 && finalState == 2)
     {
-        g_browserPauseReason = BrowserPauseReason::Manual;
-        SendBrowserControl("pause", "manual");
+        g_browserPauseReason = applyingExternal ?
+            BrowserPauseReason::External :
+            BrowserPauseReason::Manual;
+        if (!applyingExternal)
+        {
+            SendBrowserControl("pause", "manual");
+        }
     }
     else if (oldState == 2 && finalState == 1 &&
-        g_browserPauseReason == BrowserPauseReason::Manual)
+        (g_browserPauseReason == BrowserPauseReason::Manual ||
+         g_browserPauseReason == BrowserPauseReason::External))
     {
+        const BrowserPauseReason reason = g_browserPauseReason;
         g_browserPauseReason = BrowserPauseReason::None;
-        SendBrowserControl("resume", "manual");
+        if (!applyingExternal)
+        {
+            SendBrowserControl("resume",
+                reason == BrowserPauseReason::External ?
+                "external_sync" : "manual");
+        }
     }
     else if (finalState == 0)
     {
@@ -169,14 +183,19 @@ void HandleExternalStateChange(uint8_t oldState, uint8_t finalState)
 int64_t __fastcall DetourSetPlayState(void* runtime, uint8_t newState)
 {
     RuntimeEntryTitleRefresh::SetRuntime(runtime);
-    const uint8_t oldState = ReadU8(runtime, kStateOffset);
-    const uint32_t trackId = ReadU32(runtime, kCurrentTrackIdOffset);
-    void* currentRuntime = ReadPtr(runtime, kCurrentRuntimeOffset);
+    ExternalPlaybackStateSync::SetRuntime(runtime);
+    const uint8_t oldState = ReadU8(
+        runtime, GameLayout::MusicRuntime::kPlayState);
+    const uint32_t trackId = ReadU32(
+        runtime, GameLayout::MusicRuntime::kCurrentTrackId);
+    void* currentRuntime = ReadPtr(
+        runtime, GameLayout::MusicRuntime::kCurrentRuntime);
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     const uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     const int64_t result = g_original(runtime, newState);
-    const uint8_t finalState = ReadU8(runtime, kStateOffset);
-    DynamicTrackTitleSync::ApplyPendingOnGameThread();
+    const uint8_t finalState = ReadU8(
+        runtime, GameLayout::MusicRuntime::kPlayState);
+    DynamicTrackTitleSync::ApplyTitlePendingOnGameThread();
 
     if (oldState != finalState || oldState != newState)
     {

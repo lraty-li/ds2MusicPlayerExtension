@@ -5,6 +5,7 @@
 #include "FailFast.h"
 #include "HookUtils.h"
 #include "CustomJacketImageTransfer.h"
+#include "ExternalPlaybackStateSync.h"
 #include "Logger.h"
 #include "MusicPlayerInjection.h"
 #include "PlayStateMonitor.h"
@@ -180,6 +181,11 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         std::ostringstream sizeLog;
         sizeLog << "DS2.exe SizeOfImage=" << gameImageSize;
         g_initLogger.Log(sizeLog.str());
+
+        if (!ExternalPlaybackStateSync::Configure(gameModule, g_initLogger))
+        {
+            FailFast::Now(g_initLogger, "external playback sync configure failed");
+        }
 
         CustomJacketImageTransfer::Start(g_initLogger);
 

@@ -23,6 +23,12 @@
     <ClInclude Include="DynamicTrackTitleSync.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="ExternalPlaybackStatePolicy.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ExternalPlaybackStateSync.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="GameSymbols.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -152,6 +158,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="DynamicTrackTitleSync.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ExternalPlaybackStateSync.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="dllmain.cpp">

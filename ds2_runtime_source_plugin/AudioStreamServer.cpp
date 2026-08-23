@@ -210,4 +210,9 @@ int ReadMetadata(char* title, uint32_t titleBytes,
     return BrowserMetadata::Read(
         title, titleBytes, artist, artistBytes);
 }
+
+int ReadPlaybackState(uint32_t* version, int* known, int* paused)
+{
+    return BrowserMetadata::ReadPlaybackState(version, known, paused);
+}
 }

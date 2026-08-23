@@ -228,6 +228,12 @@ extern "C" __declspec(dllexport) int DS2AudioStreamReadMetadata(
     return AudioStreamServer::ReadMetadata(title, titleBytes, artist, artistBytes);
 }
 
+extern "C" __declspec(dllexport) int DS2AudioStreamReadPlaybackState(
+    unsigned int* version, int* known, int* paused)
+{
+    return AudioStreamServer::ReadPlaybackState(version, known, paused);
+}
+
 extern "C" __declspec(dllexport) int DS2AudioStreamReadJacketInfo(
     unsigned int* version, unsigned int* bytes, char* mime, unsigned int mimeBytes)
 {

@@ -2,6 +2,7 @@
 
 #include "DynamicTrackTitleSync.h"
 
+#include "ExternalPlaybackStateSync.h"
 #include "GameThreadDispatcher.h"
 #include "LocalizedTrackText.h"
 #include "RuntimeEntryTitleRefresh.h"
@@ -12,7 +13,8 @@
 
 namespace
 {
-constexpr DWORD kUpdateIntervalMs = 1000;
+constexpr DWORD kPollIntervalMs = 100;
+constexpr DWORD kMetadataIntervalMs = 1000;
 constexpr size_t kMetadataBytes = 1024;
 
 using ReadMetadataFn = int(__cdecl*)(char*, unsigned int, char*, unsigned int);
@@ -54,11 +56,11 @@ bool WaitForStopSignal()
     HANDLE stopEvent = g_stopEvent;
     if (!stopEvent)
     {
-        Sleep(kUpdateIntervalMs);
+        Sleep(kPollIntervalMs);
         return false;
     }
 
-    const DWORD result = WaitForSingleObject(stopEvent, kUpdateIntervalMs);
+    const DWORD result = WaitForSingleObject(stopEvent, kPollIntervalMs);
     return result != WAIT_TIMEOUT;
 }
 
@@ -88,12 +90,18 @@ void RequestApply()
 
 DWORD WINAPI SyncThread(LPVOID)
 {
+    uint64_t lastMetadataTick = 0;
     while (g_running.load())
     {
+        bool applyPending = ExternalPlaybackStateSync::Poll();
         void* track = g_track.load();
         auto readMetadata = ResolveReadMetadata();
-        if (track && readMetadata)
+        const uint64_t now = GetTickCount64();
+        if (track && readMetadata &&
+            (!lastMetadataTick ||
+             now - lastMetadataTick >= kMetadataIntervalMs))
         {
+            lastMetadataTick = now;
             char title[kMetadataBytes] = {};
             char artist[kMetadataBytes] = {};
             if (readMetadata(title, static_cast<unsigned int>(sizeof(title)),
@@ -101,10 +109,11 @@ DWORD WINAPI SyncThread(LPVOID)
             {
                 if (StorePendingMetadata(title, artist))
                 {
-                    RequestApply();
+                    applyPending = true;
                 }
             }
         }
+        if (applyPending) RequestApply();
         if (WaitForStopSignal())
         {
             break;
@@ -134,6 +143,7 @@ void Reset()
     g_track.store(nullptr);
     g_album.store(nullptr);
     g_readMetadata = nullptr;
+    ExternalPlaybackStateSync::Reset();
     RuntimeEntryTitleRefresh::Reset();
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
@@ -183,6 +193,12 @@ void Start(void* track, void* album, const Logger& logger)
 }
 
 void ApplyPendingOnGameThread()
+{
+    ExternalPlaybackStateSync::ApplyPendingOnGameThread();
+    ApplyTitlePendingOnGameThread();
+}
+
+void ApplyTitlePendingOnGameThread()
 {
     RuntimeEntryTitleRefresh::TryApplyPending();
 

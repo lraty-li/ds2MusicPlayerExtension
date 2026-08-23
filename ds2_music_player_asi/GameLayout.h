@@ -33,6 +33,10 @@ constexpr uint32_t kFlags = 0x2A;
 
 namespace MusicRuntime
 {
+constexpr uint32_t kPlayState = 0x1910;
+constexpr uint32_t kAutoBlockMask = 0x1912;
+constexpr uint32_t kCurrentRuntime = 0x1918;
+constexpr uint32_t kCurrentTrackId = 0x1924;
 constexpr uint32_t kEntryCount = 0x1938;
 constexpr uint32_t kEntryData = 0x1940;
 }
