@@ -12,6 +12,7 @@ struct Snapshot {
     uint8_t current = 0;
     uint8_t next = 0;
     uint8_t flag = 0;
+    uint8_t complete = 0;
     uint32_t stage = 0;
     float elapsed = 0.0f;
     uint8_t b189 = 0;
@@ -20,6 +21,7 @@ struct Snapshot {
     uint8_t b190 = 0;
     uint8_t b191 = 0;
     uint8_t b192 = 0;
+    uint8_t b371 = 0;
     uint8_t b381 = 0;
     uint8_t b3B1 = 0;
     uint32_t rideKind = 0;

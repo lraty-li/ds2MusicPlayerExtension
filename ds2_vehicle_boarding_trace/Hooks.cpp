@@ -9,9 +9,10 @@
 #include "HookUtils.h"
 #include "Logger.h"
 #include "MoverRootMotionObserver.h"
+#include "RideOffNativeDetach.h"
+#include "RideOffQueueClock.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
-#include "RideOffStateBypass.h"
 #include "RideOffVtableTrace.h"
 #include "TruckSeatTransitionObserver.h"
 
@@ -40,7 +41,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     Logger::ResetLogFile(resetErr);
 
     HMODULE gameModule = GetModuleHandleW(nullptr);
-    g_logger.Log("VehicleBoard FAST BOARDING MOD v2.0.0 start");
+    g_logger.Log("VehicleBoard FAST BOARDING MOD v2.1.0 start");
 
     if (!gameModule) {
         g_logger.Log("GetModuleHandleW failed");
@@ -81,10 +82,12 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("FastBoarding graph event wrapper failed");
     if (!CutInCameraFastForward::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding CutIn wrapper failed");
+    if (!RideOffNativeDetach::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastRideOff native detach resolve failed");
+    if (!RideOffQueueClock::TryInstall(g_logger))
+        g_logger.Log("FastRideOff queue clock wrapper failed");
     if (!MoverRootMotionObserver::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding Mover observer failed");
-    if (!RideOffStateBypass::TryInstall(gameModule, g_logger))
-        g_logger.Log("FastRideOff pre-RideOff state bypass failed");
     if (!RideOffVtableTrace::TryInstall(gameModule, g_logger))
         g_logger.Log("RideOff vtable observer failed");
 

@@ -1,55 +1,55 @@
 # DS2 玩家快速上下车：当前状态与知识索引
 
-日期：2026-07-26
+日期：2026-08-23
 
-> **当前结论：**快速上车已经验证；快速下车仍未完成。Graph 末端区间候选虽然能在
-> 117ms 内让玩家离座并沿原生根运动落到车旁，但用户实际操控确认下车后玩家动作完全
-> 卡住，无法执行任何动作，因此它只是新的视觉假阳性，已经判定失败并必须撤回。
-> 旧 `PASS`/`FLOW_PASS` 和关键帧都不能单独证明 Mod 可用；快速下车现在还必须验证
-> 落地后的玩家操控恢复。所有已证伪时间倍率、重复求值、直接绕过以及本次 Graph
-> 末端区间候选均不得作为完成方案。该失败不否定 ActionGraph 末端推进方向；定点
-> 静态分析已经确认旧实现把终点写成“恰好等于 duration”，因而得到末端姿态却没有
-> 触发原生 `reachedEnd`。后续严格越界候选已经让原生 evaluator 返回 `end=1`，但
-> 自动 W 输入探针仍确认玩家冻结，因此 `reachedEnd` 不是缺失的唯一完成条件。
-> 随后把 RideOff 四级结果合并从 `0x73` 扩展到 `0x7F` 的候选也已由运行日志证伪：
-> 第一层来源区间为 `0..2.1021`，目标在合并后仍为 `0..0.00834168`，所以它没有把
-> 叶末端同步区间送到外层，也不能解除动作锁。
+> **当前结论：**快速上车已经验证；当前卡车驾驶位样本的快速下车也已通过原生退出、
+> Basic 动作接管、Fall 缺席和移动输入四项验证。实现逐次推进 RideOff 长 descriptor，
+> 同步推进其实际外层动态表时钟，但在 descriptor 终点前 `0.1s` 停止注入额外时间，
+> 将最后几帧和动作退出交还原生生命周期。它不再强制 `pending 3→0`、不在 mover
+> 消费终点姿态前 detach，也不强制产生 `reachedEnd=1`。自动样本在约 `1.094s`
+> 连续记录 RideOff OnExit、RideVehicle OnExit 与 Basic OnEnter，之后按住 S 可立即
+> 移动且没有进入 Fall。历史 `PASS`/`FLOW_PASS`、单帧末端和强制 detach 候选仍是
+> 失败证据，不得与当前实现混用。
 
 ## 当前部署状态
 
 本地构建与游戏目录中的当前 ASI 已重新核对一致：
 
 ```text
-size    = 339968
-SHA-256 = FB478C161838793F87751175EA4AF85D18C033FAF50EFA83B39A3F690EEA0BF1
+size    = 343552
+SHA-256 = 56D19BE0DAFE7898BA2DA82AEF1575AE71A8677775502ABBC3FC42FDAF8E12E0
 ```
 
-游戏目录现在部署的是无冻结旧安全路径加只读 fullgame 状态队列观测器：保留已验证
-快速上车，并在第一次原生 RideOff RunPresentation 后调用原生 finalizer，让状态、
-CutIn 和镜头快速退出，但不改写长 ActionGraph 结果的时间区间。观测器只透传
-`qword_1884D2100` 和 `qword_1884D2118`，不修改状态队列。该构建仍会播放约 2 秒
-玩家下车动作；另一个只读 wrapper 观察 `GraphAnimationManager` slot 28 的原生
-布尔事件，同样不改写返回值。该构建因而不是最终快速下车方案。
+当前实现保留原生 RideOff 动作与根运动，只对精确长 descriptor 每次最多增加
+`0.25s`，并把相同额外量送入运行时实际命中的外层
+`ActionGraphDynamicTable_PostEvaluate`。最后 `0.1s` 不再加速，避免在原生
+RideVehicle 退出前先制造叶 `reachedEnd=1`。样本
+`artifacts/boarding/fast_dismount_20260823_231008_715` 返回
+`FAST_DISMOUNT_TRACE_OK`；本地与游戏目录哈希均为上值。该结论只覆盖已经运行验证的
+卡车驾驶位与当前存档，其他车辆/座位变体仍需各自运行验证，不能外推为全部载具已覆盖。
+
+以下构建均为历史诊断或失败候选，不代表当前部署状态。
 
 已经证伪的完整区间候选有两个连续构建：
 `57D8BEE6257F974CB211F86CB267515FADA661AB3A8E0C39A7F2F59F949892C8`
 （333824 字节）完成自动流程与视觉关键帧，随后
 `0C135ACBE3973BD58F3AB2D2392D92C64DA5FDD0136D8A3FCCAC70061A745D05`
-（333312 字节）只删除误导诊断读取。用户实际操控确认后者会完全锁死玩家动作。当前
-源码与工程已经删除 `RideOffGraphEndpoint`，也没有恢复会让角色站到车上的
-`RideOffStateBypass`。规定构建输出 `BUILD_OK`，安全基线部署源与目标哈希一致。
+（333312 字节）只删除误导诊断读取。用户实际操控确认后者会完全锁死玩家动作。该轮
+回退曾从源码与工程删除 `RideOffGraphEndpoint`，也没有恢复会让角色站到车上的
+`RideOffStateBypass`；这是历史状态。当前版本重新引入的是同步渐进推进实现，不是该
+一次性完整区间候选。
 
 随后用于验证严格越界条件的构建为 334336 字节，SHA-256
 `9418291192221BA395F3EAB1518C0C6C5C13598B92B61C5DDD69AE06FACB1432`。
 它由原 evaluator 正常产生 `end=1`，但落地后的 W 探针仍无响应，因此同样已经证伪。
-游戏目录已再次恢复上方 339968 字节安全诊断构建；该失败构建不得继续部署。
+该失败构建已经撤回，不得继续部署。
 
 同步通道合并候选为 348160 字节，SHA-256
 `42644E2D90E36B048D7CEF22D93EB39ED21FA15D5590E633E4BA60A78F1F0273`。
 样本 `dismount_20260726_162700_154` 确认它命中实际四级 RideOff 路径，但首级
 `0x7F` 合并没有改变目标的单帧同步区间，后续层也只能继续传播旧区间。该候选已经
-判定失败；相关源码和工程项已经删除，并已重新 `BUILD_OK`。游戏目录的源/目标哈希
-均已核对为上方当前安全诊断构建，失败 ASI 不再部署。详细运行证据见
+判定失败；相关同步通道改写代码随后删除并重新 `BUILD_OK`。该失败 ASI 不再部署；
+当前游戏目录产物以本页顶部的 343552 字节哈希为准。详细运行证据见
 [FastVehicleRideOffStateQueueRuntime.md](FastVehicleRideOffStateQueueRuntime.md)。
 
 ## 快速上车：已完成
@@ -79,7 +79,31 @@ CutIn 和镜头快速退出，但不改写长 ActionGraph 结果的时间区间�
 - [FastVehicleBoardingCutInCameraLifecycle.md](FastVehicleBoardingCutInCameraLifecycle.md)
 - [FastVehicleBoardingAnimationSystem.md](FastVehicleBoardingAnimationSystem.md)
 
-## 快速下车：视觉跳过成立，但功能失败
+## 快速下车：当前卡车路径已通过功能验证
+
+当前实现的关键边界不是“强制到末端”，而是“加速到末端前并交回原生”：
+
+1. 精确 RideOff descriptor 每次最多推进 `0.25s`；
+2. 同帧额外量同步到实际外层 post-evaluate 调用
+   `fullgame+0x360CCEB`（返回 RVA `0x360CCF1`）；
+3. 加速上限为 `duration - 0.1s`，最后几帧只使用原生 delta；
+4. 不写车辆子状态 `pending=0`，不调用强制 detach，不人工调用 Basic OnEnter；
+5. 只接受原生 RideOff/RideVehicle OnExit 后立即进入 Basic，且控制窗口无 Fall。
+
+验证样本 `fast_dismount_20260823_231008_715` 在 `elapsedMs=1094` 同一时刻记录：
+
+```text
+callerRva=0xF97B56   RideOff OnExit
+callerRva=0x1004F88  RideVehicleActionPlugin OnExit
+callerRva=0xFB40B6   BasicActionPlugin OnEnter
+```
+
+三次调用的 mover 坐标一致，Z 为 `102.2153168`；日志中
+`callerRva=0x110694D` 的 Fall OnEnter 次数为零。S 控制截图在实际 `148ms`
+已经出现转身/迈步，实际 `429ms` 已离开按键前位置。由此同时闭合动作接管、稳定落地与
+输入恢复，不能再沿用“视觉通过但功能失败”的旧结论。
+
+### 历史失败候选
 
 有效视觉基线为 `artifacts/boarding/dismount_20260725_215713_944`。以
 `capture_manifest.csv` 的实际捕获中点为准：
@@ -90,7 +114,7 @@ CutIn 和镜头快速退出，但不改写长 ActionGraph 结果的时间区间�
 约 2.016s     才完整站到车外
 ```
 
-现有安全路径在第一次原生 RideOff RunPresentation 后调用原生终结器，并只在
+当时的诊断基线在第一次原生 RideOff RunPresentation 后调用原生终结器，并只在
 Presentation TLS 内让动画 ready 查询通过。这会快速完成 RideOff、CutIn 和 Free
 状态；旧版本不会取消已经建立的玩家下车动作。
 
@@ -117,8 +141,9 @@ Presentation TLS 内让动画 ready 查询通过。这会快速完成 RideOff、
 该版视觉样本为
 `artifacts/boarding/dismount_20260726_115305_099`。按
 `capture_manifest.csv` 实际中点，117ms 已完全离开座位并位于车旁落地轨迹；
-320ms、726ms 均未再出现车辆下车姿态，角色没有冻结，也没有站到车体上。只查看了
-这三张首选关键帧，没有为得出结论追加查看 1200/2000ms。
+320ms、726ms 均未再出现车辆下车姿态，也没有站到车体上；这些静态帧本身不能证明
+玩家控制已经恢复。只查看了这三张首选关键帧，没有为得出视觉结论追加查看
+1200/2000ms。
 
 同一轮游戏日志在 `11:53:13.000` 同时记录 VehicleBoard 模块与 `DllMain` 的
 `DLL_PROCESS_DETACH`，确认测试通过正常进程退出完成，并非脚本强杀造成的流程假阳性。
@@ -133,7 +158,8 @@ DS2 evaluator 的定点汇编已经解释了这次失败与日志为何同时出
 `JBE`，只有严格大于 duration 才在 `0x14219A9F8` 钳制到末端，并于
 `0x14219AA01` 写 `timeState+0x0E reachedEnd=1`。旧实现写入的正是
 `end=duration=2.1021`，所以日志得到末端 `sync=2.1021`，但原生 `end=0`。这证明
-当前失败属于“生成了末端结果但没有声明原生结束”，不构成对末端推进方向本身的否定。
+该候选当时属于“生成了末端结果但没有声明原生结束”；后续严格越界实验又证明，即使
+原生 `end=1`，一次性末端推进仍不能安全释放动作。
 
 严格越界候选随后使用 duration 的下一个可表示 float 作为请求终点，让原 evaluator
 自行钳制并写完成位。自动样本
@@ -155,9 +181,10 @@ fullgame 结果传播进一步确认：RideOff 长结果经两处 mask `0x73` �
 确定冻结根因。
 
 此外，该叶结果经四级 `0x73` 选择后只是写入步长 `0xB8` 的动态表条目；fullgame
-在已确认的 `0x0184F189` RideOff 条目分派之后，于 `0x183607896` 调用宿主解析槽
-（哈希 `0x49589132`）进行这张动态表的 post-evaluate 处理。此前标注的
-`0x18360CCE8` 属于后续另一张生成式动态表，现已从 RideOff 路径中排除。因此现有
+在已确认的 `0x0184F189` RideOff 条目分派之后，实际路径最终在公共出口
+`0x18360CCEB` 调用宿主解析槽（哈希 `0x49589132`）进行动态表 post-evaluate。
+运行时精确返回 RVA 为 `0x360CCF1`。旧标注 `0x183607896` 属于 key
+`0x4404D873` 的局部表，RideOff 子图从 `0x183607217` 返回后不会落入该调用。因此现有
 `end=1` 日志只闭合叶 descriptor，不闭合动态表输出或玩家顶层动作退栈；这比
 “完成位没有写入”更准确地限定了当前缺口。
 
@@ -167,7 +194,7 @@ fullgame 结果传播进一步确认：RideOff 长结果经两处 mask `0x73` �
 参数传入。Stage2 在 `0x18318C135` 对同一对象调用解析槽
 `qword_1884D2108`，初始化／提交默认 key `0x78EC48BF`；相关槽由初始化器 hash
 `0x6685E865` 解析。该 key 的具体玩法名称尚未闭合，不能提前命名为 Free。由此确认
-`0x183607896` 操作的是玩家 Graph 持久状态块中的特定状态队列，而不是 wrapper
+`0x18360CCEB` 操作的是玩家 Graph 持久状态块中的当前动态表，而不是 wrapper
 临时构造的叶结果。
 
 同一 `arg_69B0` 还经四级明确的栈参数传递
@@ -208,18 +235,24 @@ Stage1/Stage2 参数链精确追到 `base+0x58F0`；其两个求值 gate 是
 队列退栈。完整运行证据已拆分到
 [FastVehicleRideOffStateQueueRuntime.md](FastVehicleRideOffStateQueueRuntime.md)。
 
-同一运行时专题还证伪了照搬快速上车完成事件的方向。样本
-`artifacts/boarding/dismount_20260726_160834_062` 中，
-`GraphAnimationManager` slot 28、`contextIndex=0` 的原生 true 事件只在 RideOff
-开始后 0–15ms 出现；约 2 秒动作自然释放时没有新事件首次变为 true。因此不能通过
-提前放行该接口中的某个布尔事件来补齐快速下车动作解锁。
+这里的“七张已知队列”不是 Stage2 的完整队列集合。对帧尾基本块的精确有界枚举确认，
+`0x1831D7F0A..0x1831DB6A6` 共连续调用 `qword_1884D2118` 1020 次，最后一次后直接
+进入函数尾声。因此七张队列的无变化只排除了 RideOff 已知子图内的清理遗漏，不能
+排除其余 1013 张队列中的上级或并行动作所有权队列。
+
+早期样本 `dismount_20260726_160834_062` 只记录 slot 28 的首次 true，且没有越过
+2.1021 秒自然边界，不能据此证伪既有事件在末端发生边沿变化。新样本
+`dismount_20260726_184026_386` 已按 `(manager,event,context)` 记录 false 和边沿，
+但 192 条预算由 20 条首个 true 与 172 条窗口心跳在 1829ms 恰好耗尽；此前没有
+`reason=edge`，自然边界本身仍无事件数据。因此 slot 28 完成边沿目前既未确认也未
+排除。
 
 Stage2 收尾汇编还确认，顶层 `qword_1884D2118` 的非零返回值没有被消费：
 `0x1831D7FDC` 调用后，`0x1831D7FE2` 立即装入下一张队列并继续调用同一槽，既不读取
 也不保存 `RAX`。因此该返回指针不是遗漏的 active action 句柄。
 
 该宿主槽还接收独立的 `deltaSeconds`。失败候选把叶区间一次推进到 `2.1021s` 时，
-`0x183607896` 仍向 RideOff 所在动态表的 post-evaluate 传入原始单帧增量。因此即时末端姿态与外层
+`0x18360CCEB` 曾向 RideOff 所在动态表的 post-evaluate 传入原始单帧增量。因此即时末端姿态与外层
 动作表时间线发生了已确认的分层。
 而且该槽的 `outputResult` 是外层 `entry+0x38`：它只从叶复制了 `reachedEnd` 与
 内容/payload，仍保留条目自己的同步区间，并非 wrapper 改写过的叶 timeState。
@@ -263,13 +296,32 @@ timeState double 区间没有在同帧被覆盖。此前根据区间日志推断
 运行日志也确认严格越界后的第一帧顶层项已经是
 `clock=0.00834168, derived=2.1021, mapped=2`，之后直到 `clock=2.01034` 仍保持
 末端派生值和 RideOff key。末端 event-space 数据已经建立但动作仍未退役，后续必须
-定位当前 RideOff action 的完成事件或所有权释放链。
+定位当前 RideOff action 的完成事件或所有权释放链。fullgame 又确认长 descriptor
+的 `work+0x13` gate 物理落在 `base+0x58F0` 下级队列的 `queue+0x10` 浮点最高字节，
+另一 gate `work+0x22` 与相邻队列 count 的第 3 字节重叠；这证明队列头存储直接参与
+该叶是否继续求值，但生成图存在临时复用，不能把这些字节直接命名为动作锁。
+
+现有自然与严格末端样本的最后窗口分别只到约 `2015ms` 与 `2032ms`，均未跨过
+`2102.1ms` 原生时长；当前布尔事件 observer 又不记录 false／重复 true 边沿。因此
+此前日志没有真正覆盖自然完成后的第一帧，不能用“约 2 秒没有新事件”排除完成边沿。
 
 fullgame 精确控制流已经排除 RideOff 叶子图内部存在这个释放消费者：从叶 evaluator
 返回到第一层 `0x73` 选择合并的实际路径不读取叶 timeState、`reachedEnd` 或
 `evaluationEndSeconds` 作退役判断；继续到该子图最终合并点也只有活动门、
 动态表 post-evaluate 和结果选择。叶结果的末端标志会向外传播，但释放当前 action
 的逻辑必定位于 `PlayerActionGraph_Subgraph_0184F189_Evaluate` 之外。
+
+其直接父函数现已确认对同一个 RideOff key `0x0184F189` 维护三张独立动态表：
+中间表进入已知 2.1021 秒姿态子图；另外两表分别在 `0x183606D6A` 和
+`0x183609EF1` 求值 descriptorPack `+0x35A8`、`+0x3538`，两者都是
+`mode=0/evaluatePose=0` 的非姿态结果。不过运行样本
+`dismount_20260726_185846_956` 中，精确中间姿态层命中 70 次，这两个同-key
+call site 均为零命中。它们不在本次实际 RideOff 路径活动，冻结不能解释为旧候选
+漏推进这两条 descriptor，也不得把它们加入 Mod。
+
+该样本还确认自然中间层越过 2.1021 秒后仍逐帧求值：输入区间终点继续增长到
+2.4024 秒，输出则保持 `duration=sync=2.1021/end=1`。自然完成并不会停止
+descriptor 调用或把输入播放头冻结在 duration。
 
 外层顶层控制器现已确认会单独消费当前 RideOff 队列项的
 `entry+0x88 = ActionGraphResult+0x50`：该值非负时会重置下级临时结果的同步
@@ -285,11 +337,13 @@ frame generation／瞬时标志、`result+0x50` 和 `+0x54` gate，不读取
 `reachedEnd` 或 `result+0x48/+0x4C` 来退役顶层状态。动作所有权释放因而位于
 RideOff 叶子图和这个顶层控制分支之外。
 
-同时必须限定这份自动化日志的证明范围：`capture_manifest.csv` 的最后一张截图中点是
-`2.024s`，状态队列最后一个里程碑是 `2.01034s`，二者都早于 descriptor 的
-`2.1021s` 自然末端，脚本随后很快退出。因此该样本不能单独证明自然末端之后仍冻结；
-“下车后完全无法动作”目前来自用户随后进行的较长时间手动验证。后续只读观测若要闭合
-自动证据，必须覆盖 `2.1021s` 之后，但不增加既定截图里程碑。
+新的只读样本 `dismount_20260726_184026_386` 已闭合自然完成边界：顶层队列从
+`clock/derived/mapped=2.08959/2.08959/1.9674` 进入
+`2.11045/2.1021/2` 时，`count=1`、RideOff key `0x0184F189`、
+`EventSpace=0` 和转移标志均未变化，清理槽调用前后也完全相同；直到
+`clock=2.38989` 仍保持饱和值。自然到达 `2.1021s` 因而只会钳位派生时间和映射值，
+不会退栈或释放 RideOff 动作。完整运行证据见
+[FastVehicleRideOffStateQueueRuntime.md](FastVehicleRideOffStateQueueRuntime.md)。
 
 ## 下车专题文档
 
@@ -309,16 +363,13 @@ RideOff 叶子图和这个顶层控制分支之外。
 根目录 `test_boarding.ps1` 自动执行 ESC、移动、交互、下车和退出。早期首次测试中 ESC
 之后由用户手动操作的部分不能作为自动化证据。
 
-`FLOW_PASS` 只表示自动流程捕获完成，不表示下车骨骼动画已经跳过。视觉成功必须同时
-满足：100ms 已在车辆外，且 300ms、700ms 没有下车姿态、冻结或错误落点。功能成功
-还必须证明落地后的移动/普通动作输入已经恢复；`reachedEnd=1` 也不能代替该验证。
+`FLOW_PASS` 只表示流程捕获完成。当前 `test_dismount.ps1` 还必须确认队列时钟同步、
+原生 RideOff OnExit、600ms 内出现 Basic OnEnter，并在随后 S 控制窗口内确认没有
+Fall OnEnter。任何一项缺失都判失败；`reachedEnd=1` 不能代替这些验证。
 
-截图只保存按键前帧及 `100/300/700/1200/2000ms` 里程碑，并以
-`capture_manifest.csv` 的实际捕获起止和中点计时，不依赖文件名。先检查
-100/300/700ms；只有结论矛盾才查看 1200/2000ms。
-
-针对已出现的操控冻结矛盾，测试辅助会在下车后 800–1700ms 自动按住 W，并使用既有
-1200/2000ms 里程碑与 700ms 前帧比较；不为控制验证增加新的截图时点。
+下车与控制截图都只保存按键前帧及 `25/50/100/200/400ms` 短里程碑，并以
+`capture_manifest.csv` 的实际捕获中点计时。当前样本另以动画 observer 中的 mover
+坐标确认 Basic 接管时已经到稳定地面高度，再用 S 序列的 100/400ms 画面验证实际位移。
 
 ## 失效保护边界
 
@@ -330,6 +381,7 @@ RideOff 叶子图和这个顶层控制分支之外。
 快速上车会话窗口为 5 秒，所有对象、manager、plugin、玩家、车辆、CutIn 实例与 action
 hash 都必须匹配同一有界会话。会话外共享 vtable 调用始终回到原函数。
 
-快速下车目前只通过自动流程、原生退出日志和最小视觉关键帧，未通过落地后的玩家操控
-验证。Graph 末端区间的 `end=0` 与原生 `end=1` 两版均已因动作完全卡住而判定失败，
-不能作为可用 Mod。
+当前卡车驾驶位快速下车已通过原生退出、Basic 接管、Fall 缺席与落地后 S 移动验证。
+历史 Graph 单帧末端的 `end=0`/`end=1` 两版仍因动作冻结而判定失败；当前实现没有
+恢复它们，而是在终点前停止额外推进并保留原生最后阶段。其他载具或座位变体未经运行
+验证时仍不得标记为已覆盖。

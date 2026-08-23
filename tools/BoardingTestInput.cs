@@ -168,7 +168,7 @@ public static class BoardingTestInput
             keyUpThread.IsBackground = true;
             keyUpThread.Start();
 
-            int[] targets = { 100, 300, 700, 1200, 2000 };
+            int[] targets = { 25, 50, 100, 200, 400 };
             foreach (int target in targets)
             {
                 WaitUntil(origin + target);

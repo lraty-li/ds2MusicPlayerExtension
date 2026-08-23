@@ -15,7 +15,7 @@ ds2_vehicle_boarding_trace\build.ps1 ： 构建脚本，发生代码更改时执
 如果有任何 ida mcp 调用超时，就说明你进行了一个非常复杂的操作，必须等到 ida mcp 响应。不得继续调用导致 ida 直到卡死
 
 
-不准使用 dumpbin.exe 去读取 DS2.exe 本身， 不准以任何形式去读取 DS2.exe 本身。不得直接调用ida exe
+禁止调用 dumpbin.exe，不得使用它读取任何文件（包括 DS2.exe、fullgame.dll 及其他二进制）。不准以任何形式去读取 DS2.exe 本身。不得直接调用ida exe
 
 没有我的允许，不得操作 git stage 命令
 游戏日志：

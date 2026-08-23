@@ -113,7 +113,8 @@ void ObserveUpdate(
     if (relevant) {
         const bool suppressed =
             TruckBoardingSuppressor::TrySuppress(truck, *g_logger) ||
-            TruckRideOffSuppressor::TrySuppress(truck, *g_logger);
+            (RideOffSession::GraphEndpointClaimed() &&
+                TruckRideOffSuppressor::TrySuppress(truck, *g_logger));
         if (suppressed)
             ReadSnapshot(truck, before);
     }

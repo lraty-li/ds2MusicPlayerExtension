@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "RideOffVtableTrace.h"
 
-#include "RideOffFinalizer.h"
+#include "RideOffMoverSnapshot.h"
 #include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
@@ -17,7 +17,6 @@ constexpr char kExpectedTypeName[] = ".?AVDSPlayerVehicleRideOffState@@";
 constexpr uint32_t kStateEnterSlotIndex = 11;
 constexpr uint32_t kStateUpdateSlotIndex = 13;
 constexpr uint32_t kStatePresentationSlotIndex = 14;
-constexpr uintptr_t kAnimationReadyOffset = 0x3E0;
 
 using RideOffEnterFn = int64_t(__fastcall*)(
     uintptr_t rideOff, uintptr_t a2, uintptr_t a3);
@@ -25,19 +24,34 @@ using RideOffUpdateFn = char(__fastcall*)(uintptr_t rideOff, float delta);
 using RideOffPresentationFn = int64_t(__fastcall*)(
     uintptr_t rideOff, float delta, float presentationDelta);
 using AnimStateFn = void(__fastcall*)(uintptr_t animation, uint32_t state);
-using AnimReadyFn = bool(__fastcall*)(uintptr_t animation);
 
 std::atomic<bool> g_started{false};
 std::atomic<uintptr_t> g_activeAnimation{0};
 std::atomic<uintptr_t> g_animationSlot{0};
-std::atomic<uintptr_t> g_animationReadySlot{0};
 std::atomic<uint64_t> g_enterTick{0};
+std::atomic<uint32_t> g_postEndpointUpdateLogs{0};
 const Logger* g_logger = nullptr;
 RideOffEnterFn g_originalEnter = nullptr;
 RideOffUpdateFn g_originalUpdate = nullptr;
 RideOffPresentationFn g_originalPresentation = nullptr;
 AnimStateFn g_originalAnimState = nullptr;
-AnimReadyFn g_originalAnimReady = nullptr;
+
+void AppendCaller(std::ostringstream& oss, uintptr_t caller)
+{
+    HMODULE callerModule = nullptr;
+    GetModuleHandleExA(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCSTR>(caller), &callerModule);
+    const HMODULE game = GetModuleHandleW(nullptr);
+    const HMODULE fullGame = GetModuleHandleW(L"fullgame.dll");
+    const char* moduleName = callerModule == game ? "DS2.exe" :
+        (callerModule == fullGame ? "fullgame.dll" : "other");
+    oss << " caller=" << VehicleSeatTrace::Hex(caller)
+        << " callerModule=" << moduleName
+        << " callerRva=" << VehicleSeatTrace::Hex(callerModule ?
+            caller - reinterpret_cast<uintptr_t>(callerModule) : 0);
+}
 
 void AppendSnapshot(std::ostringstream& oss, uintptr_t rideOff)
 {
@@ -59,18 +73,17 @@ void __fastcall HookAnimState(uintptr_t animation, uint32_t state)
     std::ostringstream oss;
     oss << "RideOff animation state requested=" << state
         << " callbackScope=" << (inRideOffCallback ? 1 : 0)
+        << " endpointCompletion="
+        << (RideOffSession::GraphEndpointComplete() ? 1 : 0)
         << " elapsedMs=" << GetTickCount64() -
             g_enterTick.load(std::memory_order_relaxed);
-    g_logger->Log(oss.str());
-}
-
-bool __fastcall HookAnimReady(uintptr_t animation)
-{
-    if (animation == g_activeAnimation.load(std::memory_order_acquire) &&
-        RideOffSession::CurrentId()) {
-        return true;
+    AppendCaller(oss, reinterpret_cast<uintptr_t>(_ReturnAddress()));
+    RideOffMoverSnapshot::Snapshot snapshot = {};
+    if (RideOffMoverSnapshot::Capture(animation, snapshot)) {
+        oss << " {" << RideOffMoverSnapshot::Format(
+            "afterState", snapshot) << "}";
     }
-    return g_originalAnimReady(animation);
+    g_logger->Log(oss.str());
 }
 
 bool TryInstallAnimObserver(uintptr_t rideOff)
@@ -78,80 +91,45 @@ bool TryInstallAnimObserver(uintptr_t rideOff)
     uintptr_t animation = 0;
     uintptr_t vtable = 0;
     uintptr_t target = 0;
-    uintptr_t readyTarget = 0;
     if (!VehicleSeatTrace::ReadValue(rideOff + 0xB0, animation) || !animation ||
         !VehicleSeatTrace::ReadValue(animation, vtable) || !vtable ||
-        !VehicleSeatTrace::ReadValue(vtable + 0x20, target) || !target ||
-        !VehicleSeatTrace::ReadValue(
-            vtable + kAnimationReadyOffset, readyTarget) || !readyTarget) {
+        !VehicleSeatTrace::ReadValue(vtable + 0x20, target) || !target) {
         return false;
     }
 
     const uintptr_t slot = vtable + 0x20;
-    const uintptr_t readySlot = vtable + kAnimationReadyOffset;
     const uintptr_t installed = g_animationSlot.load(std::memory_order_acquire);
-    const uintptr_t installedReady =
-        g_animationReadySlot.load(std::memory_order_acquire);
-    if ((installed && installed != slot) ||
-        (installedReady && installedReady != readySlot)) {
+    if (installed && installed != slot) {
         return false;
     }
     g_activeAnimation.store(animation, std::memory_order_release);
-    if (installed == slot && installedReady == readySlot)
+    if (installed == slot)
         return true;
 
     g_originalAnimState = reinterpret_cast<AnimStateFn>(target);
-    g_originalAnimReady = reinterpret_cast<AnimReadyFn>(readyTarget);
-    if (!VtableLocator::SwapSlot(
-            readySlot, readyTarget, reinterpret_cast<void*>(&HookAnimReady))) {
-        return false;
-    }
     if (!VtableLocator::SwapSlot(
             slot, target, reinterpret_cast<void*>(&HookAnimState))) {
-        VtableLocator::SwapSlot(
-            readySlot, reinterpret_cast<uintptr_t>(&HookAnimReady),
-            reinterpret_cast<void*>(readyTarget));
         return false;
     }
     g_animationSlot.store(slot, std::memory_order_release);
-    g_animationReadySlot.store(readySlot, std::memory_order_release);
     return true;
-}
-
-void TryRequestNativeExit(uintptr_t rideOff)
-{
-    uintptr_t plugin = 0;
-    uint8_t current = 0;
-    uint8_t next = 0;
-    if (!VehicleSeatTrace::ReadValue(rideOff + 0x88, plugin) || !plugin ||
-        !VehicleSeatTrace::ReadValue(plugin + 0x118, current) ||
-        !VehicleSeatTrace::ReadValue(plugin + 0x11A, next) ||
-        current != 3 || next != 3 ||
-        !RideOffSession::MarkNativeExitRequested() ||
-        !VehicleSeatTrace::WriteValue<uint8_t>(plugin + 0x11A, 0)) {
-        return;
-    }
-    std::ostringstream oss;
-    oss << "RideOff native Free-state exit requested"
-        << " elapsedMs=" << GetTickCount64() -
-            g_enterTick.load(std::memory_order_relaxed)
-        << " current=" << static_cast<uint32_t>(current)
-        << " next=" << static_cast<uint32_t>(next) << "->0";
-    g_logger->Log(oss.str());
 }
 
 int64_t __fastcall HookRideOffEnter(
     uintptr_t rideOff, uintptr_t a2, uintptr_t a3)
 {
     g_enterTick.store(GetTickCount64(), std::memory_order_relaxed);
+    g_postEndpointUpdateLogs.store(0, std::memory_order_relaxed);
     const bool animObserverInstalled = TryInstallAnimObserver(rideOff);
     const int64_t result = g_originalEnter(rideOff, a2, a3);
-    RideOffSession::Begin(rideOff);
+    uintptr_t player = 0;
+    VehicleSeatTrace::ReadValue(rideOff + 0x98, player);
+    const uint32_t session = RideOffSession::Begin(rideOff, player);
     std::ostringstream oss;
     oss << "RideOff Enter vtable original result=" << result
         << " rideOff=" << VehicleSeatTrace::Hex(rideOff)
         << " animObserver=" << (animObserverInstalled ? 1 : 0)
-        << " session started";
+        << " session=" << session;
     AppendSnapshot(oss, rideOff);
     g_logger->Log(oss.str());
     return result;
@@ -159,9 +137,21 @@ int64_t __fastcall HookRideOffEnter(
 
 char __fastcall HookRideOffUpdate(uintptr_t rideOff, float delta)
 {
+    const bool postEndpoint = RideOffSession::GraphEndpointComplete();
     const uintptr_t previous = RideOffSession::EnterUpdate(rideOff);
     const char result = g_originalUpdate(rideOff, delta);
     RideOffSession::LeaveUpdate(previous);
+    if (postEndpoint &&
+        g_postEndpointUpdateLogs.fetch_add(
+            1, std::memory_order_relaxed) < 12) {
+        std::ostringstream oss;
+        oss << "FastRideOff native post-endpoint Update"
+            << " elapsedMs=" << RideOffSession::ElapsedMs()
+            << " delta=" << delta
+            << " result=" << static_cast<uint32_t>(result);
+        AppendSnapshot(oss, rideOff);
+        g_logger->Log(oss.str());
+    }
     return result;
 }
 
@@ -174,14 +164,6 @@ int64_t __fastcall HookRideOffPresentation(
     uint32_t actionHash = 0;
     if (VehicleSeatTrace::ReadValue(rideOff + 0x1AC, actionHash))
         RideOffSession::ObserveCutInAction(rideOff, actionHash);
-    uintptr_t runtime = 0;
-    uint32_t runtimeMode = 0;
-    if (RideOffSession::MarkFinalizerForced() &&
-        VehicleSeatTrace::ReadValue(rideOff + 0x190, runtime) && runtime) {
-        VehicleSeatTrace::ReadValue(runtime + 0x2A0, runtimeMode);
-        RideOffFinalizer::Force(runtime, runtimeMode == 3);
-    }
-    TryRequestNativeExit(rideOff);
     RideOffSession::LeaveUpdate(previous);
     return result;
 }
@@ -198,10 +180,6 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
 {
     if (g_started.load(std::memory_order_acquire))
         return true;
-    if (!RideOffFinalizer::TryInstall(gameModule, logger)) {
-        logger.Log("RideOff native finalizer lookup failed");
-        return false;
-    }
 
     VtableLocator::Match enter = {};
     VtableLocator::Match update = {};
@@ -263,7 +241,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
     }
 
     g_started.store(true, std::memory_order_release);
-    logger.Log("RideOff Enter/Update/RunPresentation observers installed");
+    logger.Log("RideOff staged Enter/Update/RunPresentation hooks installed");
     return true;
 }
 

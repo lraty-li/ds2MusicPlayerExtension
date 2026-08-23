@@ -25,6 +25,7 @@ bool CaptureSnapshot(uintptr_t plugin, Snapshot& s)
     ReadValue(plugin + 0x118, s.current);
     ReadValue(plugin + 0x11A, s.next);
     ReadValue(plugin + 0x11B, s.flag);
+    ReadValue(plugin + 0xA, s.complete);
     ReadValue(plugin + 0x220, s.seatKey);
     ReadValue(s.rideOn + 0x180, s.elapsed);
     ReadValue(s.rideOn + 0x198, s.stage);
@@ -34,6 +35,7 @@ bool CaptureSnapshot(uintptr_t plugin, Snapshot& s)
     ReadValue(s.runtime + 0x190, s.b190);
     ReadValue(s.runtime + 0x191, s.b191);
     ReadValue(s.runtime + 0x192, s.b192);
+    ReadValue(s.runtime + 0x371, s.b371);
     ReadValue(s.runtime + 0x381, s.b381);
     ReadValue(s.runtime + 0x2A0, s.rideKind);
     ReadValue(s.runtime + 0x2A4, s.rideVariant);
@@ -48,6 +50,7 @@ std::string FormatSnapshot(uintptr_t plugin, const Snapshot& s)
         << " cur=" << static_cast<int>(s.current)
         << " next=" << static_cast<int>(s.next)
         << " flag=" << static_cast<int>(s.flag)
+        << " complete=" << static_cast<int>(s.complete)
         << " seatKey=" << Hex(s.seatKey)
         << " rideOn=" << Hex(s.rideOn)
         << " runtime=" << Hex(s.runtime)
@@ -61,6 +64,7 @@ std::string FormatSnapshot(uintptr_t plugin, const Snapshot& s)
         << " b190=" << static_cast<int>(s.b190)
         << " b191=" << static_cast<int>(s.b191)
         << " b192=" << static_cast<int>(s.b192)
+        << " b371=" << static_cast<int>(s.b371)
         << " b381=0x" << std::hex << static_cast<int>(s.b381) << std::dec
         << " b3B1=" << static_cast<int>(s.b3B1);
     return oss.str();

@@ -2,9 +2,11 @@
 #include "GraphEventFastForward.h"
 
 #include "FastBoardingSession.h"
+#include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <sstream>
@@ -21,12 +23,57 @@ using BoolEventFn = bool(__fastcall*)(
 std::atomic<bool> g_started{false};
 const Logger* g_logger = nullptr;
 BoolEventFn g_original = nullptr;
+SRWLOCK g_rideOffEventLock = SRWLOCK_INIT;
+uint32_t g_rideOffEventSession = 0;
+std::array<uint8_t, 256> g_rideOffEventResults{};
+
+void ObserveRideOffEvent(
+    uintptr_t manager, uint32_t eventId, int32_t contextIndex,
+    bool nativeResult)
+{
+    const uint32_t session = RideOffSession::ActiveId();
+    if (!session || contextIndex != 0 ||
+        eventId >= g_rideOffEventResults.size() ||
+        !RideOffSession::MatchesGraphManager(manager)) {
+        return;
+    }
+
+    const uint8_t encoded = nativeResult ? 2 : 1;
+    bool log = false;
+    const char* reason = "edge";
+    AcquireSRWLockExclusive(&g_rideOffEventLock);
+    if (g_rideOffEventSession != session) {
+        g_rideOffEventSession = session;
+        g_rideOffEventResults.fill(0);
+    }
+    const uint8_t previous = g_rideOffEventResults[eventId];
+    if (!previous && nativeResult) {
+        log = true;
+        reason = "initial-true";
+    } else if (previous && previous != encoded) {
+        log = true;
+    }
+    g_rideOffEventResults[eventId] = encoded;
+    ReleaseSRWLockExclusive(&g_rideOffEventLock);
+
+    if (log) {
+        std::ostringstream oss;
+        oss << "RideOff graph bool event session=" << session
+            << " elapsedMs=" << RideOffSession::ElapsedMs()
+            << " event=" << eventId
+            << " result=" << (nativeResult ? 1 : 0)
+            << " reason=" << reason;
+        g_logger->Log(oss.str());
+    }
+}
 
 bool __fastcall HookBoolEvent(
     uintptr_t manager, uint32_t mappedEventId, int32_t contextIndex)
 {
     const bool nativeResult =
         g_original(manager, mappedEventId, contextIndex);
+    ObserveRideOffEvent(
+        manager, mappedEventId, contextIndex, nativeResult);
     if (contextIndex != 0 ||
         !FastBoardingSession::MatchesGraphEvent(manager, mappedEventId)) {
         return nativeResult;

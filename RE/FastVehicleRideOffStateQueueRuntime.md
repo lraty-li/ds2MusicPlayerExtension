@@ -1,9 +1,10 @@
 # DS2 快速下车：fullgame 状态队列运行时证据
 
-日期：2026-07-26
+日期：2026-08-23
 
 本文只记录已经由定点静态分析和运行日志确认的 fullgame `ActiveStatesQueue` 行为。
-快速下车仍未完成；本文不记录待定修补方案。
+2026-08-23 的当前实现已经通过卡车驾驶位快速下车验证；本文保留此前失败样本，并在
+末节记录最终采用的同步推进边界，不记录未经验证的推测。
 
 ## 已确认的队列布局
 
@@ -52,6 +53,13 @@ fullgame 顶层控制器还确认了 `entry+0x88` 的一个实际消费者。当
 的直接时间控制输入仅是 timeState generation／瞬时标志、`entry+0x88` 重基准和
 `entry+0x8C` gate。由此排除顶层状态控制器直接以叶完成位或末端秒数释放玩家动作；
 释放链仍位于这些已确认分支之外。
+
+长 RideOff descriptor 的两个 activity gate 与下级队列存储现已按地址闭合。
+`0x18366F3DF` 读取 `work+0x22`，`0x18366F3E7` 读取 `work+0x13`；而该处
+`work` 已确认等于 Graph base `+0x58F0`。因此后者正好是 `base+0x58F0`
+队列 `+0x10` 浮点存储的最高字节，前者物理重叠相邻 `base+0x5910` 队列 count
+存储的第 3 字节。这个结论只证明队列头／event-space 物理存储直接参与长 descriptor
+是否求值的门控；生成图存在临时存储复用，不能据此把任一字节命名为完成位或动作锁。
 
 DS2 宿主现已闭合 `result+0x50` 的上游来源。`ActiveStatesQueue_PushActiveState`
 只在 `TransitionProperties+0x0D` flag 有效时，把 `TransitionProperties+0x08`
@@ -180,9 +188,29 @@ elapsed  event
 RideOff 时钟正常经过约 100/300/700/1200/2000ms 里程碑，进程最终正常记录两条
 `DLL_PROCESS_DETACH`。
 
-因此已证伪“原生约 2 秒动作释放表现为 `GraphAnimationManager` slot 28、
-`contextIndex=0` 的某个布尔完成事件从 false 变为 true，快速下车只需像快速上车一样
-提前放行该事件”。这不把其他事件发布接口或非零 context 自行解释为已排除对象。
+该样本只能排除在已覆盖窗口内出现一个此前从未为 true 的早期完成事件；它没有越过
+2.1021 秒自然边界，也没有记录既有 tuple 的 false/true 边沿，不能据此证伪自然末端
+由 slot 28 既有事件发生边沿变化。
+
+自然样本 `dismount_20260726_160834_062` 和严格末端样本
+`dismount_20260726_162700_154` 的最后日志／截图窗口分别只到约
+`2015ms` 与 `2032ms`，都没有跨过长 descriptor 的 `2102.1ms` 原生时长。因此现有
+样本没有记录自然完成边沿后的第一帧。当前 slot 28 observer 又只按 event ID 去重并
+记录首次 true，不记录 false、重复 true 或 `(manager,event,context)` 边沿；两份样本
+首帧都看到 `{1,2,4,6,7,10,73}`，只能证明早期集合相同，不能排除完成边沿存在差异。
+
+后续自然样本 `dismount_20260726_184026_386` 虽已把 observer 改为按
+`(manager,event,context)` 记录 false 和结果边沿，但它的 192 条共享预算在
+`elapsed=1829ms` 已全部耗尽：20 条 `initial-true` 加 172 条
+`completion-window` 心跳恰好为 192 条；此前没有一条 `reason=edge`。因此该样本仍
+没有 2.1021 秒边界上的 slot 28 数据，不能用它排除自然完成事件。这个日志预算缺口
+不影响同一样本已经完整跨过边界的顶层队列字段结论。
+
+样本 `dismount_20260726_185846_956` 随后让已登记 tuple 的结果边沿不再受心跳预算
+限制。RideOff descriptor 的精确日志覆盖到 2.390 秒，期间没有任何
+`reason=edge`；因此可排除已在 1.8 秒窗口前登记的
+`(manager,event,context=0)` tuple 于自然末端改变返回值。预算耗尽后首次出现的新
+tuple 仍不在这条结论内，不能扩大解释为 slot 28 的所有可能事件均已排除。
 
 ## 清理槽返回值没有下游用途
 
@@ -199,6 +227,21 @@ RideOff 时钟正常经过约 100/300/700/1200/2000ms 里程碑，进程最终�
 该区域是一长串相同的逐队列收尾调用；每次返回后都直接装入下一张队列参数，没有保存、
 比较或转发前一调用的 `RAX`。因此顶层非零返回值在此调用链中被明确丢弃，不能作为快速
 下车动作释放入口。
+
+进一步对这个已知收尾基本块做有界指令枚举，确认该序列远大于此前只读观测的七张
+RideOff 队列：
+
+```text
+first cleanup call = 0x1831D7F0A
+last cleanup call  = 0x1831DB6A6
+call count         = 1020
+```
+
+最后一次调用后只恢复寄存器、回收栈并返回。也就是说，Stage2 每帧对整张生成图中的
+1020 张活动状态队列调用同一个 `qword_1884D2118` 收尾槽；`base+0x5730` 和六张
+已知 RideOff 下级队列只是其中一小部分。此前运行样本仍足以排除“再清理一次这七张
+已知队列即可解锁”，但不能排除另外 1013 张队列中存在 RideOff 的上级或并行动作
+所有权队列。首尾地址和该范围已经写入 fullgame IDA 注释。
 
 ## 完整同步通道合并不会覆盖同帧目标区间
 
@@ -287,3 +330,52 @@ beforeKey=0x0184F189
 `beforeDerived=2.1021`、`beforeMapped=2` 和 RideOff key 都保持不变。也就是说，
 末端 evaluation 标量及其映射值确实已到达当前队列项，但没有使当前 RideOff action
 退役。该样本直接证伪“冻结只是因为 `+0x4C`／event-space 没有传播到外层”。
+
+## 自然到达 2.1021 秒不会触发队列退役
+
+运行样本：
+`artifacts/boarding/dismount_20260726_184026_386`。
+
+本轮只读观测首次越过了未修改顶层队列时钟的自然 descriptor 末端。末端前后的顶层
+`base+0x5730` 清理槽记录为：
+
+```text
+clock=2.08959  derived=2.08959  mapped=1.9674
+clock=2.11045  derived=2.1021   mapped=2
+```
+
+跨越边界时，队列仍为 `count=1`、`key=0x0184F189`、`EventSpace=0`、
+`flag=1`；同一次 `qword_1884D2118` 调用前后这些字段以及三个时间字段也完全相同。
+随后直到 `clock=2.38989`，`derived=2.1021`、`mapped=2` 和上述队列字段持续不变。
+
+因此自然边界只把当前项派生时间封顶到 descriptor duration，并把映射值封顶到 2；
+它不会触发该清理槽退栈、切换 key 或释放 RideOff 动作。此前样本没有覆盖
+`2.1021s` 后第一帧所留下的观测缺口已经闭合。
+
+## 2026-08-23：外层时钟同步与原生退出
+
+运行时精确观测纠正了 RideOff post-evaluate 的 fullgame 调用点。RideOff 子图在
+`0x183607217` 返回后经无条件跳转离开当前局部表，不会落入旧标注的
+`0x183607896`；该旧调用属于 key `0x4404D873` 的另一张表。实际 RideOff 路径在公共
+出口 `0x18360CCEB` 调用宿主槽，返回地址为 `0x18360CCF1`，参数是
+`RCX=dynamicTable`、`XMM1=deltaSeconds`、`R8=currentEntry+0x38`。
+
+当前 wrapper 在同一线程、同一 RideOff 会话内记录长 descriptor 每帧实际增加的额外
+秒数，并只在上述精确返回边界把它加入 `XMM1`。样本
+`artifacts/boarding/fast_dismount_20260823_231008_715` 中，四次日志分别把外层增量
+从原生 `0.00834168` 或 `0.0125125` 增加 `0.25`；它们与叶区间四次增加的
+`0.25s` 一一对应。由此消除了旧候选中“叶播放头已到末端，而最新状态项 `+0xA0`
+只增加一帧”的确定性分层。
+
+同步推进本身没有被当成直接退栈调用。实现把叶注入封顶在
+`duration - 0.1s = 2.0021s`，不伪造严格末端，也不直接写队列字段。通过样本最后一次
+加速把叶终点推进到 `1.85085s`；随后原生逻辑在会话 `1094ms` 调用 RideOff OnExit，
+同帧执行 RideVehicleActionPlugin OnExit 和 Basic OnEnter。这个顺序证明动作释放仍由
+原生生成式逻辑决定，Mod 只恢复了其所需的同步时间推进并保留最后的原生判断窗口。
+
+对照样本 `artifacts/boarding/fast_dismount_20260823_224139_933` 在严格终点后手动
+operation 21 detach 并请求 pending `3 -> 0`：RideOff 和 RideVehicle 虽于 `531ms`
+退出，却没有同帧进入 Basic，随后 `937ms` 从调用点 `0x110694D` 进入 Fall。当前通过
+样本没有手动状态提交，`0xFB40B6` 的 Basic OnEnter 与两个原生退出调用同帧发生，且
+整个控制窗口 `0x110694D` 零命中。两者共同限定了正确边界：同步推进可以加速状态机，
+但不得抢在原生完成判断前强制终端、detach 或 Free。

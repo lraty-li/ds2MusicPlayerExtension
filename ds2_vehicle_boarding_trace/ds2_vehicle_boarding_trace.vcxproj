@@ -149,6 +149,10 @@
     <ClInclude Include="RideOnUpdateVtableTrace.h" />
     <ClInclude Include="RideOffDescriptorTrace.h" />
     <ClInclude Include="RideOffFinalizer.h" />
+    <ClInclude Include="RideOffGraphEndpoint.h" />
+    <ClInclude Include="RideOffNativeDetach.h" />
+    <ClInclude Include="RideOffMoverSnapshot.h" />
+    <ClInclude Include="RideOffQueueClock.h" />
     <ClInclude Include="RideOffSession.h" />
     <ClInclude Include="RideOffStateBypass.h" />
     <ClInclude Include="RideOffVtableTrace.h" />
@@ -190,6 +194,9 @@
     <ClCompile Include="RideOnUpdateVtableTrace.cpp" />
     <ClCompile Include="RideOffDescriptorTrace.cpp" />
     <ClCompile Include="RideOffFinalizer.cpp" />
+    <ClCompile Include="RideOffGraphEndpoint.cpp" />
+    <ClCompile Include="RideOffNativeDetach.cpp" />
+    <ClCompile Include="RideOffQueueClock.cpp" />
     <ClCompile Include="RideOffSession.cpp" />
     <ClCompile Include="RideOffStateBypass.cpp" />
     <ClCompile Include="RideOffVtableTrace.cpp" />

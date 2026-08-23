@@ -2,11 +2,14 @@
 #include "MoverRootMotionObserver.h"
 
 #include "FastBoardingSession.h"
+#include "RideOffMoverSnapshot.h"
+#include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
 #include <atomic>
 #include <cstdint>
+#include <sstream>
 
 namespace MoverRootMotionObserver {
 namespace {
@@ -28,10 +31,30 @@ void __fastcall HookModifyAnimatedPose(
     const uintptr_t rideOn = FastBoardingSession::ActiveRideOn();
     if (rideOn)
         VehicleSeatTrace::ReadValue(rideOn + 0x98, player);
-
+    const bool terminalRideOffPose =
+        RideOffSession::GraphEndpointComplete();
+    RideOffMoverSnapshot::Snapshot beforeMover = {};
+    if (terminalRideOffPose)
+        RideOffMoverSnapshot::Capture(self, beforeMover);
     g_original(self, frameDelta, poseWrapper);
+    RideOffMoverSnapshot::Snapshot afterMover = {};
+    if (terminalRideOffPose)
+        RideOffMoverSnapshot::Capture(self, afterMover);
     if (FastBoardingSession::ObservePostDrivePoseApplied(player)) {
         g_logger->Log("FastBoarding post-Drive player pose committed");
+    }
+    if (terminalRideOffPose &&
+        RideOffSession::MarkPostGraphPoseConsumed(self)) {
+        std::ostringstream oss;
+        oss << "FastRideOff terminal pose consumed; awaiting native completion"
+            << " session=" << RideOffSession::ActiveId()
+            << " elapsedMs=" << RideOffSession::ElapsedMs()
+            << " accessor=" << VehicleSeatTrace::Hex(self)
+            << " {" << RideOffMoverSnapshot::Format(
+                "beforeMover", beforeMover) << "}"
+            << " {" << RideOffMoverSnapshot::Format(
+                "afterMover", afterMover) << "}";
+        g_logger->Log(oss.str());
     }
 }
 
@@ -61,6 +84,7 @@ bool TryInstall(HMODULE gameModule, const Logger& logger)
 
     FastBoardingSession::ReportComponentReady(
         FastBoardingSession::kPoseComponent);
+    RideOffSession::ReportComponentReady(RideOffSession::kPoseComponent);
     g_started.store(true, std::memory_order_release);
     logger.Log("FastBoarding DSPlayerMoverAccessor ModifyAnimatedPose wrapper installed");
     return true;

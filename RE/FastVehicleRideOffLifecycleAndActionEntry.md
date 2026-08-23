@@ -1,12 +1,14 @@
 # 快速下车：RideOff 生命周期与动作入口
 
-日期：2026-07-26
+日期：2026-08-23
 
 返回[当前状态与知识索引](FastVehicleBoardingModImplementation.md)。
 
-> **结论：**RideOff、CutIn、finalizer 和 Free 状态可以即时闭合，但状态完成不等于
-> 玩家骨骼动作或安全落点完成。已知的 `state=4`、`request=1` 与车辆 request `7`
-> 都不是玩家下车动作的充分且唯一入口。
+> **当前结论：**只即时闭合 RideOff、CutIn、finalizer 和 Free 状态，不等于玩家骨骼
+> 动作与安全落点完成。当前通过版本同步渐进推进 RideOff 叶与外层时钟，并把末端前
+> `0.1s` 交回原生；卡车驾驶位样本由原生 RideOff/RideVehicle OnExit 同帧进入 Basic，
+> 无 Fall 且移动有效。已知的 `state=4`、`request=1` 与车辆 request `7` 仍都不是玩家
+> 下车动作的充分且唯一入口。
 
 ## 已确认原生入口
 
@@ -22,9 +24,9 @@
 - `runtime+0x371 != 0` 会进入原生 operation 21 安全离车路径；
   `forceDetach=1` 仅在 `runtime+0xB8` 所指对象的 `+0x160 >= 0x14` 时形成另一入口。
 
-当前安全基线先完整执行第一次原生 RunPresentation，再调用终结器，并让动画 ready
-查询只在 Presentation TLS 中通过。这能快速进入 Free 并正常结束 CutIn，但不会取消
-已经建立的玩家下车动作。
+2026-07-26 的历史诊断基线先完整执行第一次原生 RunPresentation，再调用终结器，
+并让动画 ready 查询只在 Presentation TLS 中通过。它能快速进入 Free 并正常结束
+CutIn，但不会取消已经建立的玩家下车动作，因此不是当前快速下车实现。
 
 ## RideOff 状态完成与视觉完成的区别
 
@@ -274,6 +276,46 @@ FastRideOff pre-RideOff bypass complete current=0 next=0 flag=0
 
 本节中曾记录的 SHA-256
 `2B7BB51DE438BD7CB6210F0F711D0140640DA54CB7CFCAD60CA8062ED89ACFF5`
-只对应当时一次历史回退产物，已经被后续安全基线取代。当前部署基线以总览中的
-`9123E64B3C1A2E5932A5DE5D333ACA8DF3B7E57C976EDB730B7819EC882B11B3`
+只对应当时一次历史回退产物，已经被后续实现取代。当前部署以总览中的
+`56D19BE0DAFE7898BA2DA82AEF1575AE71A8677775502ABBC3FC42FDAF8E12E0`
 为准。
+
+## 2026-08-23：原生生命周期交接已闭合
+
+DS2.exe 当前 IDA 数据库中已经按实际行为命名以下入口：
+
+```text
+0x140FB3AF0  DSPlayerBasicActionPlugin_OnEnter
+0x141004F20  DSPlayerRideVehicleActionPlugin_OnExit
+0x140F4D290  DSPlayerActionPlugin_MarkComplete
+0x140FD0160  DSPlayerFallActionPlugin_TryActivate
+0x140FD0710  DSPlayerFallActionPlugin_OnEnter
+0x1411065F0  DSPlayerFallState_OnEnter
+```
+
+Basic 插件 vtable slot 1 的 `0x1400BD100` 固定返回 1，因此 Basic 是动作栈释放后的
+常驻可用回退，不需要 Mod 伪造其激活条件。`DSPlayerActionPlugin_MarkComplete` 会写
+`plugin+0x0A`；同时，`RideRuntime_UpdateDismountDetach` 的 operation 21 成功分支在
+`0x1410107CB` 自己调用该完成标记。因此旧手动 detach 候选并不是单纯漏写
+`plugin+0x0A`，真正问题是 Mod 在原生动作交接前抢先完成了 pending 状态与车辆分离。
+
+Fall 激活路径还给出了空间侧证据：`DSPlayerFallActionPlugin_TryActivate` 在
+`0x140FD0336` 取得 mover/contact 标量；只有该值处于 `[0, 0.1]` 才避开其中一条 Fall
+候选路径，负值或大于 `0.1` 会跳到 `0x140FD041A` 构造 reason `0xE3` 的候选。旧的
+严格末端加手动 detach 样本确实从 FallState OnEnter 调用点 `0x110694D` 进入 Fall，
+所以不能用强制 Free 代替完整原生交接。
+
+通过样本 `artifacts/boarding/fast_dismount_20260823_231008_715` 的决定性顺序是：
+
+```text
+elapsed=1094ms  callerRva=0xF97B56   RideOff OnExit
+elapsed=1094ms  callerRva=0x1004F88  RideVehicleActionPlugin OnExit
+elapsed=1094ms  callerRva=0xFB40B6   BasicActionPlugin OnEnter
+elapsed=1094ms                         CutIn Deactivate clean=1
+post window     callerRva=0x110694D   0 次
+```
+
+当前实现只同步加速 RideOff 叶区间和实际动态表时钟，并在 descriptor 末端前 `0.1s`
+停止额外推进。它不再调用手动 pending `3 -> 0` 路径，也不在 mover 根运动消费前请求
+operation 21。Basic 在两个原生 OnExit 的同帧进入，说明玩家动作所有权已经由游戏自身
+释放；后续 S 输入产生可见移动，进一步排除了“只改了动画状态但控制仍冻结”。

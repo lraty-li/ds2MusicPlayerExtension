@@ -1,15 +1,15 @@
 # 快速下车：ActionGraph 长结果与根运动时间区间
 
-日期：2026-07-26
+日期：2026-08-23
 
 返回[当前状态与知识索引](FastVehicleBoardingModImplementation.md)，或继续阅读
 [根运动与安全落点](FastVehicleRideOffRootMotionAndLanding.md)。
 
-> **结论：**fullgame 的长 descriptor 结果会在 RideOff 状态退出后继续推进。
-> DS2 宿主 evaluator 使用结果对象内的起止时间区间生成 motion transform；把该区间
-> 终点一次扩展到 descriptor duration 可以立即完成视觉动作并落到车旁，但用户实际
-> 操控确认玩家动作随后完全卡住。该候选已证伪，不能作为快速下车实现。当前调用边界
-> 仍不提供可直接提取并安全完成玩家动作生命周期的独立末端接口。
+> **当前结论：**把长 descriptor 一次强制到严格末端会留下玩家动作冻结，不能作为
+> 快速下车实现。已经通过运行验证的实现改为每次最多额外推进 `0.25s`，同时把同一份
+> 额外时间加入实际 RideOff 动态表的 post-evaluate 时钟，并在 descriptor 终点前
+> `0.1s` 停止注入。最后阶段由原生生命周期完成；卡车驾驶位样本在约 `1.094s` 原生
+> 退出 RideOff、同帧进入 Basic，后续移动输入有效且没有进入 Fall。
 
 ## 长 descriptor 与 fullgame 结果传播
 
@@ -222,15 +222,17 @@ duration=2.1021 sync=2.1021 complete=1
 ```
 
 按 `capture_manifest.csv` 的实际中点，117ms 已完全离开座位并位于车旁落地轨迹，
-320ms、726ms 均无车辆下车姿态、冻结或车顶错误落点。由此确认这个现有 Graph
-求值调用能够消费完整剩余时间区间并生成视觉末端；它无需构造脱离活动 Graph 上下文
-的 scratch 结果，也无需直接写玩家世界坐标，但后续操控证据证明这种消费并不安全。
+320ms、726ms 均无车辆下车姿态或车顶错误落点；这些静态帧不能判断玩家控制是否恢复。
+由此确认这个 Graph 求值调用能够消费完整剩余时间区间并生成视觉末端；它无需构造脱离
+活动 Graph 上下文的 scratch 结果，也无需直接写玩家世界坐标，但后续操控证据证明
+这种消费并不安全。
 
 但该关键帧结论并不等于功能完成。用户后续实际操控确认，下车后玩家动作完全卡住，
 无法执行任何动作。这证明一次性消费完整剩余区间虽然生成了正确视觉末端和空间位移，
 却没有让玩家动作状态机恢复到可继续接受动作的状态。该候选已经判定失败并撤回，
-不得通过视觉落地或 `complete=1` 将其重新认定为成功。当前源码、工程和测试脚本均
-已移除 `RideOffGraphEndpoint`，游戏目录已恢复 328192 字节的无冻结安全基线。
+不得通过视觉落地或 `complete=1` 将其重新认定为成功。当时源码、工程和测试脚本曾
+移除 `RideOffGraphEndpoint` 并恢复 328192 字节诊断基线；当前重新加入的是本文件末节
+记录的同步渐进推进实现，不是这一严格末端候选。
 
 ### `mode=0` 的严格越界完成条件
 
@@ -295,13 +297,15 @@ fullgame 的 RideOff 长结果选择器还确认了一个容易混淆的传播�
 `0x1836070D2` 确认当前动态表条目 key 为 `0x0184F189` 后，于 `0x183607217`
 调用该子图；子图已据此命名为
 `PlayerActionGraph_Subgraph_0184F189_Evaluate`。它把最终结果写回动态表条目的
-`entry+0x38`；外层遍历完这张步长 `0xB8` 的动态表后，在
-`0x183607896` 把表和该条目结果交给 fullgame 运行时解析槽
-`ActionGraphDynamicTable_PostEvaluate_Ptr`。此前标注的 `0x18360CCE8` 是同一巨型
-生成函数中后续另一张动态表的同类调用，并不属于已由 key 和子图调用共同验证的
-RideOff 表；该旧归属现已撤回。`CoreLibraryInitializer` 以哈希 `0x49589132`
-解析这个槽，fullgame 文件内没有其实现。通用动态表 evaluator `sub_1801D0828`
-也在求值全部条目后调用同一槽，把调用方 ActionGraphResult 作为输出，随后才清理表状态。
+`entry+0x38`。定点控制流和运行时返回地址共同纠正了旧归属：从 `0x183607217`
+返回后会经无条件跳转离开该局部表，不会顺序落入 `0x183607896`；后者属于 key
+`0x4404D873` 的另一张局部动态表。实际 RideOff 路径最终在公共出口
+`0x18360CCEB` 调用 fullgame 运行时解析槽
+`ActionGraphDynamicTable_PostEvaluate_Ptr`，精确返回地址为 `0x18360CCF1`。
+该调用以 `RCX` 传动态表、`XMM1` 传帧增量、`R8` 传当前 `entry+0x38`。
+`CoreLibraryInitializer` 以哈希 `0x49589132` 解析这个槽，fullgame 文件内没有其实现。
+通用动态表 evaluator `sub_1801D0828` 也在求值全部条目后调用同一槽，把调用方
+ActionGraphResult 作为输出，随后才清理表状态。
 
 对 `PlayerActionGraph_Subgraph_0184F189_Evaluate` 的精确控制流复核进一步确认：
 从 RideOff 叶 evaluator 返回点 `0x18366F423` 到第一层选择合并返回点
@@ -345,8 +349,8 @@ RideOff 表的实例指针现也已从顶层求值入口闭合。`PlayerActionGr
 子对象，并将其写为 Stage2 的 `arg_69B0`。Stage2 在 `0x1831D0E10` 把该参数写入
 调用 `sub_183594DF9` 所用的栈参数位置；后者于 `0x183595F35` 从 `arg_5B8`
 读取同一指针，再把对应局部变量 `v1912` 作为 `sub_183605C47` 的第 17 个参数传入。
-这正是 `sub_183605C47` 中执行 `0x0184F189` 分派及 `0x183607896`
-post-evaluate 的队列。
+这正是 `sub_183605C47` 中执行 `0x0184F189` 分派，并最终到达公共出口
+`0x18360CCEB` post-evaluate 的队列。
 
 Stage2 还在 `0x18318C135` 直接读取同一个 `arg_69B0`，以
 `RCX=queue`、`EDX=0x78EC48BF`、`R8=0` 调用 `qword_1884D2108`。初始化器在
@@ -468,8 +472,8 @@ ActionGraphResult，返回后立即再以 `0x73` 把临时结果向上合并。�
 表清理通知，而是位于动态条目求值与上层结果之间的实际结果处理边界。
 
 失败候选只包装叶 `ActionGraph_EvaluateDescriptorToResult_Ptr` 并改写该叶
-`timeState` 的请求区间；它没有改动外层 `PostEvaluate` 调用。fullgame 汇编确认
-`0x183607896` 仍把保存于 `XMM6` 的原始 Graph 单帧增量传入 `XMM1`。因此失败帧中
+`timeState` 的请求区间；它没有改动外层 `PostEvaluate` 调用。定点汇编与运行命中确认，
+实际 RideOff 调用 `0x18360CCEB` 仍把原始 Graph 单帧增量传入 `XMM1`。因此失败帧中
 同时存在两个都真实但不同层级的时间推进：
 
 ```text
@@ -482,7 +486,7 @@ RideOff 叶 descriptor：约 0.0125s -> 2.1021s
 它确认 `deltaSeconds` 只推进队列时钟，本身不是一个动作退役 API。
 
 传给 `PostEvaluate` 的第 3 参数也不是原始叶结果。`0x1836742D3` 的最终 `0x73`
-合并目标就是当前动态条目的 `entry+0x38`，随后 `0x183607896` 把同一个
+合并目标就是当前动态条目的 `entry+0x38`，随后公共出口 `0x18360CCEB` 把同一个
 `entry+0x38` 作为 `outputResult` 交给宿主槽。由于最终合并不包含 `0x04/0x08`，
 该条目收到的是叶 `reachedEnd` 和内容/payload，保留的却是条目自己原有的同步区间与
 sync-map。也就是说宿主 post-evaluate 从未直接收到 wrapper 改写过的叶 timeState
@@ -516,7 +520,7 @@ DS2 的动画导出注册表已经把 fullgame 中的两个运行时槽闭合到
 `ActionGraph_StatesQueue_MergeEventTagActivity`。它逐 result item、逐活动队列项
 合并 16 字节 event/tag 记录及当前／过渡活动标志，并把结果发布到
 `ActionGraphResult+0x38`。它不删除队列项，也不改 count、state key 或状态时钟。
-因此 fullgame `0x183607896` 的宿主 post-evaluate 边界已闭合为“推进状态时钟、求值并
+因此 fullgame `0x18360CCEB` 的宿主 post-evaluate 边界已闭合为“推进状态时钟、求值并
 合并 `0x73` 结果、输出一次性同步重基准、合并 event/tag 活动性”；其中没有隐藏的
 当前 action 退役步骤。真正的 RideOff 动作释放判断位于生成式 fullgame 逻辑。
 
@@ -539,8 +543,8 @@ DS2 的动画导出注册表已经把 fullgame 中的两个运行时槽闭合到
 ```
 
 这解释了为什么 `end=1`、正确根运动和正确车旁落地可以同时成立，而玩家动作仍保持
-占用。当前已确认的是失败候选造成了这三层不同步；尚未确认应把哪一个字段改成何值，
-因此这里不记录具体修补方案。
+占用。该阶段已经确认失败候选造成了这三层不同步；后续通过同步推进叶与外层队列时钟，
+并保留终点前的原生交接阶段解决，未直接写入任何未知完成字段。
 
 `ActiveStatesQueue` 的导出实现还确认了当前状态项的维护规则。
 `ActiveStatesQueue_PushActiveState`（`0x14021F8B0`）按 `entry+0x30` 的状态哈希
@@ -568,8 +572,8 @@ DS2 的 `SetCurrentStateEventSpaceTimeInSMContext`（`0x1421BC7C0`）精确读�
 对应导出 `ActiveStatesQueue_RemoveActiveStates`（`0x1421959B0`）把索引加一后调用
 原生区间擦除器，因此其精确语义是删除 `[0, index]`（含 index）的活动状态。它与
 `StatesQueueUpdateTime` 自动清理旧过渡项使用同一个资源释放和数组搬移实现。当前尚未
-确认 RideOff 转出条件读取 `+0xA0`，还是等待另一条 Graph 事件；需要在 fullgame
-生成图的局部调用点继续闭合，不能仅凭“该字段会累计”就把它写成解锁字段。
+确认 RideOff 转出条件单独读取 `+0xA0`，还是还依赖另一条 Graph 事件；现有实现也没有
+把该字段直接写成解锁值，而是仅把实际传给宿主的帧增量增加相同的叶加速量。
 
 ### `reachedEnd=1` 仍未释放玩家动作
 
@@ -592,7 +596,7 @@ duration=2.1021 sync=2.1021 end=1 complete=1
 
 该 334336 字节候选 SHA-256 为
 `9418291192221BA395F3EAB1518C0C6C5C13598B92B61C5DDD69AE06FACB1432`，
-已经撤回部署；游戏目录恢复 328192 字节无冻结安全基线。
+已经撤回部署；当前部署状态以主索引的“当前部署状态”节为准。
 
 本次日志还证伪了把 `outputResult+0x40` 直接当成 motion item 指针并从其
 `+0x10/+0x14/+0x18` 读取平移的解释：该诊断得到约 `3.02e23` 量级的无效值，与画面
@@ -600,3 +604,67 @@ duration=2.1021 sync=2.1021 end=1 complete=1
 `GraphAnimationManager_EvaluateFrame` 与
 `AnimationGraph_MaterializeResultToPoseContext` 所确认的标准结果物化链，不能把
 顶层 `outputResult+0x40` 自行命名为可直接解引用的 motion item。
+
+### 同一 RideOff key 分布在三张独立动态表
+
+`sub_183605C47` 对状态 key `0x0184F189` 有三个独立比较点和三套队列／结果：
+
+```text
+0x183606747 -> 0x183606D6A
+  descriptorPack+0x35A8, mode=0, evaluatePose=0
+
+0x1836070D2 -> 0x183607217
+  PlayerActionGraph_Subgraph_0184F189_Evaluate
+  内含已验证的 2.1021s 姿态 descriptor
+
+0x183609DB6 -> 0x183609EF1
+  descriptorPack+0x3538, mode=0, evaluatePose=0
+```
+
+第一、第三条各自把结果写入本动态表当前 `0xB8` 队列项的 `entry+0x38`，并走各自的
+`ActionGraphDynamicTable_PostEvaluate`；它们不是中间姿态子图的重复调用。由此确认
+RideOff 的生成图结果至少分为一条姿态层和两条非姿态伴随层。此前只推进中间长
+descriptor 的失败候选没有推进另外两层。
+
+但运行样本 `dismount_20260726_185846_956` 已排除把这两个静态分支纳入快速下车
+实现。修正会话观测范围后，RideOff 窗口共记录 70 次精确中间姿态调用和 32 次其他
+Graph descriptor 调用；`0x183606D6A`、`0x183609EF1` 两个非姿态同-key call site
+均为零命中。因此三处虽然共享状态 key，只有中间表在本次实际 RideOff 路径活动；
+冻结不是因为旧候选漏推进这两条未激活 descriptor，不能把它们加入 Mod。
+
+同一样本还首次记录了自然末端后的精确 evaluator 输入。跨过 2.1021 秒后，中间
+ descriptor 仍继续逐帧调用；其输入 timeState 区间终点从 2.11045 秒继续增长到
+2.4024 秒，而输出始终为 `duration=sync=2.1021`、`reachedEnd=1`。因此自然完成
+不会停止该 descriptor 的求值，也不会把输入播放头固定在 duration；它依赖的是继续
+前进的外层时间线。三个比较点、两个伴随求值点和实际零命中限定均已记录。
+
+## 2026-08-23：同步推进与原生终点前交接
+
+当前实现只处理运行时精确识别的 RideOff 长 descriptor。每次求值把请求区间终点最多
+增加 `0.25s`，但上限是 `duration - 0.1s`；实际增加量同时暂存在线程局部会话中。
+同一帧到达 `0x18360CCEB` 时，动态表 wrapper 只对匹配会话和目标表把这份增加量加入
+原始 `deltaSeconds`，随后调用原函数。这样叶播放头和最新状态项 `+0xA0` 时钟按同一
+额外量前进，而不是只让根运动姿态跳到末端。
+
+通过样本 `artifacts/boarding/fast_dismount_20260823_231008_715` 的四次已记录推进为：
+
+```text
+elapsed=15ms   leaf 0..0.0125125 -> 0.262513   table delta 0.0125125+0.25
+elapsed=484ms  leaf 0.733817..0.742159 -> 0.992159
+elapsed=750ms  leaf 1.23824..1.24658 -> 1.49658
+elapsed=844ms  leaf 1.58834..1.60085 -> 1.85085
+```
+
+最后一次仍低于 `duration=2.1021` 的原生交接上限 `2.0021`；实现没有伪造严格
+`reachedEnd`，也没有在 mover 消费根运动前手动调用 operation 21 或把 pending
+`3 -> 0`。在 `elapsed=1094ms`，原生代码依次从 RideOff OnExit 调用点
+`0xF97B56`、RideVehicleActionPlugin OnExit 调用点 `0x1004F88` 和 Basic OnEnter
+调用点 `0xFB40B6` 请求动画状态 `1`，三次记录均位于同一世界坐标
+`851.7032313,-4017.35567,102.2153168`。因此退出发生在原生允许的终点前窗口，
+不是 Mod 强制完成后再模拟状态切换。
+
+测试随后按住 S，并在目标 `25/50/100/200/400ms` 的短窗口取帧；角色在 100ms 已有
+明确转身/迈步，400ms 已离开原位置。日志中没有 Fall 入口调用点 `0x110694D`。
+该样本最终返回 `FAST_DISMOUNT_TRACE_OK`，证明当前卡车驾驶位路径同时满足视觉加速、
+原生动作释放、地面落点和输入恢复。当前已验证 ASI 为 343552 字节，SHA-256：
+`56D19BE0DAFE7898BA2DA82AEF1575AE71A8677775502ABBC3FC42FDAF8E12E0`。

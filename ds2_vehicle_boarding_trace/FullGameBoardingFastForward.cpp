@@ -4,6 +4,7 @@
 #include "FastBoardingSession.h"
 #include "PatternScan.h"
 #include "RideOffDescriptorTrace.h"
+#include "RideOffGraphEndpoint.h"
 #include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 
@@ -141,13 +142,17 @@ void __fastcall HookEvaluateDescriptor(
 {
     const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
     const uint32_t leaf = LeafMask(caller);
-    const uint32_t rideOffSession = RideOffSession::CurrentId();
+    const uint32_t rideOffSession = RideOffSession::ActiveId();
     uint32_t claimedSession = 0;
     const bool eligible = leaf && mode == 0 && timeScale == 1.0f &&
         evaluatePose == 1 && FastBoardingSession::CanFastForwardAnimation() &&
         ClaimLeafForSession(leaf, descriptor, claimedSession);
     const float effectiveScale = eligible ? kFastTimeScale : timeScale;
+    RideOffGraphEndpoint::Prepare(*g_logger, caller, output, descriptor,
+        mode, timeScale, evaluatePose);
     g_original(output, descriptor, mode, effectiveScale, evaluatePose);
+    RideOffGraphEndpoint::ObserveResult(
+        *g_logger, caller, output, descriptor);
     if (rideOffSession) {
         ResultState observed = {};
         ReadResult(output, observed);
@@ -240,6 +245,8 @@ bool InstallWhenLoaded()
             approachCall + kIndirectCallSize;
     }
 
+    const uintptr_t rideOffReturn = RideOffGraphEndpoint::FindCallerReturn(
+        textStart, textSize, slotAddress);
     auto* slot = reinterpret_cast<void* volatile*>(slotAddress);
     void* original = *slot;
     if (!original || !IsExecutable(reinterpret_cast<uintptr_t>(original)))
@@ -250,6 +257,11 @@ bool InstallWhenLoaded()
         slot, reinterpret_cast<void*>(&HookEvaluateDescriptor), original);
     if (replaced != original)
         return false;
+
+    if (rideOffReturn)
+        RideOffGraphEndpoint::Enable(rideOffReturn, *g_logger);
+    else
+        g_logger->Log("FastRideOff graph endpoint unavailable; native fallback");
 
     FastBoardingSession::ReportComponentReady(
         FastBoardingSession::kAnimationComponent);

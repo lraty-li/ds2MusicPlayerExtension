@@ -94,8 +94,8 @@ function Wait-LogLine {
         [string]$Label,
         [int]$StartLine = 0
     )
-    $deadline = [Environment]::TickCount64 + $TimeoutMs
-    while ([Environment]::TickCount64 -lt $deadline) {
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($stopwatch.ElapsedMilliseconds -lt $TimeoutMs) {
         Assert-GameAlive $Label
         $lines = Get-LogLines
         for ($i = [Math]::Max(0, $StartLine); $i -lt $lines.Count; $i++) {
@@ -184,9 +184,13 @@ if (!(Wait-LogLine "RideOn Update vtable observer installed" 30000 `
         "RideOn Update vtable observer")) {
     Stop-FailedTest "RideOn Update vtable observer was not installed before boarding"
 }
-if (!(Wait-LogLine "FastRideOff pre-RideOff state bypass installed" 30000 `
-        "pre-RideOff state bypass")) {
-    Stop-FailedTest "pre-RideOff state bypass was not installed"
+if (!(Wait-LogLine "RideOff staged Enter/Update/RunPresentation hooks installed" `
+        30000 "RideOff lifecycle hooks")) {
+    Stop-FailedTest "RideOff lifecycle hooks were not installed"
+}
+if (!(Wait-LogLine "FastRideOff graph endpoint ready" 30000 `
+        "RideOff graph endpoint")) {
+    Stop-FailedTest "RideOff graph endpoint was not ready"
 }
 
 $captureDir = Join-Path $PSScriptRoot "artifacts\boarding"
@@ -248,17 +252,25 @@ $rideOffLines = @(Get-LogLines | Select-Object -Skip $dismountStartLine)
 $rideOffLines | Where-Object { $_ -match 'RideOff|CutIn|TruckSeat' } |
     ForEach-Object { Write-Host "  $_" }
 foreach ($fragment in @(
-    "FastRideOff pre-RideOff operation-21 detach requested",
-    "FastRideOff pre-RideOff bypass complete current=0 next=0 flag=0"
+    "RideOff Enter vtable original result=",
+    "FastRideOff graph endpoint prepared",
+    "FastRideOff graph endpoint complete",
+    "FastRideOff endpoint player pose committed",
+    "FastRideOff native finalizer gate opened",
+    "RideOff animation state requested=1 callbackScope=0 endpointCompletion=1",
+    "RideOff CutIn Deactivate clean=1"
 )) {
     if (!($rideOffLines | Where-Object { $_.Contains($fragment) })) {
-        Stop-FailedTest "missing pre-RideOff bypass evidence: $fragment"
+        Stop-FailedTest "missing staged RideOff evidence: $fragment"
     }
 }
-if ($rideOffLines | Where-Object {
-        $_.Contains("RideOff Enter vtable original result=") }) {
-    Stop-FailedTest "RideOff OnEnter ran despite the pre-state bypass"
+if ($rideOffLines | Where-Object { $_.Contains("pre-RideOff bypass") }) {
+    Stop-FailedTest "obsolete pre-RideOff bypass ran"
 }
+$controlCapture = $SI::KeyScanAndCapture(
+    $script:gameHwnd, 0x11, 900, $captureDir, "dismount_control")
+if (!$controlCapture) { Stop-FailedTest "dismount W control capture failed" }
+Write-Host "  Captured post-dismount W probe: $controlCapture"
 
 for ($quitAttempt = 1; $quitAttempt -le 3; $quitAttempt++) {
     Write-Host "Quit sequence attempt $quitAttempt/3"
