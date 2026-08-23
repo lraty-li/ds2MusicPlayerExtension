@@ -18,6 +18,7 @@ $stageRoot = Join-Path $buildRoot "stage"
 $gameRoot = Join-Path $stageRoot $packageName
 $scriptsDir = Join-Path $gameRoot "scripts"
 $extensionDir = Join-Path $stageRoot "browser-extension"
+$firefoxExtensionDir = Join-Path $stageRoot "browser-extension-firefox"
 $cacheDir = Join-Path $buildRoot "cache"
 $binDir = Join-Path $buildRoot "bin"
 $bc7eDll = Join-Path $repoRoot "third_party\bc7e\bin\win64\ds2_jacket_bc7e.dll"
@@ -112,6 +113,8 @@ function Copy-BrowserExtension {
         "page_control.js",
         "adapters\youtube.js",
         "adapters\netease.js",
+        "adapters\spotify.js",
+        "adapters\bilibili.js",
         "adapters\media_session_hook.js",
         "offscreen.html",
         "offscreen_chromium_capture.js",
@@ -124,6 +127,33 @@ function Copy-BrowserExtension {
     New-Item -ItemType Directory -Path $extensionDir -Force | Out-Null
     foreach ($file in $files) {
         Copy-RequiredFile (Join-Path $source $file) (Join-Path $extensionDir $file)
+    }
+}
+
+function Copy-FirefoxExtension {
+    $source = Join-Path $repoRoot "tab-audio-recorder-mvp\firefox"
+    $files = @(
+        "manifest.json",
+        "background.js",
+        "jacket_fetch.js",
+        "stream_host.js",
+        "media_control.js",
+        "metadata_transfer.js",
+        "jacket_transfer.js",
+        "content_capture.js",
+        "page_capture.js",
+        "page_control.js",
+        "adapters\youtube_music.js",
+        "adapters\youtube.js",
+        "adapters\netease.js",
+        "adapters\spotify.js",
+        "adapters\bilibili.js",
+        "adapters\media_session_hook.js",
+        "README.md"
+    )
+    New-Item -ItemType Directory -Path $firefoxExtensionDir -Force | Out-Null
+    foreach ($file in $files) {
+        Copy-RequiredFile (Join-Path $source $file) (Join-Path $firefoxExtensionDir $file)
     }
 }
 
@@ -183,6 +213,7 @@ if (-not $SkipAsiLoaderDownload) {
 }
 
 Copy-BrowserExtension
+Copy-FirefoxExtension
 Write-InstallReadme
 
 $stamp = if ([string]::IsNullOrWhiteSpace($PackageVersion)) {

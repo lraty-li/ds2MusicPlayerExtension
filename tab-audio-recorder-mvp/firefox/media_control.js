@@ -1,5 +1,6 @@
 const PAGE_CONTROL_FILES = [
   "page_control.js",
+  "adapters/youtube_music.js",
   "adapters/youtube.js",
   "adapters/netease.js",
   "adapters/spotify.js",
@@ -120,17 +121,27 @@ function summarizeProbes(results) {
 }
 
 function summarizeControlResults(command, results) {
-  const summary = { ok: true, command, media: 0, changed: 0, clicked: 0, already: 0 };
+  const summary = {
+    ok: true,
+    command,
+    media: 0,
+    changed: 0,
+    clicked: 0,
+    already: 0,
+    debug: []
+  };
   for (const item of results || []) {
     if (!item || !item.result) continue;
     summary.media += item.result.media || 0;
     summary.changed += item.result.changed || 0;
     summary.clicked += item.result.clicked || 0;
     summary.already += item.result.already || 0;
+    if (item.result.debug) summary.debug.push(item.result.debug);
   }
   console.log(
     `DS2 media ${command}: media=${summary.media} changed=${summary.changed} ` +
-    `clicked=${summary.clicked} already=${summary.already}`
+    `clicked=${summary.clicked} already=${summary.already} ` +
+    `debug=${JSON.stringify(summary.debug)}`
   );
   if (summary.changed === 0 && summary.already === 0) {
     summary.ok = false;

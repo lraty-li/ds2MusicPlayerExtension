@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "DS2 Tab Audio Recorder MVP",
+  "description": "Capture adapter-supported Firefox page audio and stream PCM to the DS2 runtime plugin.",
+  "version": "1.1",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* https:;"
+  },
+  "host_permissions": [
+    "ws://127.0.0.1/*",
+    "http://127.0.0.1/*",
+    "https://*.youtube.com/*",
+    "https://*.youtube-nocookie.com/*",
+    "https://music.163.com/*",
+    "https://*.music.163.com/*",
+    "https://*.music.126.net/*",
+    "https://*.bilibili.com/*",
+    "https://*.hdslb.com/*",
+    "https://open.spotify.com/*",
+    "https://*.spotify.com/*",
+    "https://*.scdn.co/*",
+    "https://i.ytimg.com/*",
+    "https://*.googleusercontent.com/*"
+  ],
+  "background": {
+    "scripts": [
+      "media_control.js",
+      "jacket_fetch.js",
+      "stream_host.js",
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://open.spotify.com/*",
+        "https://*.spotify.com/*"
+      ],
+      "js": [
+        "page_control.js",
+        "adapters/media_session_hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "Stream this Firefox page to DS2"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ds2-music-player@example.invalid",
+      "strict_min_version": "109.0"
+    }
+  }
+}

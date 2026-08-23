@@ -13,6 +13,8 @@ English
 4. Browser extension:
    Open Chrome/Edge extensions page, enable Developer mode, choose Load
    unpacked, and select the browser-extension folder.
+   For Firefox, open about:debugging#/runtime/this-firefox, choose Load
+   Temporary Add-on, and select browser-extension-firefox\manifest.json.
 5. Open a browser tab that plays audio, click the extension icon, then start
    the game. WAIT means the extension is waiting for the game plugin; PCM
    means audio is streaming.
@@ -35,6 +37,8 @@ English
 4. 浏览器扩展：
    打开 Chrome/Edge 扩展管理页，启用开发者模式，选择“加载已解压的扩展”，
    然后选择 browser-extension 文件夹。
+   Firefox 打开 about:debugging#/runtime/this-firefox，选择“临时载入附加组件”，
+   然后选择 browser-extension-firefox\manifest.json。
 5. 打开一个正在播放音频的浏览器标签页，点击扩展图标，再启动游戏。
    WAIT 表示扩展正在等待游戏插件；PCM 表示正在推流。
 6. 扩展处于受控模式：点击图标只负责开始或停止推流；暂停/恢复由游戏内

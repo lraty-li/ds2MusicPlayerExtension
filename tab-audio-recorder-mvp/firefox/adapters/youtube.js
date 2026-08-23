@@ -10,6 +10,7 @@
     probe(command) {
       const ytmusicState = readYtMusicButtonState();
       if (ytmusicState) {
+        console.log(`DS2 youtube music probe command=${command} state=${ytmusicState}`);
         const wants = command === "pause" ?
           ytmusicState === "playing" : ytmusicState === "paused";
         return { score: wants ? 230 : 120, ytmusicState };
@@ -130,6 +131,7 @@
     if (!button) return null;
 
     const state = readYtMusicButtonState(button);
+    console.log(`DS2 youtube music control command=${command} state=${state}`);
     const result = tools.emptyResult();
     result.media = 1;
     if (command === "pause" && state === "paused") {

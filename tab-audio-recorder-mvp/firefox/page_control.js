@@ -22,11 +22,14 @@
 
   window.__ds2PageMediaControl = {
     async control(command) {
+      let lastResult = null;
       for (const adapter of selectAdapters()) {
         const result = await adapter.control(command);
         if (hasOutcome(result)) return result;
+        if (adapter.name === "youtubeMusic" && result && result.media > 0) return result;
+        if (result) lastResult = result;
       }
-      return emptyResult();
+      return lastResult || emptyResult();
     },
     metadata() {
       let best = { score: 0, title: "", artist: "", host: location.hostname };
