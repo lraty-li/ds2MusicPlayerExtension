@@ -5,7 +5,6 @@
 #include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 
-#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <sstream>
@@ -21,8 +20,6 @@ constexpr const char* kRideOffCallSignature =
 constexpr uintptr_t kCallOffset = 0x3E;
 constexpr uintptr_t kCallSize = 6;
 constexpr bool kEnableEndpointMutation = true;
-constexpr double kMaximumAdvanceSeconds = 0.25;
-constexpr double kNativeCompletionLeadSeconds = 0.1;
 
 std::atomic<uintptr_t> g_callerReturn{0};
 SRWLOCK g_traceLock = SRWLOCK_INIT;
@@ -165,17 +162,15 @@ void Prepare(
             output, descriptor, session)) {
         return;
     }
-    const double nativeHandoffEnd =
-        static_cast<double>(input.duration) -
-        kNativeCompletionLeadSeconds;
-    if (input.end >= nativeHandoffEnd)
-        return;
-    const double steppedEnd = (std::min)(
-        input.end + kMaximumAdvanceSeconds, nativeHandoffEnd);
-    const float requestedEnd = static_cast<float>(steppedEnd);
+    const float requestedEnd = input.duration;
     const double requestedEndDouble = static_cast<double>(requestedEnd);
-    const bool written = std::isfinite(requestedEnd) &&
-        requestedEndDouble > input.end &&
+    if (!std::isfinite(requestedEnd) ||
+        requestedEndDouble <= input.end) {
+        RideOffSession::ReleaseGraphEndpointClaim(
+            output, descriptor, session);
+        return;
+    }
+    const bool written =
         VehicleSeatTrace::WriteValue<double>(
             input.timeState + 0x10, requestedEndDouble) &&
         VehicleSeatTrace::WriteValue<float>(

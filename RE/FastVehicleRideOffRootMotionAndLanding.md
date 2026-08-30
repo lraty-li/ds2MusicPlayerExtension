@@ -347,7 +347,7 @@ fullgame 的不透明结果里。不过这条标准链仍只物化本次求值�
 这条失败证明确立的约束仍有效：不能把 operation 21、side `0/1/2`、当前
 pose-motion 缓存、当前 physics 坐标或观察到的当帧位移单独当成最终落点。
 
-## Graph 末端区间：视觉落地但操控冻结
+## Graph 末端区间：空中落点与操控冻结
 
 视觉样本 `dismount_20260726_115305_099` 没有直接写世界坐标，也没有提交前 detach。
 在 RideOff 活动会话和 fullgame 返回 RVA `0x366F423` 同时匹配时，它保留时间状态
@@ -355,15 +355,20 @@ pose-motion 缓存、当前 physics 坐标或观察到的当帧位移单独当�
 evaluator。结果立即成为 `duration=2.1021 sync=2.1021 complete=1`。
 
 该结果随后沿本章已闭合的原生物化链写入 SkinnedModel 根运动双缓冲，再由
-DSPlayerMover/PhysicsCharacterMover 消费。`capture_manifest.csv` 的实际中点为
-117ms、320ms、726ms：117ms 已完全离开座位并进入车旁落地轨迹；320ms、726ms
-没有车辆下车姿态、冻结或车顶错误落点。由此确认正确落地所需空间信息不必作为独立
-未来坐标读取；原生 evaluator 对完整剩余时间区间生成的 motion transform 已包含它。
+DSPlayerMover/PhysicsCharacterMover 消费。旧分析曾根据 117ms、320ms、726ms 三张
+截图把它判断成“车旁落地”，但截图视角无法给出碰撞体或 Entity 的实际高度；用户的
+操控测试只确认玩家动作冻结，没有证明落点正确。
 
-用户随后的实际操控测试确认，视觉落地后玩家动作完全卡住，无法执行任何动作。因此
-本节只证明了空间落点与视觉动作能够一次推进到末端，不证明玩家动作生命周期安全
-完成。Graph 末端区间候选已经判定失败并已从源码、工程、测试脚本和游戏目录撤回；
-不能用正确落点掩盖操控冻结。
+2026-08-30 的同路径复测
+`artifacts/boarding/fast_dismount_20260830_121409_480` 加入了同帧 Entity／当前 proxy
+坐标。严格末端姿态在 `31ms` 消费后，两者都位于 `Z=104.919`，差值与
+`mover+0x150` 偏移均为零；稳定地面实际为约 `Z=102.215`。`47ms` 随即由
+`callerRva=0x110694D` 请求 Fall，`406ms` 降到 `Z=102.368`，直到 `2500ms` 才到
+`Z=102.215` 并进入 Basic。由此确认严格 Graph 末端本身也是空中落点；旧截图结论
+错误，不能再把该候选作为正确空间落点的证据。
+
+Graph 末端区间候选同时存在空中落点和动作生命周期冻结，已经判定失败并从游戏目录
+撤回。
 
 ## 安全诊断基线仍执行原生下车姿态
 
@@ -402,3 +407,65 @@ OnExit、RideVehicleActionPlugin OnExit 与 Basic OnEnter；三次调用看到�
 `148ms`（目标 100ms）帧已出现明确转身/迈步，实际 `429ms`（目标 400ms）帧已离开
 原位置。这里的移动不是由残余根运动推断，而是退出后主动输入与连续画面共同验证。
 由此，当前卡车驾驶位样本已经同时闭合车旁落点、Basic 接管、Fall 缺席和玩家控制恢复。
+
+## 2026-08-30：`duration-0.1s` 加代理扫掠候选失败
+
+人工复测确认该候选并未把玩家稳定放到地面：画面表现为角色瞬移到车前方空中，
+随后自然落下。测试日志、被否决的 ASI 与当次完整日志保存在
+`artifacts/boarding/manual_air_teleport_20260830_120201`。
+
+日志直接区分了碰撞代理位置与玩家 Entity 位置：
+
+- `11:59:37.034` 的最后一次强制扫掠把 proxy `0x258C5889D80` 保持在
+  `Z=101.843`；
+- `29ms` 后的原生 RideOff OnExit（`callerRva=0xF97B56`）看到的玩家 Entity
+  却仍为 `Z=104.760`，不能把前一个 proxy 坐标当成同一时刻的玩家落点；
+- 同一个 `109ms` 时间点随后由 `callerRva=0x110694D` 请求 animation state `3`，
+  Entity 仍为 `Z=104.758`。因此此前“没有进入 Fall”的结论也是错误的；
+- 到 `468ms`，Entity 才降到 `Z=102.337`；到 `2156ms` 才稳定在
+  `Z=102.216` 并再次进入 Basic。这个连续变化与人工看到的空中下落完全一致。
+
+静态链也说明了原判断为什么无效。`PhysicsCharacterMoverProxy_UpdateMovement`
+`0x14247FCC0` 只在代理锁内推进 proxy `+0x110`，并把该坐标转发给底层 character
+mover。玩家 Entity 的世界位置是在外层普通 mover 路径 `sub_140ECECA0` 中重新读取
+当前代理坐标后，于 `0x140ECF703` 另行提交到 `Entity+0xE8`。Mod 额外直接调用一次
+proxy Update 并不执行这段 Entity 提交；本次日志中也不存在预期的
+`FastRideOff exit grounding physics sweep`，说明 OnExit 时的额外刷新实际没有成功。
+
+因此，`Basic` 状态、代理接触或测试流程完成都不能替代可见 Entity 轨迹验证。
+`duration-0.1s` 加 5 米代理向下扫掠候选已经判定失败并从游戏目录撤下，不能作为
+稳定落地实现。
+
+同日的严格末端加原生 `>10s` 兜底完成候选
+`artifacts/boarding/fast_dismount_20260830_121409_480` 进一步排除了“只修生命周期”
+的做法：Graph 完整末端、队列时钟同步和 mover 姿态消费都按顺序完成，RideOff 也在
+`47ms` 进入 OnExit；但此时 Entity 与当前 proxy 同为 `Z=104.919`，随后立即进入
+Fall，`2500ms` 才落地并由 Basic 接管。严格末端并不包含自然下车期间逐帧物理／重力
+累积出来的稳定地面结果。
+
+## 2026-08-30：终点姿态后的同帧原生碰撞提交
+
+样本 `artifacts/boarding/fast_dismount_20260830_123237_847` 不再等待异步 Graph 输出
+报告 `reachedEnd`。该回报在此前运行中曾于 `31ms` 出现，也曾延迟到 `266ms`；等待它
+会让已经位于车外空中的玩家持续可见。新路径在目标 endpoint 已认领且队列时钟同步后，
+让首个终点姿态先经过原生 mover，再使用同一活动
+`PhysicsCharacterMoverProxy_UpdateMovement` 的参数执行 5 米垂直向下输入。只有实际
+下降距离小于 5 米、即原生碰撞确实截断扫掠时，才把 proxy 的截断坐标按原生
+`Entity+0x2A8` 锁和 `Entity+0x98` dirty-bit 顺序提交给玩家 Entity，并开放 RideOff
+原生 `>10s` 完成分支。
+
+本次同帧快照记录到：
+
+- `16ms` 的终点 mover 前，Entity 与活动 proxy 均为 `Z=104.3602708`；
+- 同一次终点根运动消费后，两者均为 `Z=104.9193905`，确认该姿态本身仍在空中；
+- 原生碰撞下探把两者同时截断到 `Z=102.2153172`，Entity／proxy gap 与 mover offset
+  均为零。这个高度与此前自然落地的约 `Z=102.215` 一致，而不是被人工复测否决的
+  proxy-only `Z=101.843`；
+- 下一次 RideOff Update 于 `31ms` 走原生完成分支，OnExit 与 Basic OnEnter 看到的
+  Entity／proxy 仍同为 `Z=102.2153172`；控制窗口没有出现 Fall 入口
+  `callerRva=0x110694D`。
+
+该样本证明了“终点根运动后、退出状态前”可以在一个 mover 帧内闭合同一个活动
+proxy 的原生碰撞结果与可见 Entity 坐标，修正了此前把 proxy 接触误当成玩家落地的
+错误。不过自动截图的 `47ms` 至 `227ms` 画面被车体遮挡，不能仅凭这组截图断言玩家
+视觉姿态已经符合最终需求；最终视觉效果仍须与人工观察区分记录。

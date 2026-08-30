@@ -2,11 +2,13 @@
 #include "RideOffVtableTrace.h"
 
 #include "RideOffMoverSnapshot.h"
+#include "RideOffQueueClock.h"
 #include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
 
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <sstream>
 
@@ -17,6 +19,7 @@ constexpr char kExpectedTypeName[] = ".?AVDSPlayerVehicleRideOffState@@";
 constexpr uint32_t kStateEnterSlotIndex = 11;
 constexpr uint32_t kStateUpdateSlotIndex = 13;
 constexpr uint32_t kStatePresentationSlotIndex = 14;
+constexpr float kNativeFallbackElapsedSeconds = 10.1f;
 
 using RideOffEnterFn = int64_t(__fastcall*)(
     uintptr_t rideOff, uintptr_t a2, uintptr_t a3);
@@ -139,8 +142,29 @@ char __fastcall HookRideOffUpdate(uintptr_t rideOff, float delta)
 {
     const bool postEndpoint = RideOffSession::GraphEndpointComplete();
     const uintptr_t previous = RideOffSession::EnterUpdate(rideOff);
-    const char result = g_originalUpdate(rideOff, delta);
+    const uint32_t session = RideOffSession::CurrentId();
+    float elapsed = 0.0f;
+    float effectiveDelta = delta;
+    const bool accelerateStateClock = session &&
+        RideOffSession::CompletionReady() &&
+        RideOffQueueClock::IsSynchronized(session) &&
+        VehicleSeatTrace::ReadValue(rideOff + 0x180, elapsed) &&
+        std::isfinite(delta) && delta >= 0.0f && delta <= 1.0f &&
+        std::isfinite(elapsed) && elapsed >= 0.0f &&
+        elapsed < kNativeFallbackElapsedSeconds;
+    if (accelerateStateClock) {
+        effectiveDelta += kNativeFallbackElapsedSeconds - elapsed;
+    }
+    const char result = g_originalUpdate(rideOff, effectiveDelta);
     RideOffSession::LeaveUpdate(previous);
+    if (accelerateStateClock) {
+        std::ostringstream oss;
+        oss << "FastRideOff native fallback clock advanced"
+            << " session=" << session
+            << " elapsed=" << elapsed
+            << " delta=" << delta << "->" << effectiveDelta;
+        g_logger->Log(oss.str());
+    }
     if (postEndpoint &&
         g_postEndpointUpdateLogs.fetch_add(
             1, std::memory_order_relaxed) < 12) {

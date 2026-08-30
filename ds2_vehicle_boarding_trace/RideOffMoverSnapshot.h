@@ -14,7 +14,10 @@ struct Snapshot {
     uintptr_t mover = 0;
     uintptr_t entity = 0;
     uintptr_t model = 0;
+    uintptr_t physicsProxy = 0;
     double position[3] = {};
+    double proxyPosition[3] = {};
+    float entityOffset[3] = {};
     float frameMove[3] = {};
     float rootMotion[3] = {};
     uint32_t animationState = UINT32_MAX;
@@ -23,8 +26,33 @@ struct Snapshot {
     uint32_t rootMotionBuffer = UINT32_MAX;
     uint8_t physicsModePending = UINT8_MAX;
     bool positionValid = false;
+    bool proxyPositionValid = false;
+    bool entityOffsetValid = false;
     bool rootMotionValid = false;
 };
+
+inline void CapturePhysicsPosition(Snapshot& snapshot)
+{
+    uintptr_t owner = 0;
+    uintptr_t holder = 0;
+    uintptr_t selector = 0;
+    if (!VehicleSeatTrace::ReadValue(
+            snapshot.mover + 0x330, owner) || !owner ||
+        !VehicleSeatTrace::ReadValue(owner + 0x330, holder) || !holder ||
+        !VehicleSeatTrace::ReadValue(holder + 0x1E0, selector) || !selector ||
+        !VehicleSeatTrace::ReadValue(
+            selector + 0x40, snapshot.physicsProxy) ||
+        !snapshot.physicsProxy) {
+        return;
+    }
+    snapshot.proxyPositionValid =
+        VehicleSeatTrace::ReadValue(
+            snapshot.physicsProxy + 0x110, snapshot.proxyPosition[0]) &&
+        VehicleSeatTrace::ReadValue(
+            snapshot.physicsProxy + 0x118, snapshot.proxyPosition[1]) &&
+        VehicleSeatTrace::ReadValue(
+            snapshot.physicsProxy + 0x120, snapshot.proxyPosition[2]);
+}
 
 inline bool Capture(uintptr_t accessor, Snapshot& snapshot)
 {
@@ -46,6 +74,14 @@ inline bool Capture(uintptr_t accessor, Snapshot& snapshot)
             snapshot.entity + 0xF0, snapshot.position[1]) &&
         VehicleSeatTrace::ReadValue(
             snapshot.entity + 0xF8, snapshot.position[2]);
+    snapshot.entityOffsetValid =
+        VehicleSeatTrace::ReadValue(
+            snapshot.mover + 0x150, snapshot.entityOffset[0]) &&
+        VehicleSeatTrace::ReadValue(
+            snapshot.mover + 0x154, snapshot.entityOffset[1]) &&
+        VehicleSeatTrace::ReadValue(
+            snapshot.mover + 0x158, snapshot.entityOffset[2]);
+    CapturePhysicsPosition(snapshot);
     VehicleSeatTrace::ReadValue(
         snapshot.mover + 0x500, snapshot.frameMove[0]);
     VehicleSeatTrace::ReadValue(
@@ -87,6 +123,28 @@ inline std::string Format(const char* label, const Snapshot& snapshot)
         << " entity=" << VehicleSeatTrace::Hex(snapshot.entity)
         << " pos=" << snapshot.position[0] << ','
         << snapshot.position[1] << ',' << snapshot.position[2]
+        << " proxy=" << VehicleSeatTrace::Hex(snapshot.physicsProxy);
+    if (snapshot.proxyPositionValid) {
+        oss << " proxyPos=" << snapshot.proxyPosition[0] << ','
+            << snapshot.proxyPosition[1] << ','
+            << snapshot.proxyPosition[2];
+        if (snapshot.positionValid) {
+            oss << " entityProxyGap="
+                << snapshot.position[0] - snapshot.proxyPosition[0] << ','
+                << snapshot.position[1] - snapshot.proxyPosition[1] << ','
+                << snapshot.position[2] - snapshot.proxyPosition[2];
+        }
+    } else {
+        oss << " proxyPos=unavailable";
+    }
+    if (snapshot.entityOffsetValid) {
+        oss << " entityOffset=" << snapshot.entityOffset[0] << ','
+            << snapshot.entityOffset[1] << ','
+            << snapshot.entityOffset[2];
+    } else {
+        oss << " entityOffset=unavailable";
+    }
+    oss
         << " anim=" << snapshot.animationState
         << " physics=" << static_cast<uint32_t>(
             snapshot.physicsModePending) << ':'

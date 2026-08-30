@@ -34,6 +34,7 @@ bool CompletionReady();
 bool MarkFinalizerGateOpened();
 uint32_t ActiveId();
 uintptr_t ActivePlayer();
+bool MatchesMoverAccessor(uintptr_t moverAccessor);
 bool MatchesGraphManager(uintptr_t manager);
 uint64_t ElapsedMs();
 uintptr_t EnterUpdate(uintptr_t rideOff);

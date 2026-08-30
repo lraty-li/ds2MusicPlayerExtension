@@ -212,7 +212,7 @@ bool MarkPostGraphPoseConsumed(uintptr_t moverAccessor)
 {
     return moverAccessor &&
         moverAccessor == g_moverAccessor.load(std::memory_order_acquire) &&
-        GraphEndpointComplete() &&
+        GraphEndpointClaimed() &&
         !g_poseApplied.exchange(true, std::memory_order_acq_rel);
 }
 
@@ -230,7 +230,7 @@ bool GraphEndpointComplete()
 
 bool CompletionReady()
 {
-    return GraphEndpointComplete() &&
+    return GraphEndpointClaimed() &&
         g_poseApplied.load(std::memory_order_acquire);
 }
 
@@ -249,6 +249,13 @@ uintptr_t ActivePlayer()
 {
     return InWindow() ?
         g_player.load(std::memory_order_acquire) : 0;
+}
+
+bool MatchesMoverAccessor(uintptr_t moverAccessor)
+{
+    return moverAccessor && InWindow() &&
+        moverAccessor ==
+            g_moverAccessor.load(std::memory_order_acquire);
 }
 
 bool MatchesGraphManager(uintptr_t manager)

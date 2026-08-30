@@ -23,11 +23,13 @@ constexpr const char* kRideOffPostEvaluateSignature =
     "48 8B 8C 24 F0 02 00 00";
 constexpr uintptr_t kCallOffset = 0x3B;
 constexpr uintptr_t kIndirectCallSize = 6;
+constexpr float kMaximumSynchronizedAdvanceSeconds = 5.0f;
 
 using PostEvaluateFn = void(__fastcall*)(
     uintptr_t dynamicTable, float deltaSeconds, uintptr_t outputResult);
 
 std::atomic<bool> g_started{false};
+std::atomic<uint32_t> g_synchronizedSession{0};
 const Logger* g_logger = nullptr;
 uintptr_t g_rideOffCallerReturn = 0;
 PostEvaluateFn g_original = nullptr;
@@ -59,12 +61,13 @@ void __fastcall HookPostEvaluate(
         RideOffGraphEndpoint::TakePendingQueueClockAdvance(
             session, extraSeconds) &&
         std::isfinite(extraSeconds) && extraSeconds > 0.0f &&
-        extraSeconds <= 1.0f;
+        extraSeconds < kMaximumSynchronizedAdvanceSeconds;
     const float effectiveDelta = matched ?
         deltaSeconds + extraSeconds : deltaSeconds;
     g_original(dynamicTable, effectiveDelta, outputResult);
     if (!matched)
         return;
+    g_synchronizedSession.store(session, std::memory_order_release);
 
     std::ostringstream oss;
     oss << "FastRideOff queue clock advanced"
@@ -151,6 +154,12 @@ bool TryInstall(const Logger& logger)
     CloseHandle(thread);
     logger.Log("FastRideOff dynamic-table clock deferred install started");
     return true;
+}
+
+bool IsSynchronized(uint32_t session)
+{
+    return session &&
+        g_synchronizedSession.load(std::memory_order_acquire) == session;
 }
 
 } // namespace RideOffQueueClock

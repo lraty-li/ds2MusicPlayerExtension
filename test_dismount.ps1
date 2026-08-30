@@ -136,8 +136,24 @@ if (!(Wait-LogLine "RideOff Enter vtable original result=" 3000 $startLine)) {
 if (!(Wait-LogLine "FastRideOff queue clock advanced" 3000 $startLine)) {
     throw "RideOff queue clock was not synchronized"
 }
+if (!(Wait-LogLine "FastRideOff terminal pose consumed" 3000 $startLine)) {
+    throw "terminal RideOff pose was not grounded and committed"
+}
+if (!(Wait-LogLine "FastRideOff native fallback clock advanced" 3000 $startLine)) {
+    throw "native RideOff completion did not run after pose commit"
+}
 if (!(Wait-LogLine "callerRva=0xF97B56" 3000 $startLine)) {
     throw "native RideOff OnExit was not observed"
+}
+$exitLine = Get-LogLines | Select-Object -Skip $startLine |
+    Where-Object { $_.Contains("callerRva=0xF97B56") } |
+    Select-Object -First 1
+if (!$exitLine -or $exitLine -notmatch 'elapsedMs=(\d+)') {
+    throw "native RideOff OnExit elapsed time was not recorded"
+}
+$exitElapsedMs = [int]$Matches[1]
+if ($exitElapsedMs -gt 200) {
+    throw "RideOff exit was not instant: elapsedMs=$exitElapsedMs"
 }
 if (!(Wait-LogLine "callerRva=0xFB40B6" 600 $startLine)) {
     throw "Basic action did not enter immediately after RideVehicle exit"
