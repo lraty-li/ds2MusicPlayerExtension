@@ -123,6 +123,7 @@
     <!--<ClInclude Include="DescriptorNeighborhoodTrace.h" />-->
     <!--<ClInclude Include="FullGameDescriptorMode.h" />-->
     <ClInclude Include="FullGameBoardingFastForward.h" />
+    <ClInclude Include="FullGameBoardingLeafLocator.h" />
     <ClInclude Include="FastBoardingSession.h" />
     <ClInclude Include="GraphEventFastForward.h" />
     <!--<ClInclude Include="FullGameAnimationTrace.h" />-->
@@ -169,6 +170,7 @@
     <!--<ClCompile Include="DescriptorNeighborhoodTrace.cpp" />-->
     <!--<ClCompile Include="FullGameDescriptorMode.cpp" />-->
     <ClCompile Include="FullGameBoardingFastForward.cpp" />
+    <ClCompile Include="FullGameBoardingLeafLocator.cpp" />
     <ClCompile Include="FastBoardingSession.cpp" />
     <ClCompile Include="GraphEventFastForward.cpp" />
     <!--<ClCompile Include="FullGameAnimationTrace.cpp" />-->

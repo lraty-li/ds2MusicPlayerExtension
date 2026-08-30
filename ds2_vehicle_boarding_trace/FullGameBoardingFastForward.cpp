@@ -2,7 +2,7 @@
 #include "FullGameBoardingFastForward.h"
 
 #include "FastBoardingSession.h"
-#include "PatternScan.h"
+#include "FullGameBoardingLeafLocator.h"
 #include "RideOffDescriptorTrace.h"
 #include "RideOffGraphEndpoint.h"
 #include "RideOffSession.h"
@@ -17,31 +17,6 @@ namespace FullGameBoardingFastForward {
 namespace {
 
 constexpr wchar_t kFullGameModuleName[] = L"fullgame.dll";
-constexpr const char* kBoardingCallSignature =
-    "3D 58 A7 C4 0B 0F 85 ? ? ? ? 41 80 BE BB 07 05 00 00 "
-    "0F 84 ? ? ? ? 48 8B 95 30 27 00 00 C6 44 24 20 01 "
-    "48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 FF 15 ? ? ? ?";
-constexpr const char* kSecondaryCallSignature =
-    "3D 58 A7 C4 0B 0F 85 ? ? ? ? 41 80 BE CE B8 05 00 00 "
-    "0F 84 ? ? ? ? 48 8B 84 24 ? ? ? ? 48 8B 8C 24 ? ? ? ? "
-    "4C 8D 2C 08 49 83 C5 38 48 8B 95 78 34 00 00 C6 44 24 20 01 "
-    "4C 89 E9 45 31 C0 41 0F 28 D9 FF 15 ? ? ? ?";
-constexpr const char* kApproach2CandidateASignature =
-    "41 80 BE E1 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 20 27 00 00 "
-    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
-    "FF 15 ? ? ? ?";
-constexpr const char* kApproach1Side0Signature =
-    "41 80 BE BA 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 18 27 00 00 "
-    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
-    "FF 15 ? ? ? ?";
-constexpr const char* kApproach2CandidateCSignature =
-    "41 80 BE E2 07 05 00 00 0F 84 ? ? ? ? 48 8B 95 B8 26 00 00 "
-    "C6 44 24 20 01 48 8B 8C 24 ? ? ? ? 45 31 C0 41 0F 28 D9 "
-    "FF 15 ? ? ? ?";
-constexpr uint32_t kPrimaryCallOffset = 0x34;
-constexpr uint32_t kSecondaryCallOffset = 0x47;
-constexpr uint32_t kApproachCallOffset = 0x29;
-constexpr uint32_t kIndirectCallSize = 6;
 constexpr float kFastTimeScale = 512.0f;
 
 using EvaluateDescriptorFn = void(__fastcall*)(
@@ -51,7 +26,7 @@ using EvaluateDescriptorFn = void(__fastcall*)(
 std::atomic<bool> g_started{false};
 HMODULE g_fullGame = nullptr;
 const Logger* g_logger = nullptr;
-std::array<uintptr_t, 4> g_boardingReturns{};
+std::array<uintptr_t, 6> g_boardingReturns{};
 EvaluateDescriptorFn g_original = nullptr;
 SRWLOCK g_leafLock = SRWLOCK_INIT;
 uint32_t g_leafSession = 0;
@@ -211,43 +186,14 @@ bool InstallWhenLoaded()
     if (!g_fullGame)
         return false;
 
-    uintptr_t textStart = 0;
-    size_t textSize = 0;
-    if (!PatternScan::GetSection(g_fullGame, ".text", textStart, textSize))
+    FullGameBoardingLeafLocator::Result located = {};
+    if (!FullGameBoardingLeafLocator::Locate(g_fullGame, located))
         return false;
-    const uintptr_t primary = PatternScan::FindUnique(
-        textStart, textSize, kBoardingCallSignature);
-    const uintptr_t secondary = PatternScan::FindUnique(
-        textStart, textSize, kSecondaryCallSignature);
-    const std::array<uintptr_t, 3> approachBranches = {
-        PatternScan::FindUnique(
-            textStart, textSize, kApproach2CandidateASignature),
-        PatternScan::FindUnique(
-            textStart, textSize, kApproach1Side0Signature),
-        PatternScan::FindUnique(
-            textStart, textSize, kApproach2CandidateCSignature)};
-    if (!primary || !secondary || !approachBranches[0] ||
-        !approachBranches[1] || !approachBranches[2])
-        return false;
-
-    const uintptr_t call = primary + kPrimaryCallOffset;
-    const uintptr_t secondaryCall = secondary + kSecondaryCallOffset;
-    const uintptr_t slotAddress = PatternScan::ResolveRip(call, 2);
-    if (PatternScan::ResolveRip(secondaryCall, 2) != slotAddress)
-        return false;
-    g_boardingReturns[0] = call + kIndirectCallSize;
-    for (uint32_t index = 0; index < approachBranches.size(); ++index) {
-        const uintptr_t approachCall =
-            approachBranches[index] + kApproachCallOffset;
-        if (PatternScan::ResolveRip(approachCall, 2) != slotAddress)
-            return false;
-        g_boardingReturns[index + 1] =
-            approachCall + kIndirectCallSize;
-    }
+    g_boardingReturns = located.callerReturns;
 
     const uintptr_t rideOffReturn = RideOffGraphEndpoint::FindCallerReturn(
-        textStart, textSize, slotAddress);
-    auto* slot = reinterpret_cast<void* volatile*>(slotAddress);
+        located.textStart, located.textSize, located.slotAddress);
+    auto* slot = reinterpret_cast<void* volatile*>(located.slotAddress);
     void* original = *slot;
     if (!original || !IsExecutable(reinterpret_cast<uintptr_t>(original)))
         return false;
@@ -266,7 +212,7 @@ bool InstallWhenLoaded()
     FastBoardingSession::ReportComponentReady(
         FastBoardingSession::kAnimationComponent);
     g_logger->Log("FastBoarding fullgame evaluator wrapper installed slot=" +
-        VehicleSeatTrace::Hex(slotAddress) + " leaves=4");
+        VehicleSeatTrace::Hex(located.slotAddress) + " leaves=6");
     if (FastBoardingSession::AllComponentsReady())
         g_logger->Log("FastBoarding MOD READY");
     return true;

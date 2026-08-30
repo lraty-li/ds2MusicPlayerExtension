@@ -204,6 +204,26 @@ RideOn 完成事件在 elapsed `0.0417084s` 进入 Drive。两个 CutIn 分别�
 因此该反馈的直接根因是旧实现只取消正前方 `3/4`，没有覆盖已验证的侧面上车状态
 `5/6`；武器装备本身不是独立的生产判定条件。
 
+### 2026-08-30 当前装甲分支变体
+
+当前存档的重复运行把“只有一侧快速”进一步定位到了玩家 action graph 叶覆盖，而
+不是卡车 request 取消：
+
+```text
+request=6 -> leaf=16 callerRva=0x3607A04 -> Drive elapsed=0.0542209/0.0500501
+request=5 -> 没有 FastBoarding descriptor evaluated -> Drive elapsed=5.0092/5.00503
+```
+
+两种 request 都已经在卡车消费者执行前被原子取消；差异发生在随后玩家 descriptor
+求值。定点反汇编确认，当前 `request=6` 位置使用 approach 1 的 side 1 调用
+`0x1836079FE`，而遗漏的另一侧调用为 approach 0 的 side 1 调用
+`0x183607AB0`（return RVA `0x3607AB6`）。后者读取 descriptor pack `+0x2710`，
+并与 side 0 的 `0x183607111` 通过同一个内层 `0/1` selector 汇合到 `var_4D0`。
+
+生产定位器因此覆盖六个确定的 evaluator 返回点：approach `0/1` 的两侧各两个，
+以及 approach `2` composite 的两个候选。新增路径只扩展快速上车 evaluator 的返回点
+集合，不修改任何 RideOff hook、状态机或落地点逻辑。
+
 ## 已排除的错误路径
 
 - 玩家 fullgame descriptor 只控制玩家实时演算，不控制卡车机械状态 `3/4`。

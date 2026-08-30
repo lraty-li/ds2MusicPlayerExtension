@@ -189,6 +189,17 @@ DS2 `DSPlayerVehicleRideOnState_ProcessVehicleAttach` 把 approach class 转为 
 | `2` | `var_568` composite 候选 A | `0x18360794C`，return RVA `0x3607952` |
 | `2` | `var_568` composite 候选 C | `0x183607C14`，return RVA `0x3607C1A` |
 
+同一棵树中，approach `0/1` 还各有一个由内层 `0/1` selector 选择的另一侧结果：
+
+| approach | descriptor pack | descriptor evaluator |
+|---:|---:|---:|
+| `0` side 1 | `+0x2710` | `0x183607AB0`，return RVA `0x3607AB6` |
+| `1` side 1 | `+0x26C8` | `0x1836079FE`，return RVA `0x3607A04` |
+
+这两个调用并不是上表 side 0 调用的重复代码：内层 selector 会根据当前图状态只选择
+其中一侧。只包装 side 0 的 evaluator，或只补 approach `1` 的 side 1 evaluator，都会
+留下某个装甲侧面路径以原速执行。
+
 approach 2 的两个 evaluator 结果在 `0x18360844F` 进入原生
 `SelectNearestOfTwoAndRetain`，不是可以静态删掉其中一项的重复调用。四个调用点和
 另一个独立动态表调用点均静态引用同一 evaluator 指针槽 `0x1884D1FF8`。
