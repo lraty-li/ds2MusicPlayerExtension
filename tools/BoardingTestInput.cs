@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-public static class BoardingTestInput
+public static partial class BoardingTestInput
 {
     private const int SwRestore = 9;
     private const uint InputKeyboard = 1;

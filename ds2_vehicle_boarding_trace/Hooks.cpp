@@ -11,6 +11,7 @@
 #include "MoverRootMotionObserver.h"
 #include "RideOffNativeDetach.h"
 #include "RideOffQueueClock.h"
+#include "RideOffRootRotation.h"
 #include "RideOnVtableDiscovery.h"
 #include "RideOnUpdateVtableTrace.h"
 #include "RideOffVtableTrace.h"
@@ -41,7 +42,7 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
     Logger::ResetLogFile(resetErr);
 
     HMODULE gameModule = GetModuleHandleW(nullptr);
-    g_logger.Log("VehicleBoard FAST BOARDING MOD v2.1.0 start");
+    g_logger.Log("VehicleBoard FAST BOARDING MOD v2.1.7 start");
 
     if (!gameModule) {
         g_logger.Log("GetModuleHandleW failed");
@@ -86,6 +87,8 @@ DWORD WINAPI Hooks::InitThread(LPVOID moduleParam)
         g_logger.Log("FastRideOff native detach resolve failed");
     if (!RideOffQueueClock::TryInstall(g_logger))
         g_logger.Log("FastRideOff queue clock wrapper failed");
+    if (!RideOffRootRotation::TryInstall(gameModule, g_logger))
+        g_logger.Log("FastRideOff Basic root rotation hook failed");
     if (!MoverRootMotionObserver::TryInstall(gameModule, g_logger))
         g_logger.Log("FastBoarding Mover observer failed");
     if (!RideOffVtableTrace::TryInstall(gameModule, g_logger))

@@ -1,6 +1,6 @@
 # 快速下车：根运动与安全落点
 
-日期：2026-08-23
+日期：2026-08-30
 
 返回[当前状态与知识索引](FastVehicleBoardingModImplementation.md)。
 
@@ -469,3 +469,74 @@ Fall，`2500ms` 才落地并由 Basic 接管。严格末端并不包含自然下
 proxy 的原生碰撞结果与可见 Entity 坐标，修正了此前把 proxy 接触误当成玩家落地的
 错误。不过自动截图的 `47ms` 至 `227ms` 画面被车体遮挡，不能仅凭这组截图断言玩家
 视觉姿态已经符合最终需求；最终视觉效果仍须与人工观察区分记录。
+
+## 2026-08-30：首个 Basic 根旋转污染与一次性修复
+
+### 倾斜来源
+
+鼠标转镜头复现样本
+`artifacts/boarding/fast_dismount_20260830_204318_692` 中，角色在约 `922ms`
+仍保持明显后仰，到 `1219ms` 才恢复直立。只读诊断样本
+`artifacts/boarding/fast_dismount_20260830_210325_807` 进一步记录到：RideOff 权重
+从首个 Basic 起已经为零，终点帧留下的米级 frame motion 在下一 Basic 帧也已降到
+毫米级；但玩家 Entity 朝向基矩阵的 `M33` 在 `16ms` 为 `0.698257`，从 `62ms`
+至 `906ms` 约为 `0.787082`，到 `1109ms` 才恢复为 `0.999739`。因此画面中的身体
+倾斜是 Entity 世界朝向问题，不是仍在播放的 RideOff 骨骼权重。
+
+IDA 已闭合这条 state 1 普通 mover 路径：
+
+- `DSPlayerMover_ComposeAnimationRootRotation` 位于 `0x140ECA560`，原型为
+  `float* __fastcall(void* mover, float* outEuler, float frameDelta)`；
+- state 1 调用点为 `0x140ECEE86`，随后 `0x140ECEE98` 调用
+  `DSPlayerMover_ApplyOrientationCorrectionLayers`（`0x140ED2510`）；
+- 最终 Entity 基矩阵从 `0x140ECF703` 起提交。
+
+首个 post-terminal Basic 帧的 Compose 原始输出稳定为
+`0.717938,-0.000165194,-0.738737,0`。在同一次调用中只把前两项清零、保留第三项
+yaw 后，原 accessor 返回时 Entity 基矩阵立即成为直立矩阵，`M33=1`。从 `63ms`
+起，未修改前的 Compose 原始输出本身已经变为 `0,0,-0.738737,*`，且
+`63/110/203/406/703/906/1110ms` 的基矩阵持续直立。由此确认：异常只由首个
+Basic 帧一次性提交的 pitch/roll 产生；后续约一秒的可见寿命，是普通基础朝向把已经
+倾斜的世界基矩阵作为反馈基准继续沿用，并不是一秒长的持续 root 输出或 descriptor
+混合。
+
+`DSPlayerMover_ApplyOrientationCorrectionLayers` 在首帧输出水平化后不会重新引入
+倾斜，因此该层保持原样，以保留正常坡面修正。运行证据也排除了
+`mover+0x804` RideOff 权重、frame motion、`1.001s` descriptor、Graph 事件、相机
+Deactivate 和 SkinnedModel Commit 强制拷贝。后一个候选在
+`artifacts/boarding/fast_dismount_20260830_204935_872` 中确实命中，但 `922ms`
+画面仍然后仰，已撤回。
+
+### 最小修复边界
+
+最终实现只在现有 `DSPlayerMoverAccessor::ModifyAnimatedPose` wrapper 内满足以下全部
+条件时给 Compose 设置线程局部作用域：快速下车已完成终点落地、accessor 与当前会话
+严格匹配、mover animation state 为 Basic `1`。Compose 原函数先执行；只有返回
+buffer 有效且 mover 与线程局部对象相同时，才按 session 原子认领一次，清除
+`outEuler[0]/[1]`，保留 `outEuler[2]/[3]`。accessor 原函数返回后立即撤销线程局部
+作用域，同一 session 的后续调用永久跳过。
+
+因此修复不再使用此前的 `1500ms` 持续窗口，也不修改 Graph、descriptor、Commit、
+相机、原生完成路径或后续坡面修正。入口签名
+`48 8B C4 55 53 57 41 56 48 8D A8 ? ? ? ? 48 81 EC A8 01 00 00`
+在当前版本唯一；15 字节 trampoline 覆盖完整指令边界。
+
+### 鼠标转镜头回归结果
+
+`test_dismount.ps1` 现会在 F 下车按键按住期间启动独立鼠标输入线程，每 `10ms`
+发送一次相对水平位移 `-1`，持续 `1200ms`；同时在目标
+`25/50/100/200/300/400/550/700/900/1200ms` 截图。下车后继续发送 S，检查 Basic
+控制恢复和 Fall 缺席。脚本还要求一次性水平化日志在每个 session 中恰好出现一次。
+
+最终 v2.1.7 构建在以下三次独立启动中全部通过：
+
+| 样本 | 原生 RideOff 退出 | 首帧原始 pitch | 视觉结果 |
+|---|---:|---:|---|
+| `fast_dismount_20260830_211143_634` | `31ms` | `0.717957` | `718/937/1218ms` 直立 |
+| `fast_dismount_20260830_211300_708` | `16ms` | `0.717957` | `929ms` 直立 |
+| `fast_dismount_20260830_211402_847` | `31ms` | `0.717938` | `922ms` 直立 |
+
+三轮均保留快速下车、立即进入 Basic、后续 S 控制和正常退出，且没有命中 Fall 入口
+`callerRva=0x110694D`。这组结果与失败基线在约 `922ms` 的明显后仰形成同时间点
+对照，确认一次性修复消除了当前存档和车辆场景中的短暂身体倾斜，同时没有破坏快速
+下车功能。

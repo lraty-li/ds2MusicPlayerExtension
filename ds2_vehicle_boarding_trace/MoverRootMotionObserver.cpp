@@ -4,6 +4,7 @@
 #include "FastBoardingSession.h"
 #include "RideOffMoverSnapshot.h"
 #include "RideOffQueueClock.h"
+#include "RideOffRootRotation.h"
 #include "RideOffSession.h"
 #include "VehicleSnapshot.h"
 #include "VtableLocator.h"
@@ -199,7 +200,10 @@ void __fastcall HookModifyAnimatedPose(
     RideOffMoverSnapshot::Snapshot beforeMover = {};
     if (terminalRideOffPose)
         RideOffMoverSnapshot::Capture(self, beforeMover);
+    const uintptr_t previousRecoveryMover =
+        RideOffRootRotation::EnterRecoveryPose(self);
     g_original(self, frameDelta, poseWrapper);
+    RideOffRootRotation::LeaveRecoveryPose(previousRecoveryMover);
     RideOffMoverSnapshot::Snapshot afterMover = {};
     if (terminalRideOffPose)
         RideOffMoverSnapshot::Capture(self, afterMover);
